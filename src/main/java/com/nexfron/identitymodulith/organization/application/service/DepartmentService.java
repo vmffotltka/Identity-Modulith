@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.common.exception.BusinessException;
-import com.nexfron.identitymodulith.common.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.common.exception.BusinessException;
+import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.api.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import com.nexfron.identitymodulith.organization.infrastructure.repository.DepartmentRepository;
