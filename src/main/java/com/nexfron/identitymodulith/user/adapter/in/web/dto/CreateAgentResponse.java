@@ -1,0 +1,15 @@
+package com.nexfron.identitymodulith.user.adapter.in.web.dto;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import java.util.UUID;
+
+@Getter
+@Builder
+public class CreateAgentResponse {
+
+    private UUID agentId;
+    private String username;
+    private String tempPassword;  // 일회성 임시 비밀번호
+}
