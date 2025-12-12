@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: identity-modulith
+
+  datasource:
+    url: jdbc:postgresql://1.224.162.188:51445/nexfron
+    username: admin
+    password: nexfron11!
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect

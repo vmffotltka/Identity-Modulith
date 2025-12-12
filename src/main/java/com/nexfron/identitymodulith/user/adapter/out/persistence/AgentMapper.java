@@ -2,7 +2,6 @@ package com.nexfron.identitymodulith.user.adapter.out.persistence;
 
 import com.nexfron.identitymodulith.user.domain.Agent;
 import com.nexfron.identitymodulith.user.domain.Role;
-import com.nexfron.identitymodulith.user.domain.Skill;
 import org.springframework.stereotype.Component;
 
 import java.util.stream.Collectors;
@@ -13,7 +12,7 @@ public class AgentMapper {
     public AgentJpaEntity toJpaEntity(Agent agent) {
         AgentJpaEntity entity = AgentJpaEntity.builder()
                 .id(agent.getId())
-                .username(agent.getUsername())
+                .username(agent.getLoginId())
                 .passwordHash(agent.getPasswordHash())
                 .name(agent.getName())
                 .organizationId(agent.getOrganizationId())
@@ -33,22 +32,13 @@ public class AgentMapper {
             entity.getRoles().add(roleEntity);
         });
 
-        // Map skills
-        agent.getSkills().forEach(skill -> {
-            AgentSkillJpaEntity skillEntity = AgentSkillJpaEntity.builder()
-                    .agent(entity)
-                    .skillName(skill.getName())
-                    .build();
-            entity.getSkills().add(skillEntity);
-        });
-
         return entity;
     }
 
     public Agent toDomain(AgentJpaEntity entity) {
         return Agent.builder()
                 .id(entity.getId())
-                .username(entity.getUsername())
+                .loginId(entity.getUsername())
                 .passwordHash(entity.getPasswordHash())
                 .name(entity.getName())
                 .organizationId(entity.getOrganizationId())
@@ -58,9 +48,6 @@ public class AgentMapper {
                 .retiredAt(entity.getRetiredAt())
                 .roles(entity.getRoles().stream()
                         .map(r -> new Role(r.getRoleName(), r.getRoleType()))
-                        .collect(Collectors.toSet()))
-                .skills(entity.getSkills().stream()
-                        .map(s -> new Skill(s.getSkillName()))
                         .collect(Collectors.toSet()))
                 .build();
     }

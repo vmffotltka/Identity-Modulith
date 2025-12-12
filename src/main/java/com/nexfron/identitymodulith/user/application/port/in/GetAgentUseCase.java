@@ -2,7 +2,6 @@ package com.nexfron.identitymodulith.user.application.port.in;
 
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.Role;
-import com.nexfron.identitymodulith.user.domain.Skill;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -29,7 +28,6 @@ public interface GetAgentUseCase {
         private final LocalDateTime createdAt;
         private final LocalDateTime retiredAt;
         private final Set<Role> roles;
-        private final Set<Skill> skills;
         // 비밀번호는 절대 포함하지 않음
     }
 
