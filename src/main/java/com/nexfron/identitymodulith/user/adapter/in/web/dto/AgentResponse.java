@@ -3,7 +3,6 @@ package com.nexfron.identitymodulith.user.adapter.in.web.dto;
 import com.nexfron.identitymodulith.user.application.port.in.GetAgentUseCase.AgentInfo;
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.Role;
-import com.nexfron.identitymodulith.user.domain.Skill;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -25,7 +24,6 @@ public class AgentResponse {
     private LocalDateTime createdAt;
     private LocalDateTime retiredAt;
     private Set<RoleDto> roles;
-    private Set<String> skills;
 
     public static AgentResponse from(AgentInfo info) {
         return AgentResponse.builder()
@@ -39,9 +37,6 @@ public class AgentResponse {
                 .retiredAt(info.getRetiredAt())
                 .roles(info.getRoles().stream()
                         .map(RoleDto::from)
-                        .collect(Collectors.toSet()))
-                .skills(info.getSkills().stream()
-                        .map(Skill::getName)
                         .collect(Collectors.toSet()))
                 .build();
     }

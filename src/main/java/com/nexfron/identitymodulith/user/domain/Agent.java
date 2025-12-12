@@ -12,7 +12,7 @@ import java.util.UUID;
 public class Agent {
 
     private final UUID id;
-    private String username;
+    private String loginId;
     private String passwordHash;
     private String name;
     private UUID organizationId;
@@ -21,15 +21,14 @@ public class Agent {
     private final LocalDateTime createdAt;
     private LocalDateTime retiredAt;
     private final Set<Role> roles;
-    private final Set<Skill> skills;
 
     @Builder
-    public Agent(UUID id, String username, String passwordHash, String name,
+    public Agent(UUID id, String loginId, String passwordHash, String name,
                  UUID organizationId, AgentStatus status, boolean passwordMustChange,
                  LocalDateTime createdAt, LocalDateTime retiredAt,
-                 Set<Role> roles, Set<Skill> skills) {
+                 Set<Role> roles) {
         this.id = id != null ? id : UUID.randomUUID();
-        this.username = username;
+        this.loginId = loginId;
         this.passwordHash = passwordHash;
         this.name = name;
         this.organizationId = organizationId;
@@ -38,7 +37,6 @@ public class Agent {
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
         this.retiredAt = retiredAt;
         this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
-        this.skills = skills != null ? new HashSet<>(skills) : new HashSet<>();
     }
 
     // 비밀번호 초기화 (관리자가 리셋)
@@ -76,13 +74,5 @@ public class Agent {
 
     public void removeRole(Role role) {
         this.roles.remove(role);
-    }
-
-    public void addSkill(Skill skill) {
-        this.skills.add(skill);
-    }
-
-    public void removeSkill(Skill skill) {
-        this.skills.remove(skill);
     }
 }

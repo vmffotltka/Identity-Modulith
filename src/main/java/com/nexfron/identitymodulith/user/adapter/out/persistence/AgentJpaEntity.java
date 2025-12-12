@@ -22,7 +22,7 @@ public class AgentJpaEntity {
     private UUID id;
 
     @Column(unique = true, nullable = false)
-    private String username;
+    private String loginId;
 
     @Column(nullable = false)
     private String passwordHash;
@@ -48,10 +48,6 @@ public class AgentJpaEntity {
     @OneToMany(mappedBy = "agent", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<AgentRoleJpaEntity> roles = new HashSet<>();
-
-    @OneToMany(mappedBy = "agent", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private Set<AgentSkillJpaEntity> skills = new HashSet<>();
 
     @PrePersist
     public void prePersist() {
