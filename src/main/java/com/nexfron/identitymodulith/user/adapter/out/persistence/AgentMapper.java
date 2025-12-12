@@ -12,7 +12,7 @@ public class AgentMapper {
     public AgentJpaEntity toJpaEntity(Agent agent) {
         AgentJpaEntity entity = AgentJpaEntity.builder()
                 .id(agent.getId())
-                .username(agent.getLoginId())
+                .loginId(agent.getLoginId())
                 .passwordHash(agent.getPasswordHash())
                 .name(agent.getName())
                 .organizationId(agent.getOrganizationId())
@@ -38,7 +38,7 @@ public class AgentMapper {
     public Agent toDomain(AgentJpaEntity entity) {
         return Agent.builder()
                 .id(entity.getId())
-                .loginId(entity.getUsername())
+                .loginId(entity.getLoginId())
                 .passwordHash(entity.getPasswordHash())
                 .name(entity.getName())
                 .organizationId(entity.getOrganizationId())
