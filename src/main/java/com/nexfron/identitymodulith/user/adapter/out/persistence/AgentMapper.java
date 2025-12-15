@@ -21,6 +21,7 @@ public class AgentMapper {
     public AgentJpaEntity toJpaEntity(Agent agent) {
         return AgentJpaEntity.builder()
                 .agentId(agent.getId().toString())
+                .tenantId(agent.getTenantId())
                 .loginId(agent.getLoginId())
                 .password(agent.getPassword())
                 .name(agent.getName())
@@ -36,6 +37,7 @@ public class AgentMapper {
     public Agent toDomain(AgentJpaEntity entity) {
         return Agent.builder()
                 .id(UUID.fromString(entity.getAgentId()))
+                .tenantId(entity.getTenantId())
                 .loginId(entity.getLoginId())
                 .password(entity.getPassword())
                 .name(entity.getName())

@@ -32,7 +32,8 @@ Spring Boot와 Spring Modulith 기반의 모듈식 모놀리스 아키텍처를 
 
 ```
 com.nexfron.identitymodulith/
-└── user/                    # User 모듈 (상담사 관리)
+├── user/                    # User 모듈 (상담사 관리)
+└── organization/            # Organization 모듈 (조직/부서 관리)
 ```
 
 ### Clean Architecture 레이어 (각 모듈 내부)
@@ -163,3 +164,101 @@ com.nexfron.identitymodulith.user/
 - 기본적으로 `ACTIVE` 상태 상담사만 조회
 - `includeRetired=true` 파라미터로 퇴사자 포함 조회
 - 조회 API에서 비밀번호(해시값 포함) 절대 리턴 금지
+
+---
+
+## Organization 모듈 (조직/부서 관리)
+
+### 패키지 구조
+
+```
+com.nexfron.identitymodulith.organization/
+├── domain/
+│   └── model/
+│       ├── Department.java         # 부서 엔티티 (트리 구조)
+│       └── OrgRoleLevel.java       # 역할 레벨 enum (MEMBER, TEAM_LEAD, ADMIN)
+├── application/
+│   ├── port/
+│   │   ├── OrgUserPort.java        # User 모듈 연동 포트
+│   │   ├── OrgUserView.java        # 유저 조직 정보 DTO
+│   │   └── DummyOrgUserAdapter.java # 임시 구현체
+│   └── service/
+│       ├── DepartmentService.java  # 부서 CRUD 서비스
+│       └── OrgScopeService.java    # Level 2 RBAC 스코프 계산 서비스
+├── api/
+│   ├── DepartmentController.java   # REST Controller
+│   └── dto/
+│       └── DepartmentDto.java      # 요청/응답 DTO
+├── infrastructure/
+│   └── repository/
+│       └── DepartmentRepository.java # JPA Repository
+└── common/
+    └── exception/
+        ├── BusinessException.java
+        └── EntityNotFoundException.java
+```
+
+### 도메인 모델
+
+| 클래스 | 설명 |
+|--------|------|
+| `Department` | 부서 엔티티 - 트리 구조 (`parent`, `orgPath`, `depth`) |
+| `OrgRoleLevel` | 역할 레벨 - `MEMBER`, `TEAM_LEAD`, `ADMIN` |
+
+### Department 테이블
+
+| 타입 | 컬럼명 | 제약조건 | 비고 |
+|------|--------|----------|------|
+| Long | dept_id | PK, Auto | 부서 ID |
+| String | tenant_id | NOT NULL | 테넌트 구분 |
+| Long | parent_id | FK | 상위 부서 (Self Reference) |
+| String | name | NOT NULL | 부서명 |
+| String | type | | 부서 타입 (팀, 본부 등) |
+| String | org_path | NOT NULL | 트리 경로 (예: /1/5/10) |
+| Integer | depth | DEFAULT 0 | 트리 깊이 |
+| DateTime | created_at | | 생성 일시 |
+
+### API 엔드포인트
+
+| Method | Endpoint | 헤더 | 설명 |
+|--------|----------|------|------|
+| `POST` | `/api/v1/departments` | X-Tenant-Id | 부서 생성 |
+| `PUT` | `/api/v1/departments/{deptId}/move` | X-Tenant-Id, X-User-Id | 부서 이동 |
+| `DELETE` | `/api/v1/departments/{deptId}` | X-Tenant-Id, X-User-Id | 부서 삭제 |
+| `GET` | `/api/v1/departments/tree` | X-Tenant-Id | 전체 조직도 트리 조회 |
+| `GET` | `/api/v1/departments/my-scope` | X-Tenant-Id, X-User-Id | 내 권한 범위 조직도 조회 |
+
+### Level 2 RBAC (Data Scope)
+
+역할 레벨에 따라 조회 가능한 조직 범위가 결정됩니다:
+
+| 역할 레벨 | 조회 범위 |
+|-----------|----------|
+| `MEMBER` | 본인 부서만 |
+| `TEAM_LEAD` | 본인 부서 + 하위 부서 |
+| `ADMIN` | 테넌트 전체 조직 |
+
+### 비즈니스 규칙
+
+#### 1. 부서 생성
+
+- `parentId`가 없으면 최상위 부서로 생성
+- `orgPath`는 자동 계산 (예: `/1/5/10`)
+- `depth`는 트리 깊이에 따라 자동 설정
+
+#### 2. 부서 이동
+
+- 순환 참조 방지 (자기 하위로 이동 불가)
+- 이동 시 하위 부서의 `orgPath`도 자동 재계산
+- 이동 권한은 `OrgScopeService`로 검증
+
+#### 3. 부서 삭제
+
+- 하위 부서가 존재하면 삭제 불가
+- 소속 구성원이 있으면 삭제 불가
+- 삭제 권한은 `OrgScopeService`로 검증
+
+#### 4. 조직도 조회
+
+- `/tree`: 테넌트 전체 조직도
+- `/my-scope`: 로그인 유저의 권한 범위 내 조직도만 반환
