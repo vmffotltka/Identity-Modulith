@@ -24,9 +24,11 @@ public class AgentMapper {
                 .loginId(agent.getLoginId())
                 .password(agent.getPassword())
                 .name(agent.getName())
-                .deptId(agent.getOrganizationId() != null ? agent.getOrganizationId().toString() : null)
+                .deptId(agent.getOrganizationId())
                 .status(agent.getStatus().name())
                 .createdAt(agent.getCreatedAt())
+                .retiredAt(agent.getRetiredAt())
+                .passwordMustChange(agent.isPasswordMustChange())
                 .roleId(rolesToJson(agent.getRoles()))
                 .build();
     }
@@ -37,9 +39,11 @@ public class AgentMapper {
                 .loginId(entity.getLoginId())
                 .password(entity.getPassword())
                 .name(entity.getName())
-                .organizationId(entity.getDeptId() != null ? UUID.fromString(entity.getDeptId()) : null)
+                .organizationId(entity.getDeptId())
                 .status(AgentStatus.valueOf(entity.getStatus()))
+                .passwordMustChange(entity.getPasswordMustChange() != null && entity.getPasswordMustChange())
                 .createdAt(entity.getCreatedAt())
+                .retiredAt(entity.getRetiredAt())
                 .roles(jsonToRoles(entity.getRoleId()))
                 .build();
     }

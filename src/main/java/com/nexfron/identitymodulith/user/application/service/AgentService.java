@@ -115,7 +115,7 @@ public class AgentService implements
      * @throws IllegalArgumentException 상담사를 찾을 수 없는 경우
      */
     @Override
-    public void transferOrganization(UUID agentId, UUID newOrganizationId) {
+    public void transferOrganization(UUID agentId, String newOrganizationId) {
         Agent agent = findAgentById(agentId);
         agent.transferOrganization(newOrganizationId);
         agentRepository.save(agent);

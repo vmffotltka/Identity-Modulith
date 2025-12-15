@@ -17,9 +17,9 @@ public interface AgentRepository {
 
     boolean existsByLoginId(String loginId);
 
-    List<Agent> findByOrganizationId(UUID organizationId);
+    List<Agent> findByOrganizationId(String organizationId);
 
-    List<Agent> findByOrganizationIdAndStatus(UUID organizationId, AgentStatus status);
+    List<Agent> findByOrganizationIdAndStatus(String organizationId, AgentStatus status);
 
     List<Agent> findAll();
 

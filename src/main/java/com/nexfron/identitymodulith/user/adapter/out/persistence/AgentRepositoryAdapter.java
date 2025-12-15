@@ -42,15 +42,15 @@ public class AgentRepositoryAdapter implements AgentRepository {
     }
 
     @Override
-    public List<Agent> findByOrganizationId(UUID organizationId) {
-        return jpaRepository.findByDeptId(organizationId.toString()).stream()
+    public List<Agent> findByOrganizationId(String organizationId) {
+        return jpaRepository.findByDeptId(organizationId).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 
     @Override
-    public List<Agent> findByOrganizationIdAndStatus(UUID organizationId, AgentStatus status) {
-        return jpaRepository.findByDeptIdAndStatus(organizationId.toString(), status.name()).stream()
+    public List<Agent> findByOrganizationIdAndStatus(String organizationId, AgentStatus status) {
+        return jpaRepository.findByDeptIdAndStatus(organizationId, status.name()).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

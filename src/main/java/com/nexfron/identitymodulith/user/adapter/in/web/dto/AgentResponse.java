@@ -18,7 +18,7 @@ public class AgentResponse {
     private UUID id;
     private String loginId;
     private String name;
-    private UUID organizationId;
+    private String organizationId;
     private AgentStatus status;
     private boolean passwordMustChange;
     private LocalDateTime createdAt;

@@ -15,7 +15,7 @@ public class Agent {
     private String loginId;
     private String password;
     private String name;
-    private UUID organizationId;
+    private String organizationId;
     private AgentStatus status;
     private boolean passwordMustChange;
     private final LocalDateTime createdAt;
@@ -24,7 +24,7 @@ public class Agent {
 
     @Builder
     public Agent(UUID id, String loginId, String password, String name,
-                 UUID organizationId, AgentStatus status, boolean passwordMustChange,
+                 String organizationId, AgentStatus status, boolean passwordMustChange,
                  LocalDateTime createdAt, LocalDateTime retiredAt,
                  Set<Role> roles) {
         this.id = id != null ? id : UUID.randomUUID();
@@ -55,7 +55,7 @@ public class Agent {
         this.name = name;
     }
 
-    public void transferOrganization(UUID newOrganizationId) {
+    public void transferOrganization(String newOrganizationId) {
         this.organizationId = newOrganizationId;
     }
 

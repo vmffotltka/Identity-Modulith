@@ -9,7 +9,7 @@ public interface UpdateAgentUseCase {
 
     void updateAgent(UpdateAgentCommand command);
 
-    void transferOrganization(UUID agentId, UUID newOrganizationId);
+    void transferOrganization(UUID agentId, String newOrganizationId);
 
     @Getter
     @Builder
