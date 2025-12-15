@@ -31,14 +31,14 @@ public class AgentRepositoryAdapter implements AgentRepository {
     }
 
     @Override
-    public Optional<Agent> findByUsername(String username) {
-        return jpaRepository.findByUsername(username)
+    public Optional<Agent> findByLoginId(String loginId) {
+        return jpaRepository.findByLoginId(loginId)
                 .map(mapper::toDomain);
     }
 
     @Override
-    public boolean existsByUsername(String username) {
-        return jpaRepository.existsByUsername(username);
+    public boolean existsByLoginId(String loginId) {
+        return jpaRepository.existsByLoginId(loginId);
     }
 
     @Override

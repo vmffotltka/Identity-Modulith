@@ -20,7 +20,7 @@ public interface GetAgentUseCase {
     @Builder
     class AgentInfo {
         private final UUID id;
-        private final String username;
+        private final String loginId;
         private final String name;
         private final UUID organizationId;
         private final AgentStatus status;

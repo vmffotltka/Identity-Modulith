@@ -9,7 +9,7 @@ import java.util.UUID;
 @NoArgsConstructor
 public class CreateAgentRequest {
 
-    private String username;
+    private String loginId;
     private String name;
     private UUID organizationId;
 }

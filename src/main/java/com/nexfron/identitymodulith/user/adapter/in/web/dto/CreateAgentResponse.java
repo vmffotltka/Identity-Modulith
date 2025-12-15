@@ -10,6 +10,6 @@ import java.util.UUID;
 public class CreateAgentResponse {
 
     private UUID agentId;
-    private String username;
+    private String loginId;
     private String tempPassword;  // 일회성 임시 비밀번호
 }

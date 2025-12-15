@@ -31,24 +31,24 @@ public class AgentController {
     private final RetireAgentUseCase retireAgentUseCase;
     private final GetAgentUseCase getAgentUseCase;
     private final ManageRoleUseCase manageRoleUseCase;
-    private final CheckUsernameUseCase checkUsernameUseCase;
+    private final CheckLoginIdUseCase checkLoginIdUseCase;
 
     /**
      * 상담사 생성 (Onboarding)
      *
      * @param request 요청 본문
-     *                - username: 로그인 아이디 (중복 불가)
+     *                - loginId: 로그인 아이디 (중복 불가)
      *                - name: 상담사 이름
      *                - organizationId: 소속 조직 ID (UUID)
      * @return 201 Created
      *         - agentId: 생성된 상담사 ID (UUID)
-     *         - username: 로그인 아이디
+     *         - loginId: 로그인 아이디
      *         - tempPassword: 임시 비밀번호 (일회성, 팝업으로 표시 후 재조회 불가)
      */
     @PostMapping
     public ResponseEntity<CreateAgentResponse> createAgent(@RequestBody CreateAgentRequest request) {
         CreateAgentCommand command = CreateAgentCommand.builder()
-                .username(request.getUsername())
+                .loginId(request.getLoginId())
                 .name(request.getName())
                 .organizationId(request.getOrganizationId())
                 .build();
@@ -57,7 +57,7 @@ public class AgentController {
 
         CreateAgentResponse response = CreateAgentResponse.builder()
                 .agentId(result.getAgentId())
-                .username(result.getUsername())
+                .loginId(result.getLoginId())
                 .tempPassword(result.getTempPassword())
                 .build();
 
@@ -67,13 +67,13 @@ public class AgentController {
     /**
      * 아이디 중복 체크
      *
-     * @param username 검사할 로그인 아이디
+     * @param loginId 검사할 로그인 아이디
      * @return 200 OK
      *         - isUnique: true(사용 가능) / false(중복)
      */
-    @GetMapping("/check-username")
-    public ResponseEntity<Map<String, Boolean>> checkUsername(@RequestParam String username) {
-        boolean isUnique = checkUsernameUseCase.isUsernameUnique(username);
+    @GetMapping("/check-login-id")
+    public ResponseEntity<Map<String, Boolean>> checkLoginId(@RequestParam String loginId) {
+        boolean isUnique = checkLoginIdUseCase.isLoginIdUnique(loginId);
         return ResponseEntity.ok(Map.of("isUnique", isUnique));
     }
 
@@ -83,7 +83,7 @@ public class AgentController {
      * @param agentId 상담사 ID (UUID)
      * @return 200 OK
      *         - id: 상담사 ID
-     *         - username: 로그인 아이디
+     *         - loginId: 로그인 아이디
      *         - name: 상담사 이름
      *         - organizationId: 소속 조직 ID
      *         - status: 상태 (ACTIVE / RETIRED)
