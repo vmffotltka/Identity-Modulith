@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public class AgentResponse {
 
     private UUID id;
-    private String username;
+    private String loginId;
     private String name;
     private UUID organizationId;
     private AgentStatus status;
@@ -28,7 +28,7 @@ public class AgentResponse {
     public static AgentResponse from(AgentInfo info) {
         return AgentResponse.builder()
                 .id(info.getId())
-                .username(info.getUsername())
+                .loginId(info.getLoginId())
                 .name(info.getName())
                 .organizationId(info.getOrganizationId())
                 .status(info.getStatus())

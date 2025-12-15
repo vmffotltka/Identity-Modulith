@@ -5,8 +5,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -45,9 +43,8 @@ public class AgentJpaEntity {
 
     private LocalDateTime retiredAt;
 
-    @OneToMany(mappedBy = "agent", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private Set<AgentRoleJpaEntity> roles = new HashSet<>();
+    @Column(columnDefinition = "TEXT")
+    private String roles;  // JSON 형식: [{"name":"SUPERVISOR","type":"POSITION"}]
 
     @PrePersist
     public void prePersist() {

@@ -13,9 +13,9 @@ public interface AgentRepository {
 
     Optional<Agent> findById(UUID id);
 
-    Optional<Agent> findByUsername(String username);
+    Optional<Agent> findByLoginId(String loginId);
 
-    boolean existsByUsername(String username);
+    boolean existsByLoginId(String loginId);
 
     List<Agent> findByOrganizationId(UUID organizationId);
 

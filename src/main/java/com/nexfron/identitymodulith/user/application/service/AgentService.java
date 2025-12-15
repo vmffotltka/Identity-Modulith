@@ -29,7 +29,7 @@ public class AgentService implements
         RetireAgentUseCase,
         GetAgentUseCase,
         ManageRoleUseCase,
-        CheckUsernameUseCase {
+        CheckLoginIdUseCase {
 
     private final AgentRepository agentRepository;
     private final PasswordEncoder passwordEncoder;
@@ -39,21 +39,21 @@ public class AgentService implements
      * 새로운 상담사를 생성합니다.
      * 시스템이 임시 비밀번호를 자동 생성하며, 생성된 상담사는 첫 로그인 시 비밀번호 변경이 필요합니다.
      *
-     * @param command 상담사 생성에 필요한 정보 (사용자명, 이름, 조직ID)
-     * @return 생성된 상담사 ID, 사용자명, 임시 비밀번호를 포함한 결과
-     * @throws IllegalArgumentException 사용자명이 이미 존재하는 경우
+     * @param command 상담사 생성에 필요한 정보 (로그인ID, 이름, 조직ID)
+     * @return 생성된 상담사 ID, 로그인ID, 임시 비밀번호를 포함한 결과
+     * @throws IllegalArgumentException 로그인ID가 이미 존재하는 경우
      */
     @Override
     public CreateAgentResult createAgent(CreateAgentCommand command) {
-        if (!isUsernameUnique(command.getUsername())) {
-            throw new IllegalArgumentException("Username already exists: " + command.getUsername());
+        if (!isLoginIdUnique(command.getLoginId())) {
+            throw new IllegalArgumentException("Login ID already exists: " + command.getLoginId());
         }
 
         String tempPassword = passwordGenerator.generateTempPassword();
         String encodedPassword = passwordEncoder.encode(tempPassword);
 
         Agent agent = Agent.builder()
-                .loginId(command.getUsername())
+                .loginId(command.getLoginId())
                 .passwordHash(encodedPassword)
                 .name(command.getName())
                 .organizationId(command.getOrganizationId())
@@ -65,7 +65,7 @@ public class AgentService implements
 
         return CreateAgentResult.builder()
                 .agentId(savedAgent.getId())
-                .username(savedAgent.getLoginId())
+                .loginId(savedAgent.getLoginId())
                 .tempPassword(tempPassword)
                 .build();
     }
@@ -199,15 +199,15 @@ public class AgentService implements
     }
 
     /**
-     * 사용자명(로그인 ID)의 중복 여부를 확인합니다.
+     * 로그인 ID의 중복 여부를 확인합니다.
      *
-     * @param username 확인할 사용자명
+     * @param loginId 확인할 로그인 ID
      * @return 사용 가능하면 true, 이미 존재하면 false
      */
     @Override
     @Transactional(readOnly = true)
-    public boolean isUsernameUnique(String username) {
-        return !agentRepository.existsByUsername(username);
+    public boolean isLoginIdUnique(String loginId) {
+        return !agentRepository.existsByLoginId(loginId);
     }
 
     /**
@@ -232,7 +232,7 @@ public class AgentService implements
     private AgentInfo toAgentInfo(Agent agent) {
         return AgentInfo.builder()
                 .id(agent.getId())
-                .username(agent.getLoginId())
+                .loginId(agent.getLoginId())
                 .name(agent.getName())
                 .organizationId(agent.getOrganizationId())
                 .status(agent.getStatus())

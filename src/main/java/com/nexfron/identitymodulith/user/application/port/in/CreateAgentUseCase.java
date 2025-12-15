@@ -12,7 +12,7 @@ public interface CreateAgentUseCase {
     @Getter
     @Builder
     class CreateAgentCommand {
-        private final String username;
+        private final String loginId;
         private final String name;
         private final UUID organizationId;
     }
@@ -21,7 +21,7 @@ public interface CreateAgentUseCase {
     @Builder
     class CreateAgentResult {
         private final UUID agentId;
-        private final String username;
+        private final String loginId;
         private final String tempPassword;  // 일회성 임시 비밀번호
     }
 }

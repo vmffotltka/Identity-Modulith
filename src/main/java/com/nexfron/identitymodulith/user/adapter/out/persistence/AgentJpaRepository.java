@@ -9,9 +9,9 @@ import java.util.UUID;
 
 public interface AgentJpaRepository extends JpaRepository<AgentJpaEntity, UUID> {
 
-    Optional<AgentJpaEntity> findByUsername(String username);
+    Optional<AgentJpaEntity> findByLoginId(String loginId);
 
-    boolean existsByUsername(String username);
+    boolean existsByLoginId(String loginId);
 
     List<AgentJpaEntity> findByOrganizationId(UUID organizationId);
 
