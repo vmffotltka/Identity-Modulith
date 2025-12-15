@@ -26,7 +26,7 @@ public class AgentRepositoryAdapter implements AgentRepository {
 
     @Override
     public Optional<Agent> findById(UUID id) {
-        return jpaRepository.findById(id)
+        return jpaRepository.findById(id.toString())
                 .map(mapper::toDomain);
     }
 
@@ -43,14 +43,14 @@ public class AgentRepositoryAdapter implements AgentRepository {
 
     @Override
     public List<Agent> findByOrganizationId(UUID organizationId) {
-        return jpaRepository.findByOrganizationId(organizationId).stream()
+        return jpaRepository.findByDeptId(organizationId.toString()).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 
     @Override
     public List<Agent> findByOrganizationIdAndStatus(UUID organizationId, AgentStatus status) {
-        return jpaRepository.findByOrganizationIdAndStatus(organizationId, status).stream()
+        return jpaRepository.findByDeptIdAndStatus(organizationId.toString(), status.name()).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
@@ -64,7 +64,7 @@ public class AgentRepositoryAdapter implements AgentRepository {
 
     @Override
     public List<Agent> findAllByStatus(AgentStatus status) {
-        return jpaRepository.findByStatus(status).stream()
+        return jpaRepository.findByStatus(status.name()).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

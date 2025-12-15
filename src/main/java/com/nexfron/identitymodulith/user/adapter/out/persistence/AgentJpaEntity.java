@@ -1,56 +1,57 @@
 package com.nexfron.identitymodulith.user.adapter.out.persistence;
 
-import com.nexfron.identitymodulith.user.domain.AgentStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "agents")
-@Getter
-@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Data
 @Builder
 public class AgentJpaEntity {
 
     @Id
-    private UUID id;
+    @Column(name = "agent_id", length = 36)
+    private String agentId;
 
-    @Column(unique = true, nullable = false)
+    @Column(name = "tenant_id", length = 50, nullable = false)
+    private String tenantId;
+
+    @Column(name = "login_id", length = 100, unique = true, nullable = false)
     private String loginId;
 
-    @Column(nullable = false)
-    private String passwordHash;
-
-    @Column(nullable = false)
+    @Column(length = 100, nullable = false)
     private String name;
 
-    @Column(nullable = false)
-    private UUID organizationId;
+    @Column(length = 255, nullable = false)
+    private String password;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private AgentStatus status;
+    @Column(length = 20)
+    private String status;
 
-    @Column(nullable = false)
-    private boolean passwordMustChange;
-
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    private LocalDateTime retiredAt;
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
-    @Column(columnDefinition = "TEXT")
-    private String roles;  // JSON 형식: [{"name":"SUPERVISOR","type":"POSITION"}]
+    @Column(name = "job_title", length = 100)
+    private String jobTitle;
+
+    @Column(name = "sync_status", length = 20)
+    private String syncStatus;
+
+    @Column(name = "dept_id", length = 50)
+    private String deptId;
+
+    @Column(name = "role_id", length = 50)
+    private String roleId;
 
     @PrePersist
     public void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }

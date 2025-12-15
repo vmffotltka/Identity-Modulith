@@ -4,12 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexfron.identitymodulith.user.domain.Agent;
+import com.nexfron.identitymodulith.user.domain.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.Role;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
 public class AgentMapper {
@@ -18,31 +20,27 @@ public class AgentMapper {
 
     public AgentJpaEntity toJpaEntity(Agent agent) {
         return AgentJpaEntity.builder()
-                .id(agent.getId())
+                .agentId(agent.getId().toString())
                 .loginId(agent.getLoginId())
-                .passwordHash(agent.getPasswordHash())
+                .password(agent.getPassword())
                 .name(agent.getName())
-                .organizationId(agent.getOrganizationId())
-                .status(agent.getStatus())
-                .passwordMustChange(agent.isPasswordMustChange())
+                .deptId(agent.getOrganizationId() != null ? agent.getOrganizationId().toString() : null)
+                .status(agent.getStatus().name())
                 .createdAt(agent.getCreatedAt())
-                .retiredAt(agent.getRetiredAt())
-                .roles(rolesToJson(agent.getRoles()))
+                .roleId(rolesToJson(agent.getRoles()))
                 .build();
     }
 
     public Agent toDomain(AgentJpaEntity entity) {
         return Agent.builder()
-                .id(entity.getId())
+                .id(UUID.fromString(entity.getAgentId()))
                 .loginId(entity.getLoginId())
-                .passwordHash(entity.getPasswordHash())
+                .password(entity.getPassword())
                 .name(entity.getName())
-                .organizationId(entity.getOrganizationId())
-                .status(entity.getStatus())
-                .passwordMustChange(entity.isPasswordMustChange())
+                .organizationId(entity.getDeptId() != null ? UUID.fromString(entity.getDeptId()) : null)
+                .status(AgentStatus.valueOf(entity.getStatus()))
                 .createdAt(entity.getCreatedAt())
-                .retiredAt(entity.getRetiredAt())
-                .roles(jsonToRoles(entity.getRoles()))
+                .roles(jsonToRoles(entity.getRoleId()))
                 .build();
     }
 
