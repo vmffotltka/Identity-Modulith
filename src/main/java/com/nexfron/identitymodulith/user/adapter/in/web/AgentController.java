@@ -109,7 +109,7 @@ public class AgentController {
      */
     @GetMapping
     public ResponseEntity<List<AgentResponse>> getAgents(
-            @RequestParam(required = false) UUID organizationId,
+            @RequestParam(required = false) String organizationId,
             @RequestParam(defaultValue = "false") boolean includeRetired) {
 
         AgentSearchCriteria criteria = AgentSearchCriteria.builder()

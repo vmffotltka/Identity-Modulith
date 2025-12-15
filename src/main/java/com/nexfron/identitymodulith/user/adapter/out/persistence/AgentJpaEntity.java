@@ -38,6 +38,12 @@ public class AgentJpaEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "retired_at")
+    private LocalDateTime retiredAt;
+
+    @Column(name = "password_must_change")
+    private Boolean passwordMustChange;
+
     @Column(name = "job_title", length = 100)
     private String jobTitle;
 

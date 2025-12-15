@@ -1,18 +1,30 @@
+# ===========================================
+# Identity Modulith Application Configuration
+# ===========================================
+
 spring:
+  # 애플리케이션 기본 설정
   application:
-    name: identity-modulith
+    name: identity-modulith  # 애플리케이션 이름
 
+  # 데이터베이스 연결 설정
   datasource:
-    url: jdbc:postgresql://1.224.162.188:51445/nexfron
-    username: admin
-    password: nexfron11!
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://1.224.162.188:51445/nexfron  # PostgreSQL 데이터베이스 URL
+    username: admin                                      # 데이터베이스 사용자명
+    password: nexfron11!                                 # 데이터베이스 비밀번호
+    driver-class-name: org.postgresql.Driver             # PostgreSQL JDBC 드라이버
 
+    # HikariCP 커넥션 풀 설정
+    hikari:
+      maximum-pool-size: 5  # 최대 커넥션 풀 크기
+      minimum-idle: 2       # 최소 유휴 커넥션 수
+
+  # JPA/Hibernate 설정
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: update      # 스키마 자동 업데이트 (운영 환경에서는 validate 또는 none 권장)
+    show-sql: true          # SQL 쿼리 로깅 활성화
     properties:
       hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true                                  # SQL 포맷팅 (가독성 향상)
+        dialect: org.hibernate.dialect.PostgreSQLDialect  # PostgreSQL 데이터베이스 타입 지정

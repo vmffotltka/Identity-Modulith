@@ -22,7 +22,7 @@ public interface GetAgentUseCase {
         private final UUID id;
         private final String loginId;
         private final String name;
-        private final UUID organizationId;
+        private final String organizationId;
         private final AgentStatus status;
         private final boolean passwordMustChange;
         private final LocalDateTime createdAt;
@@ -34,7 +34,7 @@ public interface GetAgentUseCase {
     @Getter
     @Builder
     class AgentSearchCriteria {
-        private final UUID organizationId;
+        private final String organizationId;
         private final boolean includeRetired;  // 퇴사자 포함 여부
     }
 }

@@ -14,7 +14,7 @@ public interface CreateAgentUseCase {
     class CreateAgentCommand {
         private final String loginId;
         private final String name;
-        private final UUID organizationId;
+        private final String organizationId;
     }
 
     @Getter
