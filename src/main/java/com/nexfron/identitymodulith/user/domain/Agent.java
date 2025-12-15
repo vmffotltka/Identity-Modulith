@@ -13,7 +13,7 @@ public class Agent {
 
     private final UUID id;
     private String loginId;
-    private String passwordHash;
+    private String password;
     private String name;
     private UUID organizationId;
     private AgentStatus status;
@@ -23,13 +23,13 @@ public class Agent {
     private final Set<Role> roles;
 
     @Builder
-    public Agent(UUID id, String loginId, String passwordHash, String name,
+    public Agent(UUID id, String loginId, String password, String name,
                  UUID organizationId, AgentStatus status, boolean passwordMustChange,
                  LocalDateTime createdAt, LocalDateTime retiredAt,
                  Set<Role> roles) {
         this.id = id != null ? id : UUID.randomUUID();
         this.loginId = loginId;
-        this.passwordHash = passwordHash;
+        this.password = password;
         this.name = name;
         this.organizationId = organizationId;
         this.status = status != null ? status : AgentStatus.ACTIVE;
@@ -40,14 +40,14 @@ public class Agent {
     }
 
     // 비밀번호 초기화 (관리자가 리셋)
-    public void resetPassword(String newPasswordHash) {
-        this.passwordHash = newPasswordHash;
+    public void resetPassword(String newPassword) {
+        this.password = newPassword;
         this.passwordMustChange = true;
     }
 
     // 비밀번호 변경 (본인이 변경)
-    public void changePassword(String newPasswordHash) {
-        this.passwordHash = newPasswordHash;
+    public void changePassword(String newPassword) {
+        this.password = newPassword;
         this.passwordMustChange = false;
     }
 

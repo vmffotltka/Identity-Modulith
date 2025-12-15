@@ -54,7 +54,7 @@ public class AgentService implements
 
         Agent agent = Agent.builder()
                 .loginId(command.getLoginId())
-                .passwordHash(encodedPassword)
+                .password(encodedPassword)
                 .name(command.getName())
                 .organizationId(command.getOrganizationId())
                 .status(AgentStatus.ACTIVE)
