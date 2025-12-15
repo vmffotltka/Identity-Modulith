@@ -48,6 +48,7 @@ public class AgentController {
     @PostMapping
     public ResponseEntity<CreateAgentResponse> createAgent(@RequestBody CreateAgentRequest request) {
         CreateAgentCommand command = CreateAgentCommand.builder()
+                .tenantId(request.getTenantId())
                 .loginId(request.getLoginId())
                 .name(request.getName())
                 .organizationId(request.getOrganizationId())
@@ -102,6 +103,7 @@ public class AgentController {
     /**
      * 상담사 목록 조회
      *
+     * @param tenantId 테넌트 ID
      * @param organizationId 조직 ID로 필터링 (optional)
      * @param includeRetired 퇴사자 포함 여부 (default: false)
      * @return 200 OK - AgentResponse 목록
@@ -109,10 +111,12 @@ public class AgentController {
      */
     @GetMapping
     public ResponseEntity<List<AgentResponse>> getAgents(
+            @RequestParam String tenantId,
             @RequestParam(required = false) String organizationId,
             @RequestParam(defaultValue = "false") boolean includeRetired) {
 
         AgentSearchCriteria criteria = AgentSearchCriteria.builder()
+                .tenantId(tenantId)
                 .organizationId(organizationId)
                 .includeRetired(includeRetired)
                 .build();

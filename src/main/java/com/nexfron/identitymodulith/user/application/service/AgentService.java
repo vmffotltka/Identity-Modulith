@@ -7,6 +7,8 @@ import com.nexfron.identitymodulith.user.application.port.out.PasswordGenerator;
 import com.nexfron.identitymodulith.user.domain.Agent;
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.Role;
+import com.nexfron.identitymodulith.user.exception.BusinessException;
+import com.nexfron.identitymodulith.user.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,18 +43,19 @@ public class AgentService implements
      *
      * @param command 상담사 생성에 필요한 정보 (로그인ID, 이름, 조직ID)
      * @return 생성된 상담사 ID, 로그인ID, 임시 비밀번호를 포함한 결과
-     * @throws IllegalArgumentException 로그인ID가 이미 존재하는 경우
+     * @throws BusinessException 로그인ID가 이미 존재하는 경우 (ErrorCode.DUPLICATE_USERNAME)
      */
     @Override
     public CreateAgentResult createAgent(CreateAgentCommand command) {
         if (!isLoginIdUnique(command.getLoginId())) {
-            throw new IllegalArgumentException("Login ID already exists: " + command.getLoginId());
+            throw new BusinessException(ErrorCode.DUPLICATE_USERNAME);
         }
 
         String tempPassword = passwordGenerator.generateTempPassword();
         String encodedPassword = passwordEncoder.encode(tempPassword);
 
         Agent agent = Agent.builder()
+                .tenantId(command.getTenantId())
                 .loginId(command.getLoginId())
                 .password(encodedPassword)
                 .name(command.getName())

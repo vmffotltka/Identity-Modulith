@@ -34,6 +34,7 @@ public interface GetAgentUseCase {
     @Getter
     @Builder
     class AgentSearchCriteria {
+        private final String tenantId;
         private final String organizationId;
         private final boolean includeRetired;  // 퇴사자 포함 여부
     }

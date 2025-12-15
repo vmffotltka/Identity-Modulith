@@ -12,6 +12,7 @@ import java.util.UUID;
 public class Agent {
 
     private final UUID id;
+    private String tenantId;
     private String loginId;
     private String password;
     private String name;
@@ -23,11 +24,12 @@ public class Agent {
     private final Set<Role> roles;
 
     @Builder
-    public Agent(UUID id, String loginId, String password, String name,
+    public Agent(UUID id, String tenantId, String loginId, String password, String name,
                  String organizationId, AgentStatus status, boolean passwordMustChange,
                  LocalDateTime createdAt, LocalDateTime retiredAt,
                  Set<Role> roles) {
         this.id = id != null ? id : UUID.randomUUID();
+        this.tenantId = tenantId;
         this.loginId = loginId;
         this.password = password;
         this.name = name;

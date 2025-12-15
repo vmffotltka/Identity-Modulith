@@ -12,6 +12,7 @@ public interface CreateAgentUseCase {
     @Getter
     @Builder
     class CreateAgentCommand {
+        private final String tenantId;
         private final String loginId;
         private final String name;
         private final String organizationId;
