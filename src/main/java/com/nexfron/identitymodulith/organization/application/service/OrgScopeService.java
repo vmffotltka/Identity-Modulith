@@ -1,12 +1,12 @@
 // organization.application.service.OrgScopeService.java
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.common.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
-import com.nexfron.identitymodulith.organization.infrastructure.repository.DepartmentRepository;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.jpa.JpaDepartmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class OrgScopeService {
 
-    private final DepartmentRepository departmentRepository;
+    private final JpaDepartmentRepository jpaDepartmentRepository;
     private final OrgUserPort orgUserPort;
 
     /**
@@ -50,19 +50,19 @@ public class OrgScopeService {
 
         // ADMIN: 전체 조직 조회
         if (level.canSeeWholeTenant()) {
-            return departmentRepository.findAllByTenantId(tenantId).stream()
+            return jpaDepartmentRepository.findAllByTenantId(tenantId).stream()
                     .map(Department::getDeptId)
                     .collect(Collectors.toSet());
         }
 
-        Department myDept = departmentRepository.findById(myDeptId)
+        Department myDept = jpaDepartmentRepository.findById(myDeptId)
                 .filter(d -> d.getTenantId().equals(tenantId))
                 .orElseThrow(() -> new EntityNotFoundException("사용자의 소속 부서를 찾을 수 없습니다."));
 
         // TEAM_LEAD: 내 부서 + 하위 부서
         if (level.canSeeSubTree()) {
             String pathPrefix = myDept.getOrgPath();
-            return departmentRepository
+            return jpaDepartmentRepository
                     .findByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix)
                     .stream()
                     .map(Department::getDeptId)

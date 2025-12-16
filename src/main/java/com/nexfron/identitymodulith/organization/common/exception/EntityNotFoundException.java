@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.common;
+package com.nexfron.identitymodulith.organization.common.exception;
 
 /**
  * 엔티티를 찾지 못했을 때 사용하는 예외
