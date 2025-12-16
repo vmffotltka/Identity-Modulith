@@ -191,7 +191,6 @@ public class AgentService implements
      *
      * @param agentId 역할을 지정할 상담사 ID
      * @param roles 지정할 역할 세트 (직급, 채널 등)
-     * @throws IllegalArgumentException 상담사를 찾을 수 없는 경우
      */
     @Override
     public void assignRoles(UUID agentId, Set<Role> roles) {
