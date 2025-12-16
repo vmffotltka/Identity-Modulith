@@ -218,11 +218,11 @@ public class AgentService implements
      *
      * @param agentId 조회할 상담사 ID
      * @return 조회된 상담사 엔티티
-     * @throws IllegalArgumentException 상담사를 찾을 수 없는 경우
+     * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
      */
     private Agent findAgentById(UUID agentId) {
         return agentRepository.findById(agentId)
-                .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + agentId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
     }
 
     /**

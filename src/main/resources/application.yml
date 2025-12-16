@@ -23,7 +23,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update      # 스키마 자동 업데이트 (운영 환경에서는 validate 또는 none 권장)
-    show-sql: true          # SQL 쿼리 로깅 활성화
+    show-sql: false          # SQL 쿼리 로깅 활성화
     properties:
       hibernate:
         format_sql: true                                  # SQL 포맷팅 (가독성 향상)
