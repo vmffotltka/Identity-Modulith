@@ -2,9 +2,9 @@ package com.nexfron.identitymodulith.organization.application.service;
 
 import com.nexfron.identitymodulith.organization.common.exception.BusinessException;
 import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
-import com.nexfron.identitymodulith.organization.api.dto.DepartmentDto;
+import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
-import com.nexfron.identitymodulith.organization.infrastructure.persistence.jpa.JpaDepartmentRepository;
+import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.common.exception.InvalidDepartmentMoveException;
 import lombok.RequiredArgsConstructor;

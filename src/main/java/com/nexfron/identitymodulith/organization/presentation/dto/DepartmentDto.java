@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.api.dto;
+package com.nexfron.identitymodulith.organization.presentation.dto;
 
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import lombok.Builder;

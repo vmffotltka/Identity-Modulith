@@ -1,6 +1,6 @@
-package com.nexfron.identitymodulith.organization.api;
+package com.nexfron.identitymodulith.organization.presentation;
 
-import com.nexfron.identitymodulith.organization.api.dto.DepartmentDto;
+import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.application.service.DepartmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

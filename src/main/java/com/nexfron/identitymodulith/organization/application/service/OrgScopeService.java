@@ -6,7 +6,7 @@ import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
-import com.nexfron.identitymodulith.organization.infrastructure.persistence.jpa.JpaDepartmentRepository;
+import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
