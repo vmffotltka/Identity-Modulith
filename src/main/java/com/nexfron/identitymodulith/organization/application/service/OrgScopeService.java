@@ -1,7 +1,7 @@
 // organization.application.service.OrgScopeService.java
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.common.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;

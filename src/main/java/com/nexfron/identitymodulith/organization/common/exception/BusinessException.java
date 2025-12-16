@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.common;
+package com.nexfron.identitymodulith.organization.common.exception;
 
 import lombok.Getter;
 
