@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.infrastructure.persistence.jpa;
+package com.nexfron.identitymodulith.organization.domain.repository;
 
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import org.springframework.data.jpa.repository.JpaRepository;
