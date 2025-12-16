@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: identity-modulith
+
+  datasource:
+    url: jdbc:postgresql://1.224.162.188:51445/nexfron
+    username: admin
+    password: nexfron11!
+    driver-class-name: org.postgresql.Driver
+
+    hikari:
+      # =========================
+      # Connection Pool (?? ?? )
+      # =========================
+      maximum-pool-size: 20        # dev ????? 20?? ??
+      minimum-idle: 5
+      connection-timeout: 30000    # ??? ?? ?? 30?
+      validation-timeout: 5000
+      idle-timeout: 600000         # 10? idle ? ??
+      max-lifetime: 1800000        # 30? ?? (DB idle timeout?? ??)
+      keepalive-time: 300000       # 5??? keepalive (?? ? ??? ??)
+
+      # ??? ?? ?? (?? ??? ?? ?? ??)
+      leak-detection-threshold: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+    show-sql: true
