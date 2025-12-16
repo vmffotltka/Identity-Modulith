@@ -1,6 +1,7 @@
 package com.nexfron.identitymodulith.organization.presentation.dto;
 
 import com.nexfron.identitymodulith.organization.domain.model.Department;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,10 +19,27 @@ public class DepartmentDto {
      */
     @Getter
     @NoArgsConstructor
+    @Schema(description = "부서 생성 요청")
     public static class CreateRequest {
-        private String name;     // 부서명
-        private String type;     // 부서 타입 (팀, 본부 등)
-        private Long parentId;   // 상위 부서 ID (없으면 null)
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
+        private String name;
+
+        @Schema(
+                description = "부서 타입 (TEAM, DIVISION 등)",
+                example = "TEAM"
+        )
+        private String type;
+
+        @Schema(
+                description = "상위 부서 ID (최상위 부서인 경우 null)",
+                example = "1",
+                nullable = true
+        )
+        private Long parentId;
     }
 
     /**
@@ -29,8 +47,14 @@ public class DepartmentDto {
      */
     @Getter
     @NoArgsConstructor
+    @Schema(description = "부서 이동 요청")
     public static class MoveRequest {
-        private Long newParentId;   // 새 상위 부서 ID
+
+        @Schema(
+                description = "새 상위 부서 ID",
+                example = "2"
+        )
+        private Long newParentId;
     }
 
     /**
@@ -39,19 +63,54 @@ public class DepartmentDto {
      */
     @Getter
     @Builder
+    @Schema(description = "부서 응답 DTO (트리 구조)")
     public static class Response {
+
+        @Schema(
+                description = "부서 ID",
+                example = "10"
+        )
         private Long deptId;
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
         private String name;
+
+        @Schema(
+                description = "부서 타입",
+                example = "TEAM"
+        )
         private String type;
+
+        @Schema(
+                description = "조직 경로 (Materialized Path)",
+                example = "/1/3/10"
+        )
         private String orgPath;
+
+        @Schema(
+                description = "조직 트리 깊이 (Root = 0)",
+                example = "2"
+        )
         private Integer depth;
+
+        @Schema(
+                description = "상위 부서 ID (Root 부서는 null)",
+                example = "3",
+                nullable = true
+        )
         private Long parentId;
 
         /**
          * 트리 구조 표현용 자식 노드 리스트
-         * - 기본값으로 빈 리스트를 만들어 두고, addChild 로 채운다.
          */
         @Builder.Default
+        @Schema(
+                description = "하위 부서 목록 (트리 구조)",
+                implementation = Response.class
+        )
         private List<Response> children = new ArrayList<>();
 
         public void addChild(Response child) {
@@ -68,7 +127,11 @@ public class DepartmentDto {
                     .type(dept.getType())
                     .orgPath(dept.getOrgPath())
                     .depth(dept.getDepth())
-                    .parentId(dept.getParent() != null ? dept.getParent().getDeptId() : null)
+                    .parentId(
+                            dept.getParent() != null
+                                    ? dept.getParent().getDeptId()
+                                    : null
+                    )
                     .build();
         }
     }
