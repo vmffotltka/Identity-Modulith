@@ -8,7 +8,7 @@ import com.nexfron.identitymodulith.user.domain.exception.ErrorCode;
 import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
 import com.nexfron.identitymodulith.user.domain.service.PasswordEncoder;
 import com.nexfron.identitymodulith.user.domain.service.PasswordGenerator;
-import com.nexfron.identitymodulith.user.infrastructure.retry.RetrySupplier;
+import com.nexfron.identitymodulith.user.infrastructure.retry.DatabaseRetrySupplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -167,18 +167,18 @@ public class AgentService implements
 
         if (criteria.getOrganizationId() != null) {
             if (criteria.isIncludeRetired()) {
-                agents = RetrySupplier.withDatabaseRetry(
+                agents = DatabaseRetrySupplier.withRetry(
                         () -> agentRepository.findByOrganizationId(criteria.getOrganizationId()));
             } else {
-                agents = RetrySupplier.withDatabaseRetry(
+                agents = DatabaseRetrySupplier.withRetry(
                         () -> agentRepository.findByOrganizationIdAndStatus(
                                 criteria.getOrganizationId(), AgentStatus.ACTIVE));
             }
         } else {
             if (criteria.isIncludeRetired()) {
-                agents = RetrySupplier.withDatabaseRetry(agentRepository::findAll);
+                agents = DatabaseRetrySupplier.withRetry(agentRepository::findAll);
             } else {
-                agents = RetrySupplier.withDatabaseRetry(
+                agents = DatabaseRetrySupplier.withRetry(
                         () -> agentRepository.findAllByStatus(AgentStatus.ACTIVE));
             }
         }
@@ -212,7 +212,7 @@ public class AgentService implements
     @Override
     @Transactional(readOnly = true)
     public boolean isLoginIdUnique(String loginId) {
-        return RetrySupplier.withDatabaseRetry(() -> !agentRepository.existsByLoginId(loginId));
+        return DatabaseRetrySupplier.withRetry(() -> !agentRepository.existsByLoginId(loginId));
     }
 
     /**
@@ -224,7 +224,7 @@ public class AgentService implements
      * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
      */
     private Agent findAgentById(UUID agentId) {
-        return RetrySupplier.withDatabaseRetry(
+        return DatabaseRetrySupplier.withRetry(
                 () -> agentRepository.findById(agentId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND))
         );
@@ -259,6 +259,6 @@ public class AgentService implements
      * @return 저장된 Agent 엔티티
      */
     private Agent saveAgent(Agent agent) {
-        return RetrySupplier.withDatabaseRetry(() -> agentRepository.save(agent));
+        return DatabaseRetrySupplier.withRetry(() -> agentRepository.save(agent));
     }
 }
