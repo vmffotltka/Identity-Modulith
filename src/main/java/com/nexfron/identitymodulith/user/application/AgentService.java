@@ -8,6 +8,7 @@ import com.nexfron.identitymodulith.user.domain.exception.ErrorCode;
 import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
 import com.nexfron.identitymodulith.user.domain.service.PasswordEncoder;
 import com.nexfron.identitymodulith.user.domain.service.PasswordGenerator;
+import com.nexfron.identitymodulith.user.infrastructure.retry.RetrySupplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,7 +64,7 @@ public class AgentService implements
                 .passwordMustChange(true)
                 .build();
 
-        Agent savedAgent = agentRepository.save(agent);
+        Agent savedAgent = saveAgent(agent);
 
         return CreateAgentResult.builder()
                 .agentId(savedAgent.getId())
@@ -88,7 +89,7 @@ public class AgentService implements
         String encodedPassword = passwordEncoder.encode(tempPassword);
 
         agent.resetPassword(encodedPassword);
-        agentRepository.save(agent);
+        saveAgent(agent);
 
         return ResetPasswordResult.builder()
                 .agentId(agent.getId())
@@ -106,7 +107,7 @@ public class AgentService implements
     public void updateAgent(UpdateAgentCommand command) {
         Agent agent = findAgentById(command.getAgentId());
         agent.updateName(command.getName());
-        agentRepository.save(agent);
+        saveAgent(agent);
     }
 
     /**
@@ -120,7 +121,7 @@ public class AgentService implements
     public void transferOrganization(UUID agentId, String newOrganizationId) {
         Agent agent = findAgentById(agentId);
         agent.transferOrganization(newOrganizationId);
-        agentRepository.save(agent);
+        saveAgent(agent);
     }
 
     /**
@@ -135,7 +136,7 @@ public class AgentService implements
     public void retireAgent(UUID agentId) {
         Agent agent = findAgentById(agentId);
         agent.retire();
-        agentRepository.save(agent);
+        saveAgent(agent);
     }
 
     /**
@@ -166,16 +167,19 @@ public class AgentService implements
 
         if (criteria.getOrganizationId() != null) {
             if (criteria.isIncludeRetired()) {
-                agents = agentRepository.findByOrganizationId(criteria.getOrganizationId());
+                agents = RetrySupplier.withDatabaseRetry(
+                        () -> agentRepository.findByOrganizationId(criteria.getOrganizationId()));
             } else {
-                agents = agentRepository.findByOrganizationIdAndStatus(
-                        criteria.getOrganizationId(), AgentStatus.ACTIVE);
+                agents = RetrySupplier.withDatabaseRetry(
+                        () -> agentRepository.findByOrganizationIdAndStatus(
+                                criteria.getOrganizationId(), AgentStatus.ACTIVE));
             }
         } else {
             if (criteria.isIncludeRetired()) {
-                agents = agentRepository.findAll();
+                agents = RetrySupplier.withDatabaseRetry(agentRepository::findAll);
             } else {
-                agents = agentRepository.findAllByStatus(AgentStatus.ACTIVE);
+                agents = RetrySupplier.withDatabaseRetry(
+                        () -> agentRepository.findAllByStatus(AgentStatus.ACTIVE));
             }
         }
 
@@ -196,7 +200,7 @@ public class AgentService implements
         Agent agent = findAgentById(agentId);
         agent.getRoles().clear();
         roles.forEach(agent::addRole);
-        agentRepository.save(agent);
+        saveAgent(agent);
     }
 
     /**
@@ -208,19 +212,22 @@ public class AgentService implements
     @Override
     @Transactional(readOnly = true)
     public boolean isLoginIdUnique(String loginId) {
-        return !agentRepository.existsByLoginId(loginId);
+        return RetrySupplier.withDatabaseRetry(() -> !agentRepository.existsByLoginId(loginId));
     }
 
     /**
      * ID로 상담사를 조회하는 내부 헬퍼 메서드.
+     * DB 연결 실패 시 재시도를 수행합니다.
      *
      * @param agentId 조회할 상담사 ID
      * @return 조회된 상담사 엔티티
      * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
      */
     private Agent findAgentById(UUID agentId) {
-        return agentRepository.findById(agentId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
+        return RetrySupplier.withDatabaseRetry(
+                () -> agentRepository.findById(agentId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND))
+        );
     }
 
     /**
@@ -242,5 +249,16 @@ public class AgentService implements
                 .retiredAt(agent.getRetiredAt())
                 .roles(agent.getRoles())
                 .build();
+    }
+
+    /**
+     * Agent를 저장하는 내부 헬퍼 메서드.
+     * DB 연결 실패 시 재시도를 수행합니다.
+     *
+     * @param agent 저장할 Agent 엔티티
+     * @return 저장된 Agent 엔티티
+     */
+    private Agent saveAgent(Agent agent) {
+        return RetrySupplier.withDatabaseRetry(() -> agentRepository.save(agent));
     }
 }
