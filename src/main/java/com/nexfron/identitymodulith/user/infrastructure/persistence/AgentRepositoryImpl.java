@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.user.infrastructure.persistence;
 
-import com.nexfron.identitymodulith.user.domain.Agent;
-import com.nexfron.identitymodulith.user.domain.AgentStatus;
+import com.nexfron.identitymodulith.user.domain.model.Agent;
+import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
 import com.nexfron.identitymodulith.user.infrastructure.persistence.entity.AgentJpaEntity;
 import com.nexfron.identitymodulith.user.infrastructure.persistence.repository.AgentJpaRepository;

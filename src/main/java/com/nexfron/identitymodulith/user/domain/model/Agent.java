@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.user.domain;
+package com.nexfron.identitymodulith.user.domain.model;
 
 import lombok.Builder;
 import lombok.EqualsAndHashCode;

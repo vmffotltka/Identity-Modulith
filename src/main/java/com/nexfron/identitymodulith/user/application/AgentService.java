@@ -1,8 +1,8 @@
 package com.nexfron.identitymodulith.user.application;
 
-import com.nexfron.identitymodulith.user.domain.Agent;
-import com.nexfron.identitymodulith.user.domain.Agent.Role;
-import com.nexfron.identitymodulith.user.domain.AgentStatus;
+import com.nexfron.identitymodulith.user.domain.model.Agent;
+import com.nexfron.identitymodulith.user.domain.model.Agent.Role;
+import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.exception.BusinessException;
 import com.nexfron.identitymodulith.user.domain.exception.ErrorCode;
 import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;

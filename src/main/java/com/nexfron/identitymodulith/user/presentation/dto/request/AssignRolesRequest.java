@@ -1,6 +1,6 @@
 package com.nexfron.identitymodulith.user.presentation.dto.request;
 
-import com.nexfron.identitymodulith.user.domain.Agent.Role;
+import com.nexfron.identitymodulith.user.domain.model.Agent.Role;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
