@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Log4j2 Configuration
+
+    Features:
+    - Async Appenders for high-throughput (Virtual Threads 환경 최적화)
+    - Distributed Tracing support (traceId, spanId)
+    - Environment-based log levels
+    - JSON format logging for log aggregation systems
+    - Runtime configuration reload (monitorInterval)
+
+    Environment Variables:
+    - LOG_PATH: 로그 파일 경로 (기본: logs)
+    - LOG_LEVEL_ROOT: Root 로그 레벨 (기본: INFO)
+    - LOG_LEVEL_APP: 애플리케이션 로그 레벨 (기본: DEBUG)
+    - LOG_LEVEL_MONGO: MongoDB 로그 레벨 (기본: INFO)
+    - LOG_LEVEL_REDIS: Redis 로그 레벨 (기본: INFO)
+    - JSON_LOG_ENABLED: JSON 로그 활성화 (기본: false)
+-->
+<Configuration status="WARN" shutdownHook="disable" monitorInterval="30">
+
+    <Properties>
+        <!-- 기본 경로 및 앱 정보 -->
+        <Property name="LOG_PATH">${sys:LOG_PATH:-${env:LOG_PATH:-logs}}</Property>
+        <Property name="APP_NAME">apim-dataplane</Property>
+
+        <!-- 환경별 로그 레벨 (환경 변수로 오버라이드 가능) -->
+        <Property name="LOG_LEVEL_ROOT">${env:LOG_LEVEL_ROOT:-INFO}</Property>
+        <Property name="LOG_LEVEL_APP">${env:LOG_LEVEL_APP:-DEBUG}</Property>
+        <Property name="LOG_LEVEL_MONGO">${env:LOG_LEVEL_MONGO:-INFO}</Property>
+        <Property name="LOG_LEVEL_REDIS">${env:LOG_LEVEL_REDIS:-INFO}</Property>
+        <Property name="LOG_LEVEL_AMQP">${env:LOG_LEVEL_AMQP:-INFO}</Property>
+        <Property name="LOG_LEVEL_RESILIENCE">${env:LOG_LEVEL_RESILIENCE:-INFO}</Property>
+
+        <!-- 콘솔용 패턴 (컬러 출력 + 분산 추적 ID) -->
+        <Property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight{%-5level}{FATAL=red blink, ERROR=red bold, WARN=yellow bold, INFO=green, DEBUG=cyan, TRACE=blue} [%thread] [%X{traceId:--},%X{spanId:--}] %style{%-40.40logger{39}}{cyan} - %msg%n</Property>
+
+        <!-- 파일용 패턴 (분산 추적 ID 포함) -->
+        <Property name="FILE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [%X{traceId:--},%X{spanId:--}] %logger{36} - %msg%n</Property>
+
+        <!-- JSON용 패턴 -->
+        <Property name="JSON_PATTERN">{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","thread":"%thread","traceId":"%X{traceId:--}","spanId":"%X{spanId:--}","logger":"%logger{36}","message":"%msg","exception":"%ex{full}"}%n</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- ==================== Console Appender ==================== -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${CONSOLE_PATTERN}" disableAnsi="false"/>
+        </Console>
+
+        <!-- ==================== Rolling File Appenders ==================== -->
+
+        <!-- 일반 로그 파일 -->
+        <RollingFile name="RollingFile"
+                     fileName="${LOG_PATH}/${APP_NAME}.log"
+                     filePattern="${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz">
+            <PatternLayout pattern="${FILE_PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30">
+                <!-- 30일 이상 된 로그 자동 삭제 -->
+                <Delete basePath="${LOG_PATH}" maxDepth="1">
+                    <IfFileName glob="${APP_NAME}.*.log.gz"/>
+                    <IfLastModified age="30d"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+
+        <!-- 에러 전용 로그 파일 -->
+        <RollingFile name="ErrorFile"
+                     fileName="${LOG_PATH}/${APP_NAME}-error.log"
+                     filePattern="${LOG_PATH}/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log.gz">
+            <PatternLayout pattern="${FILE_PATTERN}"/>
+            <Filters>
+                <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+            </Filters>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30">
+                <Delete basePath="${LOG_PATH}" maxDepth="1">
+                    <IfFileName glob="${APP_NAME}-error.*.log.gz"/>
+                    <IfLastModified age="30d"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+
+        <!-- JSON 로그 파일 (ELK/CloudWatch 연동용) -->
+        <RollingFile name="JsonFile"
+                     fileName="${LOG_PATH}/${APP_NAME}-json.log"
+                     filePattern="${LOG_PATH}/${APP_NAME}-json.%d{yyyy-MM-dd}.%i.log.gz">
+            <PatternLayout pattern="${JSON_PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="7">
+                <!-- JSON 로그는 7일만 보관 (로그 수집 시스템으로 전송 후 삭제) -->
+                <Delete basePath="${LOG_PATH}" maxDepth="1">
+                    <IfFileName glob="${APP_NAME}-json.*.log.gz"/>
+                    <IfLastModified age="7d"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+
+        <!-- ==================== Async Appenders (성능 최적화) ==================== -->
+        <!--
+            Virtual Threads 환경에서도 파일 I/O는 블로킹됨
+            Async Appender로 로깅 지연 방지 및 처리량 향상
+        -->
+        <Async name="AsyncFile" bufferSize="1024" blocking="false">
+            <AppenderRef ref="RollingFile"/>
+        </Async>
+
+        <Async name="AsyncError" bufferSize="512" blocking="false">
+            <AppenderRef ref="ErrorFile"/>
+        </Async>
+
+        <Async name="AsyncJson" bufferSize="1024" blocking="false">
+            <AppenderRef ref="JsonFile"/>
+        </Async>
+    </Appenders>
+
+    <Loggers>
+        <!-- ==================== Application Loggers ==================== -->
+
+        <!-- 애플리케이션 메인 로거 -->
+        <Logger name="com.clalink.apimdataplan" level="${LOG_LEVEL_APP}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+            <AppenderRef ref="AsyncError"/>
+            <AppenderRef ref="AsyncJson"/>
+        </Logger>
+
+        <!-- ==================== Spring Framework Loggers ==================== -->
+
+        <!-- Spring Core -->
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Spring Web (HTTP 요청 로깅) -->
+        <Logger name="org.springframework.web" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Spring Web Client (외부 API 호출 디버깅) -->
+        <Logger name="org.springframework.web.client" level="${env:LOG_LEVEL_WEB_CLIENT:-DEBUG}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Data Store Loggers ==================== -->
+
+        <!-- MongoDB -->
+        <Logger name="org.springframework.data.mongodb" level="${LOG_LEVEL_MONGO}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- MongoDB Driver -->
+        <Logger name="org.mongodb.driver" level="${LOG_LEVEL_MONGO}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Redis -->
+        <Logger name="org.springframework.data.redis" level="${LOG_LEVEL_REDIS}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Lettuce (Redis Client) -->
+        <Logger name="io.lettuce" level="${LOG_LEVEL_REDIS}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Messaging Loggers ==================== -->
+
+        <!-- RabbitMQ -->
+        <Logger name="org.springframework.amqp" level="${LOG_LEVEL_AMQP}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- RabbitMQ Client -->
+        <Logger name="com.rabbitmq" level="${LOG_LEVEL_AMQP}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Resilience Loggers ==================== -->
+
+        <!-- Resilience4j -->
+        <Logger name="io.github.resilience4j" level="${LOG_LEVEL_RESILIENCE}" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Infrastructure Loggers ==================== -->
+
+        <!-- Spring Cloud Config -->
+        <Logger name="org.springframework.cloud.config" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Eureka Client -->
+        <Logger name="com.netflix.discovery" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- Eureka (Spring Cloud) -->
+        <Logger name="org.springframework.cloud.netflix" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Security & Validation Loggers ==================== -->
+
+        <!-- Hibernate Validator -->
+        <Logger name="org.hibernate.validator" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Logger>
+
+        <!-- ==================== Noisy Loggers (Suppress) ==================== -->
+
+        <!-- Netty (과도한 DEBUG 로그 억제) -->
+        <Logger name="io.netty" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- Reactor (과도한 DEBUG 로그 억제) -->
+        <Logger name="reactor" level="WARN" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- ==================== Root Logger ==================== -->
+        <Root level="${LOG_LEVEL_ROOT}">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AsyncFile"/>
+            <AppenderRef ref="AsyncError"/>
+        </Root>
+    </Loggers>
+</Configuration>
