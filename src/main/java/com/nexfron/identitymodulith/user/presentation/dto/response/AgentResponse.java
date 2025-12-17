@@ -1,8 +1,8 @@
 package com.nexfron.identitymodulith.user.presentation.dto.response;
 
 import com.nexfron.identitymodulith.user.application.GetAgentUseCase.AgentInfo;
+import com.nexfron.identitymodulith.user.domain.Agent.Role;
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
-import com.nexfron.identitymodulith.user.domain.Role;
 import lombok.Builder;
 import lombok.Getter;
 

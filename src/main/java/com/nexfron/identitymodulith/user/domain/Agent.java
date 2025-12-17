@@ -1,7 +1,9 @@
 package com.nexfron.identitymodulith.user.domain;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -10,6 +12,20 @@ import java.util.UUID;
 
 @Getter
 public class Agent {
+
+    @Getter
+    @RequiredArgsConstructor
+    @EqualsAndHashCode
+    public static class Role {
+
+        private final String name;
+        private final RoleType type;
+
+        public enum RoleType {
+            POSITION,  // 직급
+            CHANNEL    // 채널 (전화, 채팅 등)
+        }
+    }
 
     private final UUID id;
     private String tenantId;

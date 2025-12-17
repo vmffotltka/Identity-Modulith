@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexfron.identitymodulith.user.domain.Agent;
+import com.nexfron.identitymodulith.user.domain.Agent.Role;
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
-import com.nexfron.identitymodulith.user.domain.Role;
 import com.nexfron.identitymodulith.user.infrastructure.persistence.entity.AgentJpaEntity;
 import org.springframework.stereotype.Component;
 

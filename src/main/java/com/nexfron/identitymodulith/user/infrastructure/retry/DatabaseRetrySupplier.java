@@ -16,6 +16,8 @@ import java.util.function.Supplier;
  * );
  * }</pre>
  */
+// TODO : Resilence4J를 이용하여 Retry 구현 필요
+
 @Log4j2
 public final class DatabaseRetrySupplier {
 

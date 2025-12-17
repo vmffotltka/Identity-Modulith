@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.user.application;
 
+import com.nexfron.identitymodulith.user.domain.Agent.Role;
 import com.nexfron.identitymodulith.user.domain.AgentStatus;
-import com.nexfron.identitymodulith.user.domain.Role;
 import lombok.Builder;
 import lombok.Getter;
 
