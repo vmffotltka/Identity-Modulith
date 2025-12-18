@@ -57,6 +57,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Long>
      * - 부서 삭제 시 "하위 부서 존재하면 삭제 불가" 정책 검증
      */
     boolean existsByParent(Department parent);
+    boolean existsByTenantIdAndParent_DeptId(String tenantId, Long parentDeptId);
 
     /**
      * 특정 테넌트의 최상위(root) 부서 조회

@@ -81,40 +81,33 @@ public class DepartmentService {
                                Long deptId,
                                Long newParentId) {
 
-        // 403: 스코프 기반 권한 체크 (대상)
-        if (!orgScopeService.canAccessDepartment(tenantId, actorUserId, deptId)) {
-            throw new BusinessException("해당 부서를 이동할 권한이 없습니다.");
-        }
-
-        // 정책: 루트 이동 허용 여부
-        // - 허용하려면 여기서 newParentId==null 분기 처리로 루트로 이동시키면 됨
         if (newParentId == null) {
             throw new BusinessException("새 상위 부서는 필수입니다.");
         }
 
-        // 403: 스코프 기반 권한 체크 (새 부모)
+        // ✅ 404를 먼저 확정 (tenant 포함)
+        Department target = getDeptOrThrow(tenantId, deptId, "이동할 부서를 찾을 수 없습니다.");
+        Department newParent = getDeptOrThrow(tenantId, newParentId, "새 상위 부서를 찾을 수 없습니다.");
+
+        // ✅ 그 다음 403 (스코프 기반 권한 체크)
+        if (!orgScopeService.canAccessDepartment(tenantId, actorUserId, deptId)) {
+            throw new BusinessException("해당 부서를 이동할 권한이 없습니다.");
+        }
         if (!orgScopeService.canAccessDepartment(tenantId, actorUserId, newParentId)) {
             throw new BusinessException("새 상위 부서를 지정할 권한이 없습니다.");
         }
 
-        // 404: tenant 포함 조회로 강제
-        Department target = getDeptOrThrow(tenantId, deptId, "이동할 부서를 찾을 수 없습니다.");
-        Department newParent = getDeptOrThrow(tenantId, newParentId, "새 상위 부서를 찾을 수 없습니다.");
-
-        // 하위 경로 재계산에 필요 (null이면 데이터가 비정상)
         String oldPath = target.getOrgPath();
         if (oldPath == null) {
             throw new BusinessException("부서 경로(orgPath)가 비어 있어 이동할 수 없습니다.");
         }
 
-        // 400: 도메인 규칙 위반(순환참조 등)은 표준 예외로 변환
         try {
-            target.changeParent(newParent); // InvalidDepartmentMoveException 가능
+            target.changeParent(newParent);
         } catch (InvalidDepartmentMoveException e) {
             throw new BusinessException(e.getMessage());
         }
 
-        // 이동 대상의 oldPath 하위 부서들 orgPath 재계산
         List<Department> descendants =
                 jpaDepartmentRepository.findByTenantIdAndOrgPathStartsWith(tenantId, oldPath + "/");
 
@@ -124,34 +117,39 @@ public class DepartmentService {
         }
     }
 
+
     /* ==========================================================
      * 부서 삭제
      * ========================================================== */
 
     @Transactional
-    public void deleteDepartment(String tenantId,
-                                 UUID actorUserId,
-                                 Long deptId) {
+    public void deleteDepartment(String tenantId, UUID actorUserId, Long deptId) {
 
-        // 403
+        // ✅ 1) 404 먼저 확정 (tenant 격리 포함)
+        Department target = getDeptOrThrow(tenantId, deptId, "삭제할 부서를 찾을 수 없습니다.");
+
+        // ✅ 2) 403 (권한)
         if (!orgScopeService.canAccessDepartment(tenantId, actorUserId, deptId)) {
             throw new BusinessException("해당 부서를 삭제할 권한이 없습니다.");
         }
 
-        // 404
-        Department dept = getDeptOrThrow(tenantId, deptId, "삭제할 부서를 찾을 수 없습니다.");
-
-        // 400: 정책 위반
-        if (jpaDepartmentRepository.existsByParent(dept)) {
+        // ✅ 3) 삭제 불가 조건들 (정확한 메시지)
+        // 3-1) 하위 부서가 있으면 삭제 불가
+        // (레포 메서드는 너희 코드에 맞춰 이름만 조정하면 됨)
+        boolean hasChildren = jpaDepartmentRepository.existsByTenantIdAndParent_DeptId(tenantId, deptId);
+        if (hasChildren) {
             throw new BusinessException("하위 부서가 존재하여 삭제할 수 없습니다.");
         }
 
+        // 3-2) 활성 사용자가 있으면 삭제 불가
         if (orgUserPort.existsActiveUserInDepartment(tenantId, deptId)) {
-            throw new BusinessException("소속 구성원이 존재하여 삭제할 수 없습니다.");
+            throw new BusinessException("활성 사용자가 존재하여 삭제할 수 없습니다.");
         }
 
-        jpaDepartmentRepository.delete(dept);
+        // ✅ 4) 삭제
+        jpaDepartmentRepository.delete(target);
     }
+
 
     /* ==========================================================
      * 트리 조회
