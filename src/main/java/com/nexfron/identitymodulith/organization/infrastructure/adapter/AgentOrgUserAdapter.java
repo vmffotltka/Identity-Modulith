@@ -1,0 +1,173 @@
+package com.nexfron.identitymodulith.organization.infrastructure.adapter;
+
+import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
+import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
+import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
+import com.nexfron.identitymodulith.user.domain.model.Agent;
+import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
+import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+
+/**
+ * [Organization ↔ User 연동 어댑터]
+ *
+ * Organization 모듈에서 사용자 정보를 직접 참조하지 않기 위해
+ * OrgUserPort 인터페이스를 통해 User(Agent) 모듈을 조회하는 실제 구현체.
+ *
+ * - DummyOrgUserAdapter 를 대체하는 "실제" 구현
+ * - Agent 정보를 기반으로 조직 스코프 / 권한 판단에 필요한 최소 정보만 제공
+ *
+ * 역할 요약:
+ * 1. userId(UUID) → Agent 조회
+ * 2. Agent.organizationId(String) → Department.deptId(Long) 변환
+ * 3. Agent role 정보 → OrgRoleLevel 매핑
+ *
+ * 주의:
+ * - Agent.organizationId 는 "부서 ID를 문자열로 저장"하는 구조임
+ * - Organization 모듈은 부서 트리/경로 계산만 담당하고,
+ *   사용자 활성 여부/권한은 이 어댑터에서 해석함
+ */
+@Service
+@Primary // DummyOrgUserAdapter 보다 우선 적용되도록 설정
+@RequiredArgsConstructor
+public class AgentOrgUserAdapter implements OrgUserPort {
+
+    /**
+     * User 모듈의 Agent 조회용 Repository
+     * (Organization 모듈은 Agent 엔티티를 직접 알지 않음)
+     */
+    private final AgentRepository agentRepository;
+
+    /**
+     * 특정 부서에 "활성 상태"의 사용자가 존재하는지 여부 확인
+     *
+     * - 부서 삭제 가능 여부 판단 시 사용됨
+     * - 실제로는 tenant + deptId + ACTIVE 조건을 만족하는 사용자 존재 여부만 필요
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId   부서 ID (Department.deptId)
+     * @return 활성 사용자 존재 여부
+     */
+    @Override
+    public boolean existsActiveUserInDepartment(String tenantId, Long deptId) {
+        // Agent.organizationId 는 deptId 를 문자열로 저장하고 있음
+        String deptKey = String.valueOf(deptId);
+
+        // Repository 단에서는 tenant 조건이 없어서
+        // 애플리케이션 레벨에서 tenant 필터링을 한 번 더 수행
+        return agentRepository
+                .findByOrganizationIdAndStatus(deptKey, AgentStatus.ACTIVE)
+                .stream()
+                .anyMatch(agent ->
+                        tenantId.equals(agent.getTenantId()) && agent.isActive()
+                );
+    }
+
+    /**
+     * 사용자 ID 기반으로 조직 스코프 계산에 필요한 사용자 정보 조회
+     *
+     * - 부서 이동 / 조직 조회 등 대부분의 Organization API 에서 사용됨
+     * - userId 는 HTTP Header(X-User-Id) 로 전달됨
+     *
+     * @param tenantId 테넌트 ID
+     * @param userId   사용자(Agent) UUID
+     * @return OrgUserView (없으면 null)
+     */
+    @Override
+    public OrgUserView findOrgInfoByUserId(String tenantId, UUID userId) {
+        return agentRepository.findById(userId)
+                // 다른 테넌트 사용자 접근 방지
+                .filter(agent -> tenantId.equals(agent.getTenantId()))
+                .map(this::toView)
+                .orElse(null);
+    }
+
+    /**
+     * 여러 부서에 속한 활성 사용자 조회
+     *
+     * - 현재 Organization 모듈에서는 사용하지 않음
+     * - 추후 조직 단위 사용자 목록 API가 추가될 경우 확장 예정
+     *
+     * NOTE:
+     * 성능을 고려하면 AgentJpaRepository 에
+     * tenant + deptId IN (...) 쿼리를 추가하는 것이 바람직함
+     */
+    @Override
+    public List<OrgUserView> findActiveUsersByDeptIds(String tenantId, List<Long> deptIds) {
+        return List.of(); // 최소 구현
+    }
+
+    /**
+     * Agent → OrgUserView 변환
+     *
+     * Organization 모듈이 필요로 하는 정보만 추려서 전달
+     */
+    private OrgUserView toView(Agent agent) {
+        Long deptId = parseLongOrNull(agent.getOrganizationId());
+
+        return OrgUserView.builder()
+                .userId(agent.getId())
+                .tenantId(agent.getTenantId())
+                .deptId(deptId)
+                // orgPath 는 Department 트리 기준으로
+                // OrgScopeService 에서 다시 계산하므로 여기서는 null
+                .deptOrgPath(null)
+                .roleLevel(mapRoleLevel(agent))
+                .active(agent.isActive())
+                .build();
+    }
+
+    /**
+     * Agent.organizationId(String) → Department.deptId(Long) 변환
+     *
+     * - 숫자 문자열이 아닐 경우 null 처리
+     * - null 이면 "소속 부서 없음"으로 간주됨
+     */
+    private Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Agent 역할 정보를 Organization 권한 레벨로 매핑
+     *
+     * 현재 정책:
+     * - role 이름에 "ADMIN" 포함 → ADMIN
+     * - role 이름에 "LEAD" / "TEAM_LEAD" 포함 → TEAM_LEAD
+     * - 그 외 → MEMBER
+     *
+     * 향후 RBAC 정책이 정교해지면 이 메서드만 수정하면 됨
+     */
+    private OrgRoleLevel mapRoleLevel(Agent agent) {
+        boolean isAdmin = agent.getRoles().stream()
+                .anyMatch(role ->
+                        role.getName() != null &&
+                                role.getName().toUpperCase(Locale.ROOT).contains("ADMIN")
+                );
+
+        if (isAdmin) return OrgRoleLevel.ADMIN;
+
+        boolean isLead = agent.getRoles().stream()
+                .anyMatch(role ->
+                        role.getName() != null &&
+                                (
+                                        role.getName().toUpperCase(Locale.ROOT).contains("LEAD") ||
+                                                role.getName().toUpperCase(Locale.ROOT).contains("TEAM_LEAD")
+                                )
+                );
+
+        if (isLead) return OrgRoleLevel.TEAM_LEAD;
+
+        return OrgRoleLevel.MEMBER;
+    }
+}
