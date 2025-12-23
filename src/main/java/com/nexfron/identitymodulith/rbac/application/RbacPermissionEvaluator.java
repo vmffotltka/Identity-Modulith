@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
 @Component("rbac")
 @RequiredArgsConstructor
 public class RbacPermissionEvaluator {
@@ -20,5 +22,5 @@ public class RbacPermissionEvaluator {
                 .contains(permissionCode);
     }
 
-    public record AuthPrincipal(String tenantId, String agentId) {}
+    public record AuthPrincipal(String tenantId, UUID agentId) {}
 }
