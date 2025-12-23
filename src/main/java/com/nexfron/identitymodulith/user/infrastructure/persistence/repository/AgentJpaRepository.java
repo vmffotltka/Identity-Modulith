@@ -17,4 +17,6 @@ public interface AgentJpaRepository extends JpaRepository<AgentJpaEntity, String
     List<AgentJpaEntity> findByDeptIdAndStatus(String deptId, String status);
 
     List<AgentJpaEntity> findByStatus(String status);
+
+    Optional<AgentJpaEntity> findByTenantIdAndAgentId(String tenantId, String agentId);
 }

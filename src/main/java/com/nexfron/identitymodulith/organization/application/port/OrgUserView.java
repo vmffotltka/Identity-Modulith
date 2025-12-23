@@ -1,7 +1,7 @@
 // organization.application.port.OrgUserView.java
 package com.nexfron.identitymodulith.organization.application.port;
 
-import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
+import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -23,6 +23,6 @@ public class OrgUserView {
     private Long deptId;       // 소속 부서 ID (FK: departments.dept_id)
     private String deptOrgPath;// 소속 부서 orgPath (없으면 Dept에서 계산 가능)
 
-    private OrgRoleLevel roleLevel; // Level 2 RBAC용 역할 레벨
+    private DataScopeLevel roleLevel; // Level 2 RBAC용 역할 레벨
     private boolean active;    // 재직 여부
 }

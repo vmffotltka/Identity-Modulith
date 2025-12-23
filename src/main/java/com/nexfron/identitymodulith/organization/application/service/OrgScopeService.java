@@ -5,7 +5,7 @@ import com.nexfron.identitymodulith.organization.common.exception.EntityNotFound
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
-import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
+import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
 import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,7 +41,7 @@ public class OrgScopeService {
             throw new EntityNotFoundException("사용자의 조직 정보를 찾을 수 없습니다.");
         }
 
-        OrgRoleLevel level = userView.getRoleLevel();
+        DataScopeLevel level = userView.getRoleLevel();
         Long myDeptId = userView.getDeptId();
 
         if (myDeptId == null) {

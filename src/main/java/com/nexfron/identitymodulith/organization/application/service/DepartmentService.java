@@ -1,10 +1,10 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.common.BusinessException;
-import com.nexfron.identitymodulith.organization.common.EntityNotFoundException;
-import com.nexfron.identitymodulith.organization.api.dto.DepartmentDto;
+import com.nexfron.identitymodulith.organization.common.exception.BusinessException;
+import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
-import com.nexfron.identitymodulith.organization.infrastructure.repository.DepartmentRepository;
+import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class DepartmentService {
 
-    private final DepartmentRepository departmentRepository;
+    private final JpaDepartmentRepository departmentRepository;
     private final OrgScopeService orgScopeService; // Level 2 RBAC 스코프 계산용
     private final OrgUserPort orgUserPort;         // Users 테이블 간접 접근 (소속 인원 체크용)
 
