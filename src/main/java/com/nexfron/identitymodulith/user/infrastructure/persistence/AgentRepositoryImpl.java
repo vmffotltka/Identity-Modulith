@@ -76,4 +76,10 @@ public class AgentRepositoryImpl implements AgentRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public Optional<Agent> findByTenantIdAndAgentId(String tenantId, UUID agentId) {
+        return jpaRepository.findByTenantIdAndAgentId(tenantId, agentId.toString())
+                .map(mapper::toDomain);
+    }
 }

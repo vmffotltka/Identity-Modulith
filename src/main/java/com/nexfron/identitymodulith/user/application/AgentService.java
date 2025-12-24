@@ -1,5 +1,7 @@
 package com.nexfron.identitymodulith.user.application;
 
+import com.nexfron.identitymodulith.user.AgentExternalInfo;
+import com.nexfron.identitymodulith.user.UserModuleApi;
 import com.nexfron.identitymodulith.user.domain.model.Agent;
 import com.nexfron.identitymodulith.user.domain.model.Agent.Role;
 import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
@@ -14,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 상담사(Agent) 관련 비즈니스 로직을 처리하는 Application Service 클래스.
@@ -31,7 +35,8 @@ public class AgentService implements
         RetireAgentUseCase,
         GetAgentUseCase,
         ManageRoleUseCase,
-        CheckLoginIdUseCase {
+        CheckLoginIdUseCase,
+        UserModuleApi {
 
     private final AgentRepository agentRepository;
     private final PasswordEncoder passwordEncoder;
@@ -260,5 +265,66 @@ public class AgentService implements
      */
     private Agent saveAgent(Agent agent) {
         return DatabaseRetrySupplier.withRetry(() -> agentRepository.save(agent));
+    }
+
+    // ========== UserModuleApi 구현 (모듈 간 통신용 Public API) ==========
+
+    /**
+     * 특정 부서에 속한 활성 상태의 상담사 목록을 조회합니다.
+     * Organization 모듈에서 부서 삭제 가능 여부 판단 시 사용됩니다.
+     *
+     * @param tenantId       테넌트 ID
+     * @param organizationId 부서(조직) ID
+     * @return 해당 부서의 활성 상담사 목록
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentExternalInfo> findActiveAgentsByOrganizationId(String tenantId, String organizationId) {
+        return DatabaseRetrySupplier.withRetry(
+                () -> agentRepository.findByOrganizationIdAndStatus(organizationId, AgentStatus.ACTIVE)
+        ).stream()
+                .filter(agent -> tenantId.equals(agent.getTenantId()))
+                .map(this::toAgentExternalInfo)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 상담사 ID로 상담사 정보를 조회합니다.
+     * Organization 모듈에서 조직 스코프 계산에 필요한 사용자 정보 조회 시 사용됩니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param agentId  상담사 UUID
+     * @return 상담사 정보 (없거나 테넌트 불일치 시 empty)
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AgentExternalInfo> findAgentById(String tenantId, UUID agentId) {
+        return DatabaseRetrySupplier.withRetry(
+                () -> agentRepository.findByTenantIdAndAgentId(tenantId, agentId)
+        ).map(this::toAgentExternalInfo);
+    }
+
+    /**
+     * Agent 도메인 객체를 AgentExternalInfo DTO로 변환합니다.
+     * 모듈 간 통신에 필요한 최소한의 정보만 포함됩니다.
+     *
+     * @param agent 변환할 Agent 도메인 객체
+     * @return 변환된 AgentExternalInfo DTO
+     */
+    private AgentExternalInfo toAgentExternalInfo(Agent agent) {
+        Set<AgentExternalInfo.RoleInfo> roleInfos = agent.getRoles().stream()
+                .map(role -> new AgentExternalInfo.RoleInfo(
+                        role.getName(),
+                        AgentExternalInfo.RoleInfo.RoleType.valueOf(role.getType().name())
+                ))
+                .collect(Collectors.toSet());
+
+        return AgentExternalInfo.builder()
+                .id(agent.getId())
+                .tenantId(agent.getTenantId())
+                .organizationId(agent.getOrganizationId())
+                .roles(roleInfos)
+                .active(agent.isActive())
+                .build();
     }
 }

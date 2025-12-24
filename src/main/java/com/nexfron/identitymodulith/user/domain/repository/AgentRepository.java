@@ -31,4 +31,7 @@ public interface AgentRepository {
     List<Agent> findAll();
 
     List<Agent> findAllByStatus(AgentStatus status);
+
+    // 추가: tenantId 와 agentId 를 동시에 where 조건으로 사용하는 조회 메서드
+    Optional<Agent> findByTenantIdAndAgentId(String tenantId, UUID agentId);
 }
