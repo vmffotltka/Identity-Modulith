@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -286,6 +287,16 @@ public class AgentService implements
                 .filter(agent -> tenantId.equals(agent.getTenantId()))
                 .map(this::toAgentExternalInfo)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentExternalInfo> findActiveAgentsByOrganizationIds(String tenantId, List<String> organizationIds) {
+        List<AgentExternalInfo> result = new ArrayList<>();
+        for (String orgId : organizationIds) {
+            result.addAll(findActiveAgentsByOrganizationId(tenantId, orgId));
+        }
+        return result;
     }
 
     /**

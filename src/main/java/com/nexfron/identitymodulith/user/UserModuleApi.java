@@ -27,6 +27,12 @@ public interface UserModuleApi {
     List<AgentExternalInfo> findActiveAgentsByOrganizationId(String tenantId, String organizationId);
 
     /**
+     * 여러 부서 ID에 해당하는 활성 상담사들을 일괄 조회합니다.
+     * - Organization 모듈의 findActiveUsersByDeptIds 에 매핑되어 사용됩니다.
+     */
+    List<AgentExternalInfo> findActiveAgentsByOrganizationIds(String tenantId, List<String> organizationIds);
+
+    /**
      * 상담사 ID로 상담사 정보를 조회합니다.
      *
      * @param tenantId 테넌트 ID

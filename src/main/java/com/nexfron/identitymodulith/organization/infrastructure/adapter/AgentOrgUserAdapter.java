@@ -3,13 +3,13 @@ package com.nexfron.identitymodulith.organization.infrastructure.adapter;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
-import com.nexfron.identitymodulith.user.domain.model.Agent;
-import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
-import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
+import com.nexfron.identitymodulith.user.UserModuleApi;
+import com.nexfron.identitymodulith.user.AgentExternalInfo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -42,7 +42,7 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * User 모듈의 Agent 조회용 Repository
      * (Organization 모듈은 Agent 엔티티를 직접 알지 않음)
      */
-    private final AgentRepository agentRepository;
+    private final UserModuleApi userModuleApi;
 
     /**
      * 특정 부서에 "활성 상태"의 사용자가 존재하는지 여부 확인
@@ -56,17 +56,11 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      */
     @Override
     public boolean existsActiveUserInDepartment(String tenantId, Long deptId) {
-        // Agent.organizationId 는 deptId 를 문자열로 저장하고 있음
         String deptKey = String.valueOf(deptId);
 
-        // Repository 단에서는 tenant 조건이 없어서
-        // 애플리케이션 레벨에서 tenant 필터링을 한 번 더 수행
-        return agentRepository
-                .findByOrganizationIdAndStatus(deptKey, AgentStatus.ACTIVE)
-                .stream()
-                .anyMatch(agent ->
-                        tenantId.equals(agent.getTenantId()) && agent.isActive()
-                );
+        // UserModuleApi를 통해 해당 부서의 활성 상담사 목록을 가져온다.
+        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptKey).stream()
+                .anyMatch(AgentExternalInfo::isActive);
     }
 
     /**
@@ -81,10 +75,8 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      */
     @Override
     public OrgUserView findOrgInfoByUserId(String tenantId, UUID userId) {
-        return agentRepository.findById(userId)
-                // 다른 테넌트 사용자 접근 방지
-                .filter(agent -> tenantId.equals(agent.getTenantId()))
-                .map(this::toView)
+        return userModuleApi.findAgentById(tenantId, userId)
+                .map(this::toViewFromExternal)
                 .orElse(null);
     }
 
@@ -100,26 +92,33 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      */
     @Override
     public List<OrgUserView> findActiveUsersByDeptIds(String tenantId, List<Long> deptIds) {
-        return List.of(); // 최소 구현
+        // 단순 구현: 각 부서별로 UserModuleApi 호출하고 결과를 합친다.
+        List<OrgUserView> result = new ArrayList<>();
+        for (Long deptId : deptIds) {
+            String deptKey = String.valueOf(deptId);
+            List<AgentExternalInfo> agents = userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptKey);
+            agents.stream()
+                    .map(this::toViewFromExternal)
+                    .forEach(result::add);
+        }
+        return result;
     }
 
     /**
-     * Agent → OrgUserView 변환
+     * AgentExternalInfo → OrgUserView 변환
      *
      * Organization 모듈이 필요로 하는 정보만 추려서 전달
      */
-    private OrgUserView toView(Agent agent) {
-        Long deptId = parseLongOrNull(agent.getOrganizationId());
+    private OrgUserView toViewFromExternal(AgentExternalInfo info) {
+        Long deptId = parseLongOrNull(info.getOrganizationId());
 
         return OrgUserView.builder()
-                .userId(agent.getId())
-                .tenantId(agent.getTenantId())
+                .userId(info.getId())
+                .tenantId(info.getTenantId())
                 .deptId(deptId)
-                // orgPath 는 Department 트리 기준으로
-                // OrgScopeService 에서 다시 계산하므로 여기서는 null
                 .deptOrgPath(null)
-                .roleLevel(mapRoleLevel(agent))
-                .active(agent.isActive())
+                .roleLevel(mapRoleLevelFromExternal(info))
+                .active(info.isActive())
                 .build();
     }
 
@@ -148,23 +147,19 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * <p>
      * 향후 RBAC 정책이 정교해지면 이 메서드만 수정하면 됨
      */
-    private DataScopeLevel mapRoleLevel(Agent agent) {
-        boolean isAdmin = agent.getRoles().stream()
+    private DataScopeLevel mapRoleLevelFromExternal(AgentExternalInfo info) {
+        boolean isAdmin = info.getRoles().stream()
                 .anyMatch(role ->
-                        role.getName() != null &&
-                                role.getName().toUpperCase(Locale.ROOT).contains("ADMIN")
+                        role.getName() != null && role.getName().toUpperCase(Locale.ROOT).contains("ADMIN")
                 );
 
         if (isAdmin) return DataScopeLevel.ADMIN;
 
-        boolean isLead = agent.getRoles().stream()
-                .anyMatch(role ->
-                        role.getName() != null &&
-                                (
-                                        role.getName().toUpperCase(Locale.ROOT).contains("LEAD") ||
-                                                role.getName().toUpperCase(Locale.ROOT).contains("TEAM_LEAD")
-                                )
-                );
+        boolean isLead = info.getRoles().stream()
+                .anyMatch(role -> role.getName() != null && (
+                        role.getName().toUpperCase(Locale.ROOT).contains("LEAD") ||
+                                role.getName().toUpperCase(Locale.ROOT).contains("TEAM_LEAD")
+                ));
 
         if (isLead) return DataScopeLevel.TEAM_LEAD;
 
