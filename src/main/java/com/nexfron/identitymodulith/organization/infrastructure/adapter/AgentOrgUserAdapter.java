@@ -2,7 +2,7 @@ package com.nexfron.identitymodulith.organization.infrastructure.adapter;
 
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
-import com.nexfron.identitymodulith.organization.domain.model.OrgRoleLevel;
+import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
 import com.nexfron.identitymodulith.user.domain.model.Agent;
 import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
 import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
@@ -140,22 +140,22 @@ public class AgentOrgUserAdapter implements OrgUserPort {
 
     /**
      * Agent 역할 정보를 Organization 권한 레벨로 매핑
-     *
+     * <p>
      * 현재 정책:
      * - role 이름에 "ADMIN" 포함 → ADMIN
      * - role 이름에 "LEAD" / "TEAM_LEAD" 포함 → TEAM_LEAD
      * - 그 외 → MEMBER
-     *
+     * <p>
      * 향후 RBAC 정책이 정교해지면 이 메서드만 수정하면 됨
      */
-    private OrgRoleLevel mapRoleLevel(Agent agent) {
+    private DataScopeLevel mapRoleLevel(Agent agent) {
         boolean isAdmin = agent.getRoles().stream()
                 .anyMatch(role ->
                         role.getName() != null &&
                                 role.getName().toUpperCase(Locale.ROOT).contains("ADMIN")
                 );
 
-        if (isAdmin) return OrgRoleLevel.ADMIN;
+        if (isAdmin) return DataScopeLevel.ADMIN;
 
         boolean isLead = agent.getRoles().stream()
                 .anyMatch(role ->
@@ -166,8 +166,8 @@ public class AgentOrgUserAdapter implements OrgUserPort {
                                 )
                 );
 
-        if (isLead) return OrgRoleLevel.TEAM_LEAD;
+        if (isLead) return DataScopeLevel.TEAM_LEAD;
 
-        return OrgRoleLevel.MEMBER;
+        return DataScopeLevel.MEMBER;
     }
 }
