@@ -22,19 +22,28 @@ import java.util.Optional;
  * 제약 사항:
  * - DB 스키마 변경 불가
  * - 따라서 JPA 메서드 네이밍과 서비스 로직으로 안전장치를 만든다.
+ *
+ * ID 타입:
+ * - deptId는 UUID 문자열 (String, VARCHAR(36))
+ * - 모든 메서드의 deptId 파라미터는 String 타입
  */
-public interface JpaDepartmentRepository extends JpaRepository<Department, Long> {
+public interface JpaDepartmentRepository extends JpaRepository<Department, String> {
 
     /**
      * [트리 탐색]
      * 특정 테넌트에서 orgPath prefix 로 시작하는 모든 하위 부서 조회
      *
      * 예)
-     *  orgPathPrefix = "/1/5"
-     *   → "/1/5", "/1/5/10", "/1/5/11" ...
+     *  orgPathPrefix = "/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001"
+     *   → "/550e8400-...", "/550e8400-.../550e8400-..." 등으로 시작하는 모든 부서
      *
      * 사용처:
      * - 부서 이동 시 하위 부서 orgPath 재계산
+     * - 조직도 트리 구성
+     *
+     * @param tenantId 테넌트 ID
+     * @param orgPathPrefix orgPath 접두사 (예: "/550e8400-...")
+     * @return 조건에 맞는 부서 리스트
      */
     List<Department> findByTenantIdAndOrgPathStartsWith(String tenantId, String orgPathPrefix);
 
@@ -45,16 +54,22 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Long>
      * - 전체 조직도 트리 구성
      * - 스코프 기반 조회 전 단계
      *
+     * @param tenantId 테넌트 ID
+     * @return 해당 테넌트의 모든 부서 리스트
+     *
      * 주의:
      * - 데이터 규모가 커지면 IN 조회로 대체 고려
      */
     List<Department> findAllByTenantId(String tenantId);
 
     /**
-     * 특정 부서를 parent 로 가지는 하위 부서 존재 여부
+     * 특정 부서를 parent로 가지는 하위 부서 존재 여부
      *
      * 사용처:
      * - 부서 삭제 시 "하위 부서 존재하면 삭제 불가" 정책 검증
+     *
+     * @param parent 대상 부서
+     * @return true: 하위 부서 존재, false: 없음
      */
     boolean existsByParent(Department parent);
 
@@ -63,17 +78,26 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Long>
      *
      * 구현 방식:
      * - depth = 0 대신 parent IS NULL 조건 사용
+     * - 모든 최상위 부서 반환
+     *
+     * @param tenantId 테넌트 ID
+     * @return 최상위 부서(parent가 null) 리스트
      */
     List<Department> findByTenantIdAndParentIsNull(String tenantId);
 
     /**
      * [권장]
-     * tenantId 를 포함한 단건 조회
+     * tenantId를 포함한 단건 조회
      *
      * 목적:
      * - Service 계층에서 tenant 필터 누락 사고 방지
+     * - 멀티테넌시 환경에서 데이터 격리 보장
+     *
+     * @param deptId 부서 ID (UUID 문자열)
+     * @param tenantId 테넌트 ID
+     * @return 해당 부서 (없으면 Empty)
      */
-    Optional<Department> findByDeptIdAndTenantId(Long deptId, String tenantId);
+    Optional<Department> findByDeptIdAndTenantId(String deptId, String tenantId);
 
     /**
      * [성능 최적화]
@@ -81,6 +105,11 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Long>
      *
      * 사용처:
      * - RBAC 스코프 기반 조직도 트리 조회
+     * - 여러 부서를 한 번에 조회 (N+1 쿼리 방지)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptIds 부서 ID 리스트 (UUID 문자열들)
+     * @return 조건에 맞는 부서 리스트
      */
-    List<Department> findAllByTenantIdAndDeptIdIn(String tenantId, List<Long> deptIds);
+    List<Department> findAllByTenantIdAndDeptIdIn(String tenantId, List<String> deptIds);
 }

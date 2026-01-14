@@ -12,17 +12,22 @@ import java.util.UUID;
  *
  * - Users 엔티티를 직접 보지 않고, 필요한 정보만 추상화한다.
  * - 실제 조회/저장은 User 모듈이 책임진다.
+ *
+ * 데이터 타입:
+ * - userId: UUID
+ * - tenantId: String (테넌트 식별자)
+ * - deptId: String (UUID 문자열, departments.dept_id)
  */
 @Getter
 @Builder
 public class OrgUserView {
 
-    private UUID userId;       // Users.id
-    private String tenantId;
+    private UUID userId;           // Users.id (UUID)
+    private String tenantId;       // 테넌트 ID
 
-    private Long deptId;       // 소속 부서 ID (FK: departments.dept_id)
-    private String deptOrgPath;// 소속 부서 orgPath (없으면 Dept에서 계산 가능)
+    private String deptId;         // 소속 부서 ID (UUID 문자열, FK: departments.dept_id)
+    private String deptOrgPath;    // 소속 부서 orgPath (없으면 Dept에서 계산 가능)
 
     private DataScopeLevel roleLevel; // Level 2 RBAC용 역할 레벨
-    private boolean active;    // 재직 여부
+    private boolean active;           // 재직 여부
 }

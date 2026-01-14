@@ -51,15 +51,13 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * - 실제로는 tenant + deptId + ACTIVE 조건을 만족하는 사용자 존재 여부만 필요
      *
      * @param tenantId 테넌트 ID
-     * @param deptId   부서 ID (Department.deptId)
+     * @param deptId   부서 ID (UUID 문자열, Department.deptId)
      * @return 활성 사용자 존재 여부
      */
     @Override
-    public boolean existsActiveUserInDepartment(String tenantId, Long deptId) {
-        String deptKey = String.valueOf(deptId);
-
+    public boolean existsActiveUserInDepartment(String tenantId, String deptId) {
         // UserModuleApi를 통해 해당 부서의 활성 상담사 목록을 가져온다.
-        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptKey).stream()
+        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).stream()
                 .anyMatch(AgentExternalInfo::isActive);
     }
 
@@ -86,17 +84,20 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * - 현재 Organization 모듈에서는 사용하지 않음
      * - 추후 조직 단위 사용자 목록 API가 추가될 경우 확장 예정
      *
+     * @param tenantId 테넌트 ID
+     * @param deptIds 부서 ID 리스트 (UUID 문자열들)
+     * @return 해당 부서들에 속한 활성 사용자 목록
+     *
      * NOTE:
      * 성능을 고려하면 AgentJpaRepository 에
      * tenant + deptId IN (...) 쿼리를 추가하는 것이 바람직함
      */
     @Override
-    public List<OrgUserView> findActiveUsersByDeptIds(String tenantId, List<Long> deptIds) {
+    public List<OrgUserView> findActiveUsersByDeptIds(String tenantId, List<String> deptIds) {
         // 단순 구현: 각 부서별로 UserModuleApi 호출하고 결과를 합친다.
         List<OrgUserView> result = new ArrayList<>();
-        for (Long deptId : deptIds) {
-            String deptKey = String.valueOf(deptId);
-            List<AgentExternalInfo> agents = userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptKey);
+        for (String deptId : deptIds) {
+            List<AgentExternalInfo> agents = userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId);
             agents.stream()
                     .map(this::toViewFromExternal)
                     .forEach(result::add);
@@ -110,7 +111,8 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * Organization 모듈이 필요로 하는 정보만 추려서 전달
      */
     private OrgUserView toViewFromExternal(AgentExternalInfo info) {
-        Long deptId = parseLongOrNull(info.getOrganizationId());
+        // organizationId는 이미 부서 ID (UUID 문자열)
+        String deptId = info.getOrganizationId();
 
         return OrgUserView.builder()
                 .userId(info.getId())
@@ -122,20 +124,6 @@ public class AgentOrgUserAdapter implements OrgUserPort {
                 .build();
     }
 
-    /**
-     * Agent.organizationId(String) → Department.deptId(Long) 변환
-     *
-     * - 숫자 문자열이 아닐 경우 null 처리
-     * - null 이면 "소속 부서 없음"으로 간주됨
-     */
-    private Long parseLongOrNull(String value) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            return Long.valueOf(value);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
 
     /**
      * Agent 역할 정보를 Organization 권한 레벨로 매핑

@@ -281,3 +281,39 @@ com.nexfron.identitymodulith.organization/
 
 - `/tree`: 테넌트 전체 조직도
 - `/my-scope`: 로그인 유저의 권한 범위 내 조직도만 반환
+
+---
+
+## 📚 데이터베이스 스키마
+
+RBAC 모듈과 Organization 모듈의 테이블 정의, 컬럼 설명, 표준 데이터 형식은 다음 문서를 참고하세요:
+
+👉 **[DB 스키마 표준 가이드](./DB_SCHEMA_STANDARD.md)**
+
+주요 내용:
+- **RBAC 테이블**: permissions, roles, role_permissions, agent_roles
+- **Organization 테이블**: departments
+- **데이터 형식**: UUID, tenant_id, org_path, 타임스탬프 등 표준
+- **정합성 규칙**: 제약조건, 유니크 키, 외래키
+- **쿼리 예시**: 권한 조회, 조직도 조회 등 자주 사용되는 SQL
+
+---
+
+## 📚 RBAC 표준 데이터
+
+RBAC 모듈의 역할(Role), 권한(Permission), 그리고 역할-권한 매핑의 표준을 정의한 문서입니다:
+
+👉 **[RBAC 표준 데이터 정의 가이드](./RBAC_DATA_STANDARD.md)**
+
+주요 내용:
+- **역할 분류**: POSITION(직급), CHANNEL(채널), SKILL(역량)
+- **권한 코드 표준**: 도메인:액션 형식 (예: `user:create`, `org:manage`)
+- **표준 역할**: ADMIN, MANAGER, TEAM_LEAD, MEMBER, PHONE_AGENT, CHAT_AGENT, SUPERVISOR 등
+- **역할별 권한 매핑**: 각 역할이 보유해야 할 권한 정의
+- **SQL 예시**: 표준 권한/역할 데이터 삽입 스크립트
+
+**마이그레이션 스크립트**:
+- `V1_0_1__RBAC_standard_data_init.sql`: 기존 데이터 삭제 후 표준 데이터 삽입
+
+---
+

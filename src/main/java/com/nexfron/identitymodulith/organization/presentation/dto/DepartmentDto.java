@@ -35,11 +35,11 @@ public class DepartmentDto {
         private String type;
 
         @Schema(
-                description = "상위 부서 ID (최상위 부서인 경우 null)",
-                example = "1",
+                description = "상위 부서 ID (최상위 부서인 경우 null, UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000",
                 nullable = true
         )
-        private Long parentId;
+        private String parentId;
     }
 
     /**
@@ -51,10 +51,10 @@ public class DepartmentDto {
     public static class MoveRequest {
 
         @Schema(
-                description = "새 상위 부서 ID",
-                example = "2"
+                description = "새 상위 부서 ID (UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440001"
         )
-        private Long newParentId;
+        private String newParentId;
     }
 
     /**
@@ -67,10 +67,10 @@ public class DepartmentDto {
     public static class Response {
 
         @Schema(
-                description = "부서 ID",
-                example = "10"
+                description = "부서 ID (UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000"
         )
-        private Long deptId;
+        private String deptId;
 
         @Schema(
                 description = "부서명",
@@ -86,22 +86,22 @@ public class DepartmentDto {
 
         @Schema(
                 description = "조직 경로 (Materialized Path)",
-                example = "/1/3/10"
+                example = "/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001"
         )
         private String orgPath;
 
         @Schema(
                 description = "조직 트리 깊이 (Root = 0)",
-                example = "2"
+                example = "1"
         )
         private Integer depth;
 
         @Schema(
-                description = "상위 부서 ID (Root 부서는 null)",
-                example = "3",
+                description = "상위 부서 ID (Root 부서는 null, UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000",
                 nullable = true
         )
-        private Long parentId;
+        private String parentId;
 
         /**
          * 트리 구조 표현용 자식 노드 리스트

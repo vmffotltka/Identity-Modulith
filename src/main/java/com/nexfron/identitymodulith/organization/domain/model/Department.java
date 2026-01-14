@@ -7,18 +7,49 @@ import com.nexfron.identitymodulith.organization.common.exception.InvalidDepartm
 import java.time.LocalDateTime;
 
 /**
- * Department
+ * Department (부서/조직) 도메인 엔티티
  *
- * 역할:
- * - 조직 트리의 한 노드를 표현하는 도메인 엔티티
+ * 개요:
+ * 조직의 계층적 구조를 나타내는 도메인 모델입니다.
+ * 각 부서는 자기 참조(self-reference)를 통해 부모 부서를 가질 수 있으며,
+ * 이를 통해 조직의 트리 구조를 형성합니다.
  *
- * 핵심 규칙:
- * - parent / depth / orgPath 는 항상 일관성을 유지해야 한다.
- * - orgPath 는 문자열 기반 트리 탐색을 위한 비즈니스 키이다.
+ * 조직 구조 예시:
  *
- * 제약:
- * - DB 스키마 변경 불가
- * - ID 생성 이후(@PostPersist)에 orgPath 를 확정한다.
+ * 총무부 (depth=0, orgPath=/총무부ID)
+ * ├─ 총무팀 (depth=1, orgPath=/총무부ID/총무팀ID)
+ * ├─ HR팀 (depth=1, orgPath=/총무부ID/HR팀ID)
+ * │  ├─ 채용팀 (depth=2, orgPath=/총무부ID/HR팀ID/채용팀ID)
+ * │  └─ 교육팀 (depth=2, orgPath=/총무부ID/HR팀ID/교육팀ID)
+ * └─ 경리팀 (depth=1, orgPath=/총무부ID/경리팀ID)
+ *
+ * 핵심 특징:
+ * - 자기참조: parent 필드로 상위 부서 지정
+ * - 깊이 추적: depth 필드로 계층 레벨 관리
+ * - 경로 관리: orgPath로 전체 경로를 문자열로 저장 (빠른 검색 가능)
+ * - 일관성 보장: parent, depth, orgPath가 항상 동기화
+ *
+ * 불변 규칙:
+ * - parent와 depth는 항상 일치해야 함
+ * - orgPath는 계층 구조를 정확히 반영해야 함
+ * - 자신의 하위 부서로는 이동할 수 없음 (순환 방지)
+ *
+ * 데이터 베이스 제약:
+ * - DB 스키마는 마이그레이션으로 이미 확정됨
+ * - 스키마 변경 불가능 (다른 모듈에 영향)
+ * - 모든 ID는 UUID (VARCHAR(36))로 통일
+ * - parent_id는 NULL 가능 (루트 부서)
+ *
+ * 생성 흐름:
+ * 1. create() 메서드로 엔티티 생성
+ * 2. @PrePersist에서 초기값 설정 (depth, orgPath)
+ * 3. DB 저장
+ * 4. @PostPersist에서 UUID 기반 정확한 orgPath 계산
+ *
+ * 주의사항:
+ * - orgPath는 저장 후(@PostPersist)에 확정됨
+ * - parent 변경 시 하위 부서들의 depth/orgPath도 업데이트 필요
+ * - 조직 이동은 신중하게 처리 (권한 범위 변경 가능성)
  */
 @Entity
 @Getter
@@ -28,34 +59,164 @@ public class Department {
 
     private static final String TEMP_PATH = "/temp";
 
+    /**
+     * 부서 ID (Primary Key)
+     * - UUID 형식의 고유 식별자
+     * - 데이터베이스 전체에서 유일성 보장
+     * - 예: "550e8400-e29b-41d4-a716-446655440200"
+     * - 멀티테넌시에서는 tenantId와 함께 사용해야 한다
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "dept_id")
-    private Long deptId;
+    @Column(name = "dept_id", length = 36)
+    private String deptId;
 
+    /**
+     * 테넌트 ID (Foreign Key)
+     * - 멀티테넌시 환경에서 조직/회사를 구분
+     * - 같은 부서명이라도 테넌트별로 독립적으로 관리
+     * - 길이: 최대 50자
+     * - 필수값: NOT NULL
+     * - 예: "tenant-001", "company-xyz"
+     */
     @Column(nullable = false)
     private String tenantId;
 
+    /**
+     * 부모 부서 (Foreign Key to departments table - Self Reference)
+     * - 상위 부서를 참조 (자기참조)
+     * - NULL인 경우 루트 부서 (최상위 조직)
+     * - 조직 이동 시 이 값을 변경
+     * - LAZY 로딩으로 성능 최적화
+     *
+     * 예시:
+     * - 루트: 총무부 (parent = null, depth = 0)
+     * - 자식: HR팀 (parent = 총무부, depth = 1)
+     * - 손자: 채용팀 (parent = HR팀, depth = 2)
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
     private Department parent;
 
+    /**
+     * 부서명
+     * - 사용자가 이해하기 쉬운 부서 이름
+     * - 예: "총무부", "HR팀", "채용팀"
+     * - 길이: 제한 없음 (VARCHAR)
+     * - 필수값: NOT NULL
+     * - 중복 허용 (같은 이름의 부서가 다른 상위부서에 있을 수 있음)
+     */
     @Column(nullable = false)
     private String name;
 
+    /**
+     * 조직 경로 (Unique with tenantId)
+     * - 루트부터 현재 부서까지의 전체 경로를 저장
+     * - 형식: /부모ID/현재ID (계층 관계를 / 로 구분)
+     * - 예: "/총무부ID", "/총무부ID/HR팀ID", "/총무부ID/HR팀ID/채용팀ID"
+     * - 부서 생성 시 임시로 "/temp"로 설정, @PostPersist 후 UUID로 업데이트
+     * - 빠른 범위 검색이 가능 (LIKE 쿼리로 하위 부서 조회)
+     * - 길이: 최대 1000자 (깊이 제한)
+     * - 필수값: NOT NULL
+     *
+     * 활용:
+     * - "특정 부서의 모든 하위 부서 조회"
+     *   SELECT * FROM departments WHERE org_path LIKE '/총무부ID/%'
+     * - "특정 부서의 상위 경로 확인"
+     *   SELECT * FROM departments WHERE '/총무부ID/HR팀ID' LIKE CONCAT(org_path, '%')
+     */
     @Column(name = "org_path", nullable = false)
     private String orgPath;
 
+    /**
+     * 계층 깊이 (Depth)
+     * - 루트부터 현재 부서까지의 거리
+     * - depth = 0: 루트 부서 (최상위)
+     * - depth = 1: 루트의 직속 자식
+     * - depth = 2: 루트의 손자
+     * - 예시:
+     *   - 총무부: depth = 0
+     *   - HR팀: depth = 1 (총무부의 자식)
+     *   - 채용팀: depth = 2 (HR팀의 자식)
+     * - 필수값: NOT NULL
+     * - 조직 이동 시 자동으로 재계산됨
+     *
+     * 활용:
+     * - 조직 트리 출력 시 들여쓰기 깊이 결정
+     * - "특정 깊이 이상의 부서만 조회"
+     * - 조직 계층 쿼리 최적화
+     */
     @Column(nullable = false)
     private Integer depth;
 
+    /**
+     * 부서 타입 (Optional)
+     * - 부서를 분류하는 추가 속성
+     * - 예: "본부", "팀", "센터", "팀장실" 등
+     * - 길이: 제한 없음 (VARCHAR)
+     * - 선택값: NULL 허용
+     *
+     * 권장 표준 타입:
+     * - 본부/사업부 (최상위)
+     * - 부서/센터 (중간)
+     * - 팀 (실무)
+     * - 소팀/담당 (최하위)
+     */
     private String type;
 
+    /**
+     * 생성 일시
+     * - 부서가 생성된 정확한 시간
+     * - 데이터베이스에서 자동 설정 (현재 시간)
+     * - 수정 불가능 (updatable = false)
+     * - 감시 추적(Audit Trail)용으로 사용
+     * - 필수값: NOT NULL
+     */
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
 
     public static Department create(String tenantId, String name, String type, Department parent) {
+        /**
+         * 새로운 부서 엔티티 생성 (Factory Method)
+         *
+         * 역할:
+         * - 새 부서 엔티티를 올바르게 초기화하여 생성
+         * - UUID 자동 생성
+         * - parent 설정 및 depth/orgPath 계산
+         *
+         * 생성 로직:
+         * 1. 새 Department 인스턴스 생성
+         * 2. UUID로 deptId 생성
+         * 3. tenantId, name, type 설정
+         * 4. changeParent로 parent 설정 (depth, orgPath 자동 계산)
+         *
+         * 생성 예시:
+         * 1. 루트 부서 생성:
+         *    Department 총무부 = Department.create(
+         *        "tenant-001", "총무부", "본부", null
+         *    )
+         *    → deptId: "550e...", depth: 0, orgPath: "/temp"
+         *    → 저장 후 postPersist에서 orgPath: "/{deptId}"로 업데이트
+         *
+         * 2. 자식 부서 생성:
+         *    Department HR팀 = Department.create(
+         *        "tenant-001", "HR팀", "팀", 총무부
+         *    )
+         *    → deptId: "550e...", depth: 1, orgPath: "/{총무부ID}/{HR팀ID}"
+         *
+         * 호출 시점:
+         * - 부서 생성 비즈니스 로직에서 호출
+         * - 스프링 빈(new)으로 생성하지 말 것 (이 메서드 사용)
+         *
+         * @param tenantId 테넌트 ID
+         * @param name 부서명
+         * @param type 부서 타입 (예: "본부", "팀", "센터")
+         * @param parent 부모 부서 (NULL 가능 - 루트 부서)
+         * @return 새로 생성된 Department 엔티티
+         *
+         * @throws InvalidDepartmentMoveException 부모로 설정할 부서가 자신의 하위 부서인 경우
+         */
         Department dept = new Department();
+        dept.deptId = java.util.UUID.randomUUID().toString();  // UUID 생성
         dept.tenantId = tenantId;
         dept.name = name;
         dept.type = type;
@@ -64,11 +225,34 @@ public class Department {
     }
 
     /**
-     * 부모 변경 (조직 이동)
+     * 부모 부서 변경 (조직 이동)
+     *
+     * 역할:
+     * - 부서를 다른 부서 아래로 이동
+     * - parent 변경 시 depth와 orgPath 자동으로 재계산
+     * - 조직 구조의 일관성을 유지
+     *
+     * 변경 예시:
+     * 변경 전: HR팀 (부모: 총무부, depth: 1, path: /총무부ID/HR팀ID)
+     * 변경 후: HR팀 (부모: 경영진팀, depth: 1, path: /경영진팀ID/HR팀ID)
      *
      * 규칙:
-     * - 자신의 하위 부서로는 이동할 수 없다.
-     * - parent 변경 시 depth / orgPath 는 함께 재계산된다.
+     * - 자신의 하위 부서로는 이동할 수 없음 (순환 참조 방지)
+     * - NULL을 전달하면 루트 부서로 설정 (depth = 0)
+     * - parent 변경 후 depth와 orgPath가 자동으로 재계산됨
+     *
+     * 제약사항:
+     * - 자신의 하위 부서로 이동 시 InvalidDepartmentMoveException 발생
+     * - 예: 채용팀의 부모를 채용팀의 자식으로 설정 불가
+     * - 순환 참조를 방지하여 무한 루프 방지
+     *
+     * 부작용 (Side Effects):
+     * - depth 값 변경
+     * - orgPath 값 변경
+     * - 하위 부서들의 depth/orgPath도 업데이트 필요 (별도 처리)
+     *
+     * @param newParent 새로운 부모 부서 (NULL 가능 - 루트로 설정)
+     * @throws InvalidDepartmentMoveException 자신의 하위 부서로 이동하려 할 때
      */
     public void changeParent(Department newParent) {
         if (this.orgPath != null
@@ -86,14 +270,59 @@ public class Department {
     }
 
     /**
-     * orgPath 재계산
+     * 조직 경로 직접 설정 (서비스 계층에서만 사용)
      *
-     * 호출 전제:
-     * - parent 가 정상적으로 설정되어 있어야 한다.
-     * - 신규 엔티티의 경우 deptId 는 null 일 수 있다.
+     * <b>주의: 이 메서드는 서비스 계층에서 하위 부서의 경로를 일괄 업데이트할 때만 사용됩니다.</b>
      *
-     * 주의:
-     * - 외부에서 직접 호출하지 말 것
+     * @param orgPath 설정할 새로운 조직 경로
+     */
+    public void setOrgPath(String orgPath) {
+        this.orgPath = orgPath;
+    }
+
+    /**
+     * 계층 깊이 직접 설정 (서비스 계층에서만 사용)
+     *
+     * <b>주의: 이 메서드는 서비스 계층에서 하위 부서의 깊이를 일괄 업데이트할 때만 사용됩니다.</b>
+     *
+     * @param depth 설정할 새로운 깊이
+     */
+    public void setDepth(Integer depth) {
+        this.depth = depth;
+    }
+
+    /**
+     * 조직 경로 재계산
+     *
+     * 역할:
+     * - 현재 부서의 orgPath를 부모 부서와 자신의 ID 기반으로 계산
+     * - parent, depth 변경 후 항상 호출되어야 함
+     * - 조직 구조의 일관성을 유지하는 핵심 메서드
+     *
+     * 경로 계산 로직:
+     * 1. parent가 없으면 (루트 부서):
+     *    - deptId가 null이면: "/temp" (임시값, 저장 전)
+     *    - deptId가 있으면: "/{deptId}" (루트 부서 확정)
+     * 2. parent가 있으면:
+     *    - "{parent의 orgPath}/{자신의 deptId}"
+     *
+     * 계산 예시:
+     * - 부모: /총무부ID, 자신: HR팀ID → /총무부ID/HR팀ID
+     * - 부모: /총무부ID/HR팀ID, 자신: 채용팀ID → /총무부ID/HR팀ID/채용팀ID
+     *
+     * 호출 시점:
+     * - parent 변경 후 (changeParent에서 호출)
+     * - 저장 후 (postPersist에서 호출해서 UUID 확정)
+     * - 조직 이동 시
+     *
+     * 전제 조건:
+     * - parent가 정상적으로 설정되어 있어야 함
+     * - 신규 엔티티의 경우 deptId는 null일 수 있음
+     *
+     * 주의사항:
+     * - 하위 부서들의 orgPath를 함께 업데이트하지 않음
+     * - 하위 부서들의 orgPath 업데이트는 별도의 서비스 로직에서 처리
+     * - 직접 호출하지 말 것 (changeParent에서 자동으로 호출됨)
      */
     public void updatePath() {
         if (this.parent == null) {
@@ -113,6 +342,15 @@ public class Department {
 
     @PrePersist
     void prePersist() {
+        /**
+         * DB 저장 직전 실행되는 콜백
+         *
+         * 역할:
+         * - 저장하기 전에 필수값 초기화
+         * - createdAt 설정
+         * - depth 초기값 설정
+         * - orgPath 임시값 설정
+         */
         this.createdAt = LocalDateTime.now();
         if (this.depth == null) {
             this.depth = (parent == null) ? 0 : parent.getDepth() + 1;
@@ -124,6 +362,19 @@ public class Department {
 
     @PostPersist
     void postPersist() {
+        /**
+         * DB 저장 직후 실행되는 콜백
+         *
+         * 역할:
+         * - UUID 기반 정확한 orgPath 계산
+         * - prePersist에서 설정한 임시값 "/temp"를 확정된 경로로 업데이트
+         * - deptId가 생성된 후 호출되므로 정확한 계산 가능
+         *
+         * 동작:
+         * - updatePath() 호출로 orgPath를 UUID 기반으로 재계산
+         * - 예: "/temp" → "/{deptId}" (루트의 경우)
+         * - 예: "/parent/temp" → "/parent/{deptId}" (자식의 경우)
+         */
         updatePath();
     }
 }

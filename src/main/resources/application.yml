@@ -47,7 +47,20 @@ spring:
   # ---------------------------------------------------------------------------
   jpa:
     hibernate:
-      ddl-auto: update             # 스키마 자동 업데이트 (운영 환경에서는 validate 권장)
+      ddl-auto: none               # Flyway로 스키마 관리 (Hibernate 자동 생성 비활성화)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+
+  # ---------------------------------------------------------------------------
+  # Flyway 마이그레이션 설정
+  # ---------------------------------------------------------------------------
+  flyway:
+    enabled: true                   # Flyway 활성화
+    baseline-on-migrate: true       # 기존 DB에 Flyway 적용 시
+    locations: classpath:db/migration  # 마이그레이션 스크립트 위치
 
     properties:
       hibernate:
