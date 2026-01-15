@@ -110,7 +110,7 @@ public class RbacExceptionHandler {
             case ROLE_ALREADY_EXISTS, PERMISSION_ALREADY_EXISTS, PERMISSION_ALREADY_ASSIGNED -> HttpStatus.CONFLICT;
 
             // 400 Bad Request: 잘못된 요청 (비즈니스 규칙 위반)
-            case ROLE_HAS_USERS -> HttpStatus.BAD_REQUEST;
+            case ROLE_HAS_USERS, ROLE_NOT_ACTIVE -> HttpStatus.BAD_REQUEST;
         };
     }
 

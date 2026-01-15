@@ -52,4 +52,28 @@ public interface OrgUserPort {
      * - 아직 안 쓰더라도 시그니처만 잡아두면 나중에 유저 리스트 API에 쓰기 좋음
      */
     List<OrgUserView> findActiveUsersByDeptIds(String tenantId, List<String> deptIds);
+
+    /**
+     * 특정 부서의 전체 직원 수 조회 (활성 + 비활성)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 전체 직원 수
+     *
+     * 사용처:
+     * - 부서 통계 API
+     */
+    long countEmployeesByDepartment(String tenantId, String deptId);
+
+    /**
+     * 특정 부서의 활성 직원 수 조회 (ACTIVE 상태만)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 활성 직원 수
+     *
+     * 사용처:
+     * - 부서 통계 API
+     */
+    long countActiveEmployeesByDepartment(String tenantId, String deptId);
 }

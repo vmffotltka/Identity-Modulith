@@ -114,7 +114,11 @@ CREATE TABLE roles (
     tenant_id VARCHAR(50) NOT NULL,
     name VARCHAR(64) NOT NULL,
     type VARCHAR(32) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    description VARCHAR(255),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 COMMENT ON TABLE roles IS '역할 관리 테이블';
@@ -122,10 +126,15 @@ COMMENT ON COLUMN roles.role_id IS '역할 ID (UUID)';
 COMMENT ON COLUMN roles.tenant_id IS '테넌트 ID (멀티테넌시)';
 COMMENT ON COLUMN roles.name IS '역할명 (ADMIN, TEAM_LEADER 등)';
 COMMENT ON COLUMN roles.type IS '역할 타입 (POSITION, CHANNEL, SKILL)';
+COMMENT ON COLUMN roles.description IS '역할 설명 (목적 및 권한 범위)';
+COMMENT ON COLUMN roles.is_active IS '활성화 상태 (true=활성, false=비활성/논리적 삭제)';
+COMMENT ON COLUMN roles.version IS '낙관적 잠금 버전 (동시성 제어용)';
 COMMENT ON COLUMN roles.created_at IS '생성 일시';
+COMMENT ON COLUMN roles.updated_at IS '마지막 수정 일시';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_roles_tenant_name ON roles(tenant_id, name);
 CREATE INDEX IF NOT EXISTS idx_roles_tenant_id ON roles(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_roles_is_active ON roles(is_active);
 
 -- Role-Permission 매핑 테이블
 CREATE TABLE role_permissions (

@@ -106,6 +106,34 @@ public class AgentOrgUserAdapter implements OrgUserPort {
     }
 
     /**
+     * 특정 부서의 전체 직원 수 조회 (활성 + 비활성)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 전체 직원 수
+     */
+    @Override
+    public long countEmployeesByDepartment(String tenantId, String deptId) {
+        // UserModuleApi를 통해 해당 부서의 모든 상담사 수를 조회
+        // 현재는 활성 상담사만 조회 가능하므로, 전체 조회 API가 필요하면 UserModuleApi에 추가 필요
+        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).size();
+    }
+
+    /**
+     * 특정 부서의 활성 직원 수 조회 (ACTIVE 상태만)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 활성 직원 수
+     */
+    @Override
+    public long countActiveEmployeesByDepartment(String tenantId, String deptId) {
+        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).stream()
+                .filter(AgentExternalInfo::isActive)
+                .count();
+    }
+
+    /**
      * AgentExternalInfo → OrgUserView 변환
      *
      * Organization 모듈이 필요로 하는 정보만 추려서 전달

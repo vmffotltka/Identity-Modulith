@@ -118,6 +118,39 @@ public class RoleJpaEntity {
     private String type;
 
     /**
+     * 역할 설명
+     * - 역할의 목적과 권한 범위를 설명
+     * - 관리자가 역할을 이해하고 적절히 할당하도록 도움
+     * - 예: "시스템 전체를 관리하는 최고 관리자 권한"
+     * - 길이: 최대 255자
+     * - 선택 사항 (NULL 가능)
+     */
+    @Column(name = "description", length = 255)
+    private String description;
+
+    /**
+     * 활성화 상태
+     * - true: 활성 (사용자에게 할당 가능)
+     * - false: 비활성 (더 이상 할당 불가, 기존 할당은 유지)
+     *
+     * 논리적 삭제(Soft Delete) 구현:
+     * - 물리적 삭제 대신 is_active = false로 설정
+     * - 이미 할당된 사용자의 권한은 유지되지만, 새로운 할당은 차단
+     * - 감사 로그 및 데이터 추적 가능
+     *
+     * 사용 시나리오:
+     * - 더 이상 사용하지 않는 역할을 비활성화
+     * - 임시로 역할 할당을 중단하고자 할 때
+     * - 역할 재활성화 시 기존 설정 복원 가능
+     *
+     * 기본값: true (활성)
+     * 필수값: NOT NULL
+     */
+    @Builder.Default
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+
+    /**
      * 생성 일시
      * - 역할이 생성된 정확한 시간
      * - 데이터베이스에서 자동 설정 (현재 시간)
@@ -137,6 +170,31 @@ public class RoleJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * 낙관적 잠금(Optimistic Lock) 버전
+     *
+     * JPA에서 동시성 제어를 위해 자동 관리:
+     * - 엔티티 생성 시 version = 0으로 초기화
+     * - 엔티티 수정 시마다 자동으로 증가
+     * - 동일한 버전으로 업데이트 시도 시 낙관적 잠금 예외 발생
+     *
+     * 사용 사례:
+     * - 두 명의 관리자가 동시에 같은 역할을 수정할 때 충돌 감지
+     * - A가 수정 중이던 version=1 상태에서
+     *   B가 이미 수정한 version=2를 읽었다면
+     *   A의 수정 시도는 실패 (OptimisticLockException 발생)
+     *
+     * 운영 이점:
+     * - 데이터베이스 레벨의 행 잠금 불필요 (성능 향상)
+     * - 변경 이력 추적 가능 (version 값이 수정 횟수를 나타냄)
+     * - 분산 환경에서 동시성 제어 가능
+     *
+     * 필수값: NOT NULL, 초기값: 0
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
@@ -144,6 +202,9 @@ public class RoleJpaEntity {
         }
         if (updatedAt == null) {
             updatedAt = LocalDateTime.now();
+        }
+        if (isActive == null) {
+            isActive = true;
         }
     }
 

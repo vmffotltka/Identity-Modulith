@@ -19,7 +19,10 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -69,6 +72,9 @@ class RbacCachingTest {
 
     @InjectMocks
     private RbacManagementServiceImpl rbacManagementService;
+
+    @InjectMocks
+    private RbacQueryServiceImpl rbacQueryService;
 
     private final String tenantId = "test-tenant";
     private final String roleName = "ADMIN";
@@ -194,5 +200,110 @@ class RbacCachingTest {
         // Then: 해당 사용자의 캐시만 무효화됨
         verify(agentRoleRepository, times(1)).save(any());
     }
-}
 
+    @Test
+    @DisplayName("roles→permissions 조회가 테넌트 격리를 적용한다")
+    void permissionsOfRoles_respectsTenantIsolation() {
+        // Given: 동일 역할명이 여러 테넌트에 존재할 때, 요청 테넌트만 반환
+        RoleJpaEntity role = RoleJpaEntity.builder()
+                .roleId(roleId)
+                .tenantId(tenantId)
+                .name(roleName)
+                .type("POSITION")
+                .build();
+
+        when(roleRepository.findByTenantIdAndNameIn(eq(tenantId), anySet()))
+                .thenReturn(List.of(role));
+        when(rolePermissionRepository.findPermissionIdsByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId)))
+                .thenReturn(List.of("perm-001"));
+        when(permissionRepository.findByTenantIdAndPermissionIdIn(eq(tenantId), anySet()))
+                .thenReturn(List.of(PermissionJpaEntity.builder()
+                        .permissionId("perm-001")
+                        .tenantId(tenantId)
+                        .code("user:manage")
+                        .build()));
+
+        // When
+        Set<String> codes = rbacQueryService.permissionsOfRoles(tenantId, Set.of(roleName));
+
+        // Then: 다른 테넌트 데이터가 섞이지 않고, 기대 코드만 반환
+        assertEquals(Set.of("user:manage"), codes);
+        verify(rolePermissionRepository).findPermissionIdsByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId));
+        verify(permissionRepository).findByTenantIdAndPermissionIdIn(eq(tenantId), eq(Set.of("perm-001")));
+    }
+
+    @Test
+    @DisplayName("agent 권한 조회도 테넌트 격리를 적용한다")
+    void permissionsOfAgent_respectsTenantIsolation() {
+        UUID agentId = UUID.randomUUID();
+
+        when(agentRoleRepository.findRoleIdsByAgentId(agentId.toString()))
+                .thenReturn(Set.of(roleId));
+        when(rolePermissionRepository.findPermissionsByRoleIdAndTenant(roleId, tenantId))
+                .thenReturn(List.of(PermissionJpaEntity.builder()
+                        .permissionId("perm-002")
+                        .tenantId(tenantId)
+                        .code("org:view")
+                        .build()));
+
+        Set<String> codes = rbacQueryService.permissionsOf(tenantId, agentId);
+
+        assertEquals(Set.of("org:view"), codes);
+        verify(rolePermissionRepository).findPermissionsByRoleIdAndTenant(roleId, tenantId);
+    }
+
+    @Test
+    @DisplayName("역할-권한 할당 시 감사 로그가 기록된다")
+    void assignPermissionToRole_recordsAuditLog() {
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId);
+        SecurityContextHolder.setContext(securityContext);
+
+        RoleJpaEntity role = RoleJpaEntity.builder()
+                .roleId(roleId)
+                .tenantId(tenantId)
+                .name(roleName)
+                .type("POSITION")
+                .build();
+        PermissionJpaEntity permission = PermissionJpaEntity.builder()
+                .permissionId("perm-010")
+                .tenantId(tenantId)
+                .code("sample:perm")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
+        when(permissionRepository.findByTenantIdAndCode(tenantId, "sample:perm"))
+                .thenReturn(Optional.of(permission));
+        when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, "perm-010"))
+                .thenReturn(false);
+
+        rbacManagementService.assignPermissionToRole(roleName, "sample:perm");
+
+        verify(auditLogService).recordRolePermissionAssignment(eq(tenantId), eq(roleName), eq(roleId),
+                eq("sample:perm"), eq("perm-010"), anyString());
+    }
+
+    @Test
+    @DisplayName("사용자-역할 할당 시 감사 로그가 기록된다")
+    void assignRoleToAgent_recordsAuditLog() {
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId);
+        SecurityContextHolder.setContext(securityContext);
+
+        String agentId = "agent-999";
+        RoleJpaEntity role = RoleJpaEntity.builder()
+                .roleId(roleId)
+                .tenantId(tenantId)
+                .name(roleName)
+                .type("POSITION")
+                .build();
+
+        when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
+        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId)).thenReturn(false);
+
+        rbacManagementService.assignRoleToAgent(agentId, roleName);
+
+        verify(auditLogService).recordAgentRoleAssignment(eq(tenantId), eq(agentId), eq(roleName), anyString());
+    }
+}

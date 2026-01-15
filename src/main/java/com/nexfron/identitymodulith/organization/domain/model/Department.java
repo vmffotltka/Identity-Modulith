@@ -377,4 +377,24 @@ public class Department {
          */
         updatePath();
     }
+
+    /**
+     * 부서 정보 업데이트
+     *
+     * 역할:
+     * - 부서명, 타입 등 기본 정보를 변경
+     * - 조직 구조(parent, depth, orgPath)는 변경하지 않음
+     * - 조직 구조 변경은 changeParent() 메서드를 사용
+     *
+     * @param name 변경할 부서명 (null이면 변경하지 않음)
+     * @param type 변경할 부서 타입 (null이면 변경하지 않음)
+     */
+    public void updateInfo(String name, String type) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (type != null) {
+            this.type = type;
+        }
+    }
 }

@@ -95,6 +95,27 @@ public class AuditLogService {
     }
 
     /**
+     * 역할 업데이트를 기록합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param roleId 업데이트된 역할 ID
+     * @param roleName 업데이트된 역할명
+     * @param operatorId 작업 수행자 ID
+     * @param changeDetails 변경 상세 정보
+     */
+    @Transactional
+    public void recordRoleUpdate(String tenantId, String roleId, String roleName, String operatorId, String changeDetails) {
+        Map<String, String> changes = Map.of(
+                "name", roleName,
+                "action", "updated",
+                "changes", changeDetails
+        );
+        recordAuditLog(tenantId, "UPDATE", "ROLE", roleId, operatorId, changes);
+        log.info("[RBAC 감사] 역할 업데이트: tenantId={}, roleName={}, roleId={}, operatorId={}, changes={}",
+                tenantId, roleName, roleId, operatorId, changeDetails);
+    }
+
+    /**
      * 역할 삭제를 기록합니다.
      *
      * @param tenantId 테넌트 ID
@@ -111,6 +132,46 @@ public class AuditLogService {
     }
 
     /**
+     * 역할 비활성화를 기록합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param roleName 비활성화된 역할명
+     * @param roleId 비활성화된 역할 ID
+     * @param operatorId 작업 수행자 ID
+     */
+    @Transactional
+    public void recordRoleDeactivation(String tenantId, String roleName, String roleId, String operatorId) {
+        Map<String, String> changes = Map.of(
+                "name", roleName,
+                "action", "deactivated",
+                "is_active", "false"
+        );
+        recordAuditLog(tenantId, "DEACTIVATE", "ROLE", roleId, operatorId, changes);
+        log.info("[RBAC 감사] 역할 비활성화: tenantId={}, roleName={}, roleId={}, operatorId={}",
+                tenantId, roleName, roleId, operatorId);
+    }
+
+    /**
+     * 역할 활성화를 기록합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param roleName 활성화된 역할명
+     * @param roleId 활성화된 역할 ID
+     * @param operatorId 작업 수행자 ID
+     */
+    @Transactional
+    public void recordRoleActivation(String tenantId, String roleName, String roleId, String operatorId) {
+        Map<String, String> changes = Map.of(
+                "name", roleName,
+                "action", "activated",
+                "is_active", "true"
+        );
+        recordAuditLog(tenantId, "ACTIVATE", "ROLE", roleId, operatorId, changes);
+        log.info("[RBAC 감사] 역할 활성화: tenantId={}, roleName={}, roleId={}, operatorId={}",
+                tenantId, roleName, roleId, operatorId);
+    }
+
+    /**
      * 권한 생성을 기록합니다.
      *
      * @param tenantId 테넌트 ID
@@ -123,6 +184,27 @@ public class AuditLogService {
         recordAuditLog(tenantId, "CREATE", "PERMISSION", permissionCode, operatorId, changes);
         log.info("[RBAC 감사] 권한 생성: tenantId={}, code={}, operatorId={}",
                 tenantId, permissionCode, operatorId);
+    }
+
+    /**
+     * 권한 업데이트를 기록합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param permissionId 업데이트된 권한 ID
+     * @param permissionCode 업데이트된 권한 코드
+     * @param operatorId 작업 수행자 ID
+     * @param changeDetails 변경 상세 정보
+     */
+    @Transactional
+    public void recordPermissionUpdate(String tenantId, String permissionId, String permissionCode, String operatorId, String changeDetails) {
+        Map<String, String> changes = Map.of(
+                "code", permissionCode,
+                "action", "updated",
+                "changes", changeDetails
+        );
+        recordAuditLog(tenantId, "UPDATE", "PERMISSION", permissionId, operatorId, changes);
+        log.info("[RBAC 감사] 권한 업데이트: tenantId={}, code={}, permissionId={}, operatorId={}, changes={}",
+                tenantId, permissionCode, permissionId, operatorId, changeDetails);
     }
 
     /**
@@ -260,6 +342,37 @@ public class AuditLogService {
     }
 
     /**
+     * 권한 검증 실패를 기록합니다.
+     *
+     * 보안 감시:
+     * - 사용자가 요청한 권한에 대한 접근 거부 이벤트 기록
+     * - 악의적인 접근 패턴 탐지에 활용
+     * - 규정 준수(Compliance) 감사 증거
+     *
+     * 기록 내용:
+     * - 거부된 권한 코드
+     * - 사용자가 실제로 보유한 권한 목록
+     * - 요청 시간, 사용자 ID 등
+     *
+     * @param tenantId 테넌트 ID
+     * @param agentId 권한 요청을 시도한 사용자 ID
+     * @param requestedPermission 요청한 권한 코드
+     * @param userPermissions 사용자가 실제로 보유한 권한 집합
+     */
+    @Transactional
+    public void recordAccessDenied(String tenantId, String agentId, String requestedPermission, Set<String> userPermissions) {
+        Map<String, String> changes = Map.of(
+                "agent_id", agentId,
+                "requested_permission", requestedPermission,
+                "user_permissions", String.join(",", userPermissions != null ? userPermissions : Set.of()),
+                "result", "DENIED"
+        );
+        recordAuditLog(tenantId, "ACCESS_DENIED", "PERMISSION", requestedPermission, agentId, changes);
+        log.warn("[RBAC 감사] 권한 거부: tenantId={}, agentId={}, requestedPermission={}, userPermissions={}",
+                tenantId, agentId, requestedPermission, userPermissions);
+    }
+
+    /**
      * 내부 헬퍼: 감사 로그 기록
      *
      * @param tenantId 테넌트 ID
@@ -290,6 +403,160 @@ public class AuditLogService {
         } catch (Exception e) {
             log.error("[RBAC 감사] 로그 저장 실패: action={}, resourceType={}, error={}",
                     action, resourceType, e.getMessage(), e);
+        }
+    }
+
+    // ============================================================
+    // 감사 로그 조회 메서드 (권한 변경 이력)
+    // ============================================================
+
+    /**
+     * 특정 사용자의 권한 변경 이력 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param agentId 사용자 ID
+     * @param from 시작 일시 (null이면 무제한)
+     * @param to 종료 일시 (null이면 현재)
+     * @return 사용자의 권한 변경 이력 목록 (최신순)
+     */
+    public List<AuditLogJpaEntity> getAgentPermissionChangeHistory(
+            String tenantId,
+            String agentId,
+            LocalDateTime from,
+            LocalDateTime to) {
+
+        if (to == null) {
+            to = LocalDateTime.now();
+        }
+
+        if (from == null) {
+            return auditLogRepository.findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+                    tenantId,
+                    agentId,
+                    List.of("AGENT_ROLE", "ROLE_PERMISSION"),
+                    to
+            );
+        } else {
+            return auditLogRepository.findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+                    tenantId,
+                    agentId,
+                    List.of("AGENT_ROLE", "ROLE_PERMISSION"),
+                    from,
+                    to
+            );
+        }
+    }
+
+    /**
+     * 특정 역할의 권한 변경 이력 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param roleName 역할명
+     * @param from 시작 일시 (null이면 무제한)
+     * @param to 종료 일시 (null이면 현재)
+     * @return 역할의 권한 변경 이력 목록 (최신순)
+     */
+    public List<AuditLogJpaEntity> getRolePermissionChangeHistory(
+            String tenantId,
+            String roleName,
+            LocalDateTime from,
+            LocalDateTime to) {
+
+        if (to == null) {
+            to = LocalDateTime.now();
+        }
+
+        if (from == null) {
+            return auditLogRepository.findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+                    tenantId,
+                    roleName,
+                    List.of("ROLE", "ROLE_PERMISSION", "ROLE_PERMISSION_GROUP"),
+                    to
+            );
+        } else {
+            return auditLogRepository.findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+                    tenantId,
+                    roleName,
+                    List.of("ROLE", "ROLE_PERMISSION", "ROLE_PERMISSION_GROUP"),
+                    from,
+                    to
+            );
+        }
+    }
+
+    /**
+     * 전체 권한 변경 이력 조회 (관리자용)
+     *
+     * @param tenantId 테넌트 ID
+     * @param from 시작 일시 (null이면 무제한)
+     * @param to 종료 일시 (null이면 현재)
+     * @param pageSize 페이지 크기 (기본 100)
+     * @return 권한 변경 이력 목록 (최신순)
+     */
+    public List<AuditLogJpaEntity> getAllPermissionChangeHistory(
+            String tenantId,
+            LocalDateTime from,
+            LocalDateTime to,
+            Integer pageSize) {
+
+        if (pageSize == null || pageSize <= 0) {
+            pageSize = 100;
+        }
+
+        if (to == null) {
+            to = LocalDateTime.now();
+        }
+
+        if (from == null) {
+            return auditLogRepository.findTop100ByTenantIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+                    tenantId,
+                    List.of("ROLE", "PERMISSION", "ROLE_PERMISSION", "AGENT_ROLE", "ROLE_PERMISSION_GROUP"),
+                    to
+            );
+        } else {
+            return auditLogRepository.findByTenantIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+                    tenantId,
+                    List.of("ROLE", "PERMISSION", "ROLE_PERMISSION", "AGENT_ROLE", "ROLE_PERMISSION_GROUP"),
+                    from,
+                    to
+            );
+        }
+    }
+
+    /**
+     * 특정 작업자의 권한 관련 작업 이력 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param operatorId 작업자 ID
+     * @param from 시작 일시 (null이면 무제한)
+     * @param to 종료 일시 (null이면 현재)
+     * @return 작업자의 권한 관련 작업 이력 (최신순)
+     */
+    public List<AuditLogJpaEntity> getOperatorPermissionActions(
+            String tenantId,
+            String operatorId,
+            LocalDateTime from,
+            LocalDateTime to) {
+
+        if (to == null) {
+            to = LocalDateTime.now();
+        }
+
+        if (from == null) {
+            return auditLogRepository.findByTenantIdAndOperatorIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+                    tenantId,
+                    operatorId,
+                    List.of("ROLE", "PERMISSION", "ROLE_PERMISSION", "AGENT_ROLE", "ROLE_PERMISSION_GROUP"),
+                    to
+            );
+        } else {
+            return auditLogRepository.findByTenantIdAndOperatorIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+                    tenantId,
+                    operatorId,
+                    List.of("ROLE", "PERMISSION", "ROLE_PERMISSION", "AGENT_ROLE", "ROLE_PERMISSION_GROUP"),
+                    from,
+                    to
+            );
         }
     }
 

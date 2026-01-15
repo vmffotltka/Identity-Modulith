@@ -146,5 +146,145 @@ public interface AuditLogJpaRepository extends JpaRepository<AuditLogJpaEntity, 
             @Param("tenantId") String tenantId,
             @Param("resourceType") String resourceType
     );
+
+    /**
+     * 특정 날짜 이전의 감사 로그 건수 조회 (아카이빙용)
+     *
+     * 사용 시나리오:
+     * - "6개월 이전의 감사 로그 수 계산"
+     * - "아카이브할 데이터 규모 파악"
+     *
+     * @param cutoffDate 기준 날짜 (이 날짜 이전의 로그 개수)
+     * @return 감사 로그 개수
+     */
+    @Query("SELECT COUNT(a) FROM AuditLogJpaEntity a WHERE a.timestamp < :cutoffDate")
+    long countByTimestampBefore(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    /**
+     * 특정 날짜 이후의 감사 로그 건수 조회 (통계용)
+     *
+     * 사용 시나리오:
+     * - "최근 6개월 감사 로그 수 계산"
+     * - "활성 감사 로그 통계"
+     *
+     * @param cutoffDate 기준 날짜 (이 날짜 이후의 로그 개수)
+     * @return 감사 로그 개수
+     */
+    @Query("SELECT COUNT(a) FROM AuditLogJpaEntity a WHERE a.timestamp >= :cutoffDate")
+    long countByTimestampAfter(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    /**
+     * 특정 날짜 이전의 감사 로그 모두 삭제 (아카이빙 후 사용)
+     *
+     * 주의: 이 메서드는 데이터를 물리적으로 삭제합니다.
+     *       반드시 먼저 audit_logs_archive로 데이터를 복사한 후 사용하세요.
+     *
+     * @param cutoffDate 기준 날짜 (이 날짜 이전의 로그 삭제)
+     * @return 삭제된 행 수
+     */
+    @Query("DELETE FROM AuditLogJpaEntity a WHERE a.timestamp < :cutoffDate")
+    int deleteByTimestampBefore(@Param("cutoffDate") LocalDateTime cutoffDate);
+
+    // ============================================================
+    // 권한 변경 이력 조회용 메서드들
+    // ============================================================
+
+    /**
+     * 특정 리소스의 여러 타입에 대한 변경 이력 조회 (시간 범위 포함)
+     *
+     * @param tenantId 테넌트 ID
+     * @param resourceId 리소스 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param from 시작 일시
+     * @param to 종료 일시
+     * @return 변경 이력 (최신순)
+     */
+    List<AuditLogJpaEntity> findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+            String tenantId,
+            String resourceId,
+            List<String> resourceTypes,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    /**
+     * 특정 리소스의 여러 타입에 대한 변경 이력 조회 (시간 상한만)
+     *
+     * @param tenantId 테넌트 ID
+     * @param resourceId 리소스 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param to 종료 일시
+     * @return 변경 이력 (최신순)
+     */
+    List<AuditLogJpaEntity> findByTenantIdAndResourceIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+            String tenantId,
+            String resourceId,
+            List<String> resourceTypes,
+            LocalDateTime to
+    );
+
+    /**
+     * 여러 리소스 타입에 대한 변경 이력 조회 (시간 범위 포함)
+     *
+     * @param tenantId 테넌트 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param from 시작 일시
+     * @param to 종료 일시
+     * @return 변경 이력 (최신순)
+     */
+    List<AuditLogJpaEntity> findByTenantIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+            String tenantId,
+            List<String> resourceTypes,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    /**
+     * 여러 리소스 타입에 대한 변경 이력 조회 (상위 100개, 시간 상한만)
+     *
+     * @param tenantId 테넌트 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param to 종료 일시
+     * @return 변경 이력 (최신순, 최대 100개)
+     */
+    List<AuditLogJpaEntity> findTop100ByTenantIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+            String tenantId,
+            List<String> resourceTypes,
+            LocalDateTime to
+    );
+
+    /**
+     * 특정 작업자의 여러 리소스 타입에 대한 작업 이력 조회 (시간 범위 포함)
+     *
+     * @param tenantId 테넌트 ID
+     * @param operatorId 작업자 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param from 시작 일시
+     * @param to 종료 일시
+     * @return 작업 이력 (최신순)
+     */
+    List<AuditLogJpaEntity> findByTenantIdAndOperatorIdAndResourceTypeInAndTimestampBetweenOrderByTimestampDesc(
+            String tenantId,
+            String operatorId,
+            List<String> resourceTypes,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    /**
+     * 특정 작업자의 여러 리소스 타입에 대한 작업 이력 조회 (시간 상한만)
+     *
+     * @param tenantId 테넌트 ID
+     * @param operatorId 작업자 ID
+     * @param resourceTypes 리소스 타입 목록
+     * @param to 종료 일시
+     * @return 작업 이력 (최신순)
+     */
+    List<AuditLogJpaEntity> findByTenantIdAndOperatorIdAndResourceTypeInAndTimestampBeforeOrderByTimestampDesc(
+            String tenantId,
+            String operatorId,
+            List<String> resourceTypes,
+            LocalDateTime to
+    );
 }
 

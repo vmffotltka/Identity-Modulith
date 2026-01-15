@@ -43,6 +43,27 @@ public class DepartmentDto {
     }
 
     /**
+     * 부서 업데이트 요청 바디
+     */
+    @Getter
+    @NoArgsConstructor
+    @Schema(description = "부서 업데이트 요청")
+    public static class UpdateRequest {
+
+        @Schema(
+                description = "변경할 부서명 (선택)",
+                example = "AI개발팀"
+        )
+        private String name;
+
+        @Schema(
+                description = "변경할 부서 타입 (선택)",
+                example = "TEAM"
+        )
+        private String type;
+    }
+
+    /**
      * 부서 이동 요청 바디
      */
     @Getter
@@ -134,5 +155,62 @@ public class DepartmentDto {
                     )
                     .build();
         }
+    }
+
+    /**
+     * 부서 통계 정보 DTO
+     */
+    @Getter
+    @Builder
+    @Schema(description = "부서 통계 정보")
+    public static class Statistics {
+
+        @Schema(
+                description = "부서 ID",
+                example = "550e8400-e29b-41d4-a716-446655440000"
+        )
+        private String deptId;
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
+        private String name;
+
+        @Schema(
+                description = "부서 타입",
+                example = "TEAM"
+        )
+        private String type;
+
+        @Schema(
+                description = "부서 깊이 (0부터 시작)",
+                example = "2"
+        )
+        private Integer depth;
+
+        @Schema(
+                description = "전체 직원 수 (활성 + 비활성)",
+                example = "15"
+        )
+        private Long totalEmployees;
+
+        @Schema(
+                description = "활성 직원 수 (ACTIVE 상태)",
+                example = "12"
+        )
+        private Long activeEmployees;
+
+        @Schema(
+                description = "직속 하위 부서 수",
+                example = "3"
+        )
+        private Long childDeptCount;
+
+        @Schema(
+                description = "전체 하위 부서 수 (재귀적으로 모든 하위 포함)",
+                example = "8"
+        )
+        private Long descendantDeptCount;
     }
 }

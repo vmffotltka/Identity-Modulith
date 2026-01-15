@@ -112,4 +112,46 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @return 조건에 맞는 부서 리스트
      */
     List<Department> findAllByTenantIdAndDeptIdIn(String tenantId, List<String> deptIds);
+
+    /**
+     * [부서 검색]
+     * 키워드로 부서명 검색 (부분 일치)
+     *
+     * 사용처:
+     * - 부서 검색 기능
+     * - 부서명으로 빠르게 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param keyword 검색 키워드 (부서명에 포함되어야 함)
+     * @return 키워드가 포함된 부서 리스트
+     */
+    List<Department> findByTenantIdAndNameContainingIgnoreCase(String tenantId, String keyword);
+
+    /**
+     * [부서 검색]
+     * 특정 깊이(depth)의 부서 조회
+     *
+     * 사용처:
+     * - 계층별 부서 조회
+     * - 특정 레벨의 부서만 필터링
+     *
+     * @param tenantId 테넌트 ID
+     * @param depth 깊이 (0: 루트, 1: 1단계, 2: 2단계...)
+     * @return 해당 깊이의 부서 리스트
+     */
+    List<Department> findByTenantIdAndDepth(String tenantId, Integer depth);
+
+    /**
+     * [부서 검색]
+     * 특정 타입의 부서 조회
+     *
+     * 사용처:
+     * - 타입별 부서 필터링
+     * - 예: "TEAM" 타입의 부서만 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param type 부서 타입 (예: "TEAM", "DIVISION", "DEPARTMENT")
+     * @return 해당 타입의 부서 리스트
+     */
+    List<Department> findByTenantIdAndType(String tenantId, String type);
 }

@@ -78,12 +78,17 @@ public class RbacQueryServiceImpl implements RbacQueryService {
             log.trace("역할 목록이 비어있습니다 (tenantId 미지정)");
             return Set.of();
         }
+        // 멀티테넌시 환경에서는 반드시 tenantId 포함 오버로드를 사용할 것을 가이드한다.
         log.warn("permissionsOfRoles(Set<String>)는 멀티테넌시 환경에서 권장되지 않습니다. tenantId가 포함된 오버로드를 사용하세요. roleNames={}", roleNames);
         return Set.of();
     }
 
     /**
-     * 테넌트 + 역할명 집합에 대한 권한 코드 집합 조회 구현
+     * 테넌트 + 역할명 집합에 대한 권한 코드 집합 조회 구현 (성능 최적화됨)
+     *
+     * 개선 사항:
+     * - 기존: 3개 쿼리 (roles 조회 + role_permissions 조회 + permissions 조회)
+     * - 개선: 2개 쿼리 (roles 조회 + JOIN으로 권한 코드 한 번에 조회)
      */
     @Override
     public Set<String> permissionsOfRoles(String tenantId, Set<String> roleNames) {
@@ -109,27 +114,19 @@ public class RbacQueryServiceImpl implements RbacQueryService {
                 .map(RoleJpaEntity::getRoleId)
                 .collect(Collectors.toSet());
 
-        // 2) 역할 ID 집합에 대해 role_permissions를 조회하여 Permission 엔티티 목록 추출
-        List<RolePermissionJpaEntity> mappings = rolePermissionRepository.findByRoleIdIn(roleIds);
-        if (mappings.isEmpty()) {
-            log.debug("[RBAC] 역할은 존재하지만 권한 매핑이 없습니다: tenantId={}, roleNames={}", tenantId, roleNames);
+        // 2) DTO 프로젝션으로 권한 코드 한 번에 조회 (성능 최적화)
+        List<String> permissionCodes = rolePermissionRepository
+                .findPermissionCodesByRoleIdsAndTenant(roleIds, tenantId);
+
+        if (permissionCodes.isEmpty()) {
+            log.debug("[RBAC] 역할은 있으나 권한 매핑이 없습니다: tenantId={}, roleNames={}", tenantId, roleNames);
             return Set.of();
         }
 
-        Set<String> permissionIds = mappings.stream()
-                .map(RolePermissionJpaEntity::getPermissionId)
-                .collect(Collectors.toSet());
-
-        // 3) permissionIds 기반으로 Permission 엔티티를 조회하고 코드 집합으로 변환
-        List<PermissionJpaEntity> permissions = permissionRepository
-                .findByTenantIdAndPermissionIdIn(tenantId, permissionIds);
-
-        Set<String> codes = permissions.stream()
-                .map(PermissionJpaEntity::getCode)
-                .collect(Collectors.toSet());
+        Set<String> codes = new HashSet<>(permissionCodes);
 
         long duration = System.currentTimeMillis() - startTime;
-        log.info("[RBAC] permissionsOfRoles 완료: tenantId={}, roles={}, roleCount={}, permissionCount={}, 소요시간={}ms",
+        log.info("[RBAC] permissionsOfRoles 완료 (최적화): tenantId={}, roles={}, roleCount={}, permissionCount={}, 소요시간={}ms",
                 tenantId, roleNames, roleIds.size(), codes.size(), duration);
 
         return codes;
@@ -191,6 +188,10 @@ public class RbacQueryServiceImpl implements RbacQueryService {
     @Override
     @Cacheable(value = "userPermissions", key = "#tenantId + ':' + #agentId", unless = "#result.isEmpty()")
     public Set<String> permissionsOf(String tenantId, UUID agentId) {
+        if (tenantId == null || tenantId.isBlank() || agentId == null) {
+            log.warn("[RBAC] 권한 조회 입력이 올바르지 않습니다: tenantId={}, agentId={} (빈 Set 반환)", tenantId, agentId);
+            return Set.of();
+        }
         long startTime = System.currentTimeMillis();
 
         // ========== Step 1: 에이전트의 모든 역할 ID 조회 ==========
@@ -212,12 +213,11 @@ public class RbacQueryServiceImpl implements RbacQueryService {
         //       WHERE p.permission_id IN (SELECT rp.permission_id FROM role_permissions rp WHERE rp.role_id IN (...))
         Set<String> permissionCodes = roleIds.stream()
                 .flatMap(roleId -> {
-                    // 각 역할의 권한 엔티티 조회
-                    var permissions = rolePermissionRepository.findPermissionsByRoleId(roleId);
+                    // 각 역할의 권한 엔티티 조회 (테넌트 격리)
+                    var permissions = rolePermissionRepository.findPermissionsByRoleIdAndTenant(roleId, tenantId);
                     log.trace("[RBAC] roleId={} 권한 수: {}", roleId, permissions.size());
-                    // 권한 엔티티의 코드 추출
                     return permissions.stream()
-                            .map(perm -> perm.getCode());
+                            .map(PermissionJpaEntity::getCode);
                 })
                 .collect(Collectors.toSet());
 

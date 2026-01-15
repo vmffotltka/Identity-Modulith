@@ -57,4 +57,24 @@ public interface RoleJpaRepository extends JpaRepository<RoleJpaEntity, String> 
      * @return 해당 테넌트에 속한 역할들만 반환
      */
     List<RoleJpaEntity> findByTenantIdAndNameIn(String tenantId, Collection<String> names);
+
+    /**
+     * 특정 테넌트의 활성 역할만 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param isActive 활성화 상태 (true=활성, false=비활성)
+     * @return 활성 역할 리스트
+     */
+    List<RoleJpaEntity> findByTenantIdAndIsActive(String tenantId, Boolean isActive);
+
+    /**
+     * 테넌트와 역할명으로 활성 역할 조회
+     * (역할 할당 시 비활성 역할은 차단하기 위해 사용)
+     *
+     * @param tenantId 테넌트 ID
+     * @param name 역할명
+     * @param isActive 활성화 상태
+     * @return Optional 역할
+     */
+    Optional<RoleJpaEntity> findByTenantIdAndNameAndIsActive(String tenantId, String name, Boolean isActive);
 }

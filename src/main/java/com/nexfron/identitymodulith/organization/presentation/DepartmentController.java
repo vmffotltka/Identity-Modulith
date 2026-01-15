@@ -100,6 +100,45 @@ public class DepartmentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /**
+     * 부서 정보 수정
+     *
+     * <h3>동작:</h3>
+     * 1. 부서 존재 여부 확인
+     * 2. 변경할 필드만 업데이트 (name, type)
+     * 3. 업데이트된 부서 정보 반환
+     *
+     * @param tenantId 테넌트 ID (헤더)
+     * @param deptId   업데이트할 부서 ID (UUID)
+     * @param request  업데이트 요청 바디 (name, type 중 변경할 항목만 포함)
+     * @return 200 OK - 업데이트된 부서 정보
+     *         404 Not Found - 부서가 존재하지 않음
+     */
+    @Operation(summary = "부서 정보 수정", description = "부서의 이름이나 타입을 수정합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부서 수정 성공"),
+            @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
+    })
+    @PatchMapping("/{deptId}")
+    public ResponseEntity<DepartmentDto.Response> updateDepartment(
+            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
+            @Parameter(description = "부서 ID (UUID)", required = true)
+            @PathVariable String deptId,
+            @RequestBody DepartmentDto.UpdateRequest request) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            tenantId = "default-tenant";
+        }
+
+        DepartmentDto.Response response = departmentService.updateDepartment(
+                tenantId,
+                deptId,
+                request.getName(),
+                request.getType()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
     // ============================================================
     // 부서 조회 (전체)
     // ============================================================
@@ -157,6 +196,124 @@ public class DepartmentController {
 
         List<DepartmentDto.Response> tree = departmentService.getDepartmentTree(tenantId);
         return ResponseEntity.ok(tree);
+    }
+
+    /**
+     * 부서 검색 (키워드)
+     *
+     * <h3>검색 방식:</h3>
+     * - 부서명에 키워드가 포함된 모든 부서 조회
+     * - 대소문자 구분 없음
+     *
+     * @param tenantId 테넌트 ID (헤더)
+     * @param keyword  검색 키워드 (쿼리 파라미터)
+     * @return 검색된 부서 목록
+     */
+    @Operation(summary = "부서 검색 (키워드)", description = "부서명에 키워드가 포함된 부서를 검색합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "검색 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
+    @GetMapping("/search")
+    public ResponseEntity<List<DepartmentDto.Response>> searchDepartments(
+            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
+            @Parameter(description = "검색 키워드", example = "개발", required = true)
+            @RequestParam String keyword) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            tenantId = "default-tenant";
+        }
+
+        List<DepartmentDto.Response> result = departmentService.searchDepartments(tenantId, keyword);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 부서 조회 (깊이별)
+     *
+     * <h3>사용 예시:</h3>
+     * - depth=0: 최상위(루트) 부서만
+     * - depth=1: 1단계 하위 부서만
+     *
+     * @param tenantId 테넌트 ID (헤더)
+     * @param depth    조회할 깊이 (쿼리 파라미터)
+     * @return 해당 깊이의 부서 목록
+     */
+    @Operation(summary = "부서 조회 (깊이별)", description = "특정 깊이(depth)의 부서를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
+    @GetMapping("/by-depth")
+    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByDepth(
+            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
+            @Parameter(description = "부서 깊이", example = "0", required = true)
+            @RequestParam int depth) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            tenantId = "default-tenant";
+        }
+
+        List<DepartmentDto.Response> result = departmentService.getDepartmentsByDepth(tenantId, depth);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 부서 조회 (타입별)
+     *
+     * <h3>사용 예시:</h3>
+     * - type=TEAM: 팀 단위만
+     * - type=DIVISION: 사업부만
+     *
+     * @param tenantId 테넌트 ID (헤더)
+     * @param type     부서 타입 (쿼리 파라미터)
+     * @return 해당 타입의 부서 목록
+     */
+    @Operation(summary = "부서 조회 (타입별)", description = "특정 타입의 부서를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청")
+    })
+    @GetMapping("/by-type")
+    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByType(
+            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
+            @Parameter(description = "부서 타입", example = "TEAM", required = true)
+            @RequestParam String type) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            tenantId = "default-tenant";
+        }
+
+        List<DepartmentDto.Response> result = departmentService.getDepartmentsByType(tenantId, type);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 부서 통계 조회
+     *
+     * <h3>제공 통계:</h3>
+     * - 전체 직원 수 (활성 + 비활성)
+     * - 활성 직원 수 (ACTIVE 상태만)
+     * - 직속 하위 부서 수
+     * - 전체 하위 부서 수 (재귀적으로 모든 하위 포함)
+     *
+     * @param tenantId 테넌트 ID (헤더)
+     * @param deptId   조회할 부서 ID (UUID)
+     * @return 부서 통계 정보
+     */
+    @Operation(summary = "부서 통계 조회", description = "부서의 직원 수, 하위 부서 수 등 통계 정보를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
+    })
+    @GetMapping("/{deptId}/statistics")
+    public ResponseEntity<DepartmentDto.Statistics> getDepartmentStatistics(
+            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
+            @Parameter(description = "부서 ID (UUID)", required = true)
+            @PathVariable String deptId) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            tenantId = "default-tenant";
+        }
+
+        DepartmentDto.Statistics statistics = departmentService.getDepartmentStatistics(tenantId, deptId);
+        return ResponseEntity.ok(statistics);
     }
 
     // ============================================================

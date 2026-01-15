@@ -214,6 +214,60 @@ public class DepartmentService {
         return DepartmentDto.Response.from(savedDept);
     }
 
+    /**
+     * 부서 정보를 업데이트합니다.
+     *
+     * <h3>업데이트 처리 흐름:</h3>
+     * <ol>
+     *   <li>부서 존재 여부 검증
+     *       <br/>→ 없으면 DEPARTMENT_NOT_FOUND 예외 발생
+     *   </li>
+     *   <li>변경할 필드만 업데이트 (null이 아닌 값만)
+     *       <br/>→ name: 부서명 변경
+     *       <br/>→ type: 부서 타입 변경
+     *   </li>
+     *   <li>updatedAt 타임스탬프 갱신</li>
+     *   <li>DB에 저장</li>
+     *   <li>DTO 변환 후 응답</li>
+     * </ol>
+     *
+     * <h3>예외 처리:</h3>
+     * <ul>
+     *   <li>DEPARTMENT_NOT_FOUND (HTTP 404): 부서가 존재하지 않는 경우</li>
+     * </ul>
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId   업데이트할 부서 ID
+     * @param name     변경할 부서명 (선택, null이면 변경하지 않음)
+     * @param type     변경할 부서 타입 (선택, null이면 변경하지 않음)
+     * @return 업데이트된 부서 정보 DTO
+     * @throws OrganizationException DEPARTMENT_NOT_FOUND: 부서가 존재하지 않는 경우
+     */
+    @Transactional
+    public DepartmentDto.Response updateDepartment(
+            String tenantId,
+            String deptId,
+            String name,
+            String type) {
+
+        // 1) 부서 조회
+        Department department = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
+                .orElseThrow(() -> new OrganizationException(
+                        OrganizationErrorCode.DEPARTMENT_NOT_FOUND
+                ));
+
+        // 2) 변경할 필드만 업데이트
+        department.updateInfo(name, type);
+
+        // 3) updatedAt은 @PreUpdate 콜백에서 자동 갱신
+
+        // 4) 저장
+        Department updatedDept = departmentRepository.save(department);
+
+        // 5) DTO 변환 후 반환
+        return DepartmentDto.Response.from(updatedDept);
+    }
+
     /* ============================================================
      * CRUD: 부서 이동 (재조직)
      * ============================================================ */
@@ -538,5 +592,153 @@ public class DepartmentService {
 
         return roots;
     }
+
+    /* ============================================================
+     * 부서 검색 기능
+     * ============================================================ */
+
+    /**
+     * 키워드로 부서 검색
+     *
+     * <h3>검색 방식:</h3>
+     * - 부서명(name)에 키워드가 포함된 모든 부서 조회
+     * - 대소문자 구분 없음 (IGNORE CASE)
+     *
+     * <h3>사용 예시:</h3>
+     * - keyword = "개발" → "개발팀", "AI개발팀", "플랫폼개발부" 등
+     * - keyword = "team" → "TEAM_A", "Sales Team" 등
+     *
+     * @param tenantId 테넌트 ID
+     * @param keyword  검색 키워드
+     * @return 검색된 부서 목록 (DTO)
+     */
+    @Transactional(readOnly = true)
+    public List<DepartmentDto.Response> searchDepartments(String tenantId, String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return List.of();
+        }
+
+        List<Department> departments = departmentRepository
+                .findByTenantIdAndNameContainingIgnoreCase(tenantId, keyword);
+
+        return departments.stream()
+                .map(DepartmentDto.Response::from)
+                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 특정 깊이(depth)의 부서 조회
+     *
+     * <h3>사용 예시:</h3>
+     * - depth = 0 → 최상위(루트) 부서만 조회
+     * - depth = 1 → 1단계 하위 부서만 조회
+     * - depth = 2 → 2단계 하위 부서만 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param depth    조회할 깊이 (0부터 시작)
+     * @return 해당 깊이의 부서 목록 (DTO)
+     */
+    @Transactional(readOnly = true)
+    public List<DepartmentDto.Response> getDepartmentsByDepth(String tenantId, int depth) {
+        if (depth < 0) {
+            throw new IllegalArgumentException("depth는 0 이상이어야 합니다.");
+        }
+
+        List<Department> departments = departmentRepository
+                .findByTenantIdAndDepth(tenantId, depth);
+
+        return departments.stream()
+                .map(DepartmentDto.Response::from)
+                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 특정 타입의 부서 조회
+     *
+     * <h3>사용 예시:</h3>
+     * - type = "TEAM" → 팀 단위 부서만 조회
+     * - type = "DIVISION" → 사업부 단위만 조회
+     * - type = "DEPARTMENT" → 부서 단위만 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param type     부서 타입
+     * @return 해당 타입의 부서 목록 (DTO)
+     */
+    @Transactional(readOnly = true)
+    public List<DepartmentDto.Response> getDepartmentsByType(String tenantId, String type) {
+        if (type == null || type.trim().isEmpty()) {
+            return List.of();
+        }
+
+        List<Department> departments = departmentRepository
+                .findByTenantIdAndType(tenantId, type);
+
+        return departments.stream()
+                .map(DepartmentDto.Response::from)
+                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .collect(Collectors.toList());
+    }
+
+    /* ============================================================
+     * 부서 통계 조회
+     * ============================================================ */
+
+    /**
+     * 부서 통계 정보 조회
+     *
+     * <h3>제공 통계:</h3>
+     * - 전체 직원 수 (활성 + 비활성)
+     * - 활성 직원 수 (ACTIVE 상태만)
+     * - 직속 하위 부서 수 (direct children)
+     * - 전체 하위 부서 수 (모든 descendants)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 조회할 부서 ID
+     * @return 부서 통계 정보
+     * @throws OrganizationException DEPARTMENT_NOT_FOUND: 부서가 존재하지 않을 때
+     */
+    @Transactional(readOnly = true)
+    public DepartmentDto.Statistics getDepartmentStatistics(String tenantId, String deptId) {
+        // 1. 부서 조회
+        Department department = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
+                .orElseThrow(() -> new OrganizationException(
+                        OrganizationErrorCode.DEPARTMENT_NOT_FOUND
+                ));
+
+        // 2. 직원 수 조회 (OrgUserPort 사용)
+        long totalEmployees = orgUserPort.countEmployeesByDepartment(tenantId, deptId);
+        long activeEmployees = orgUserPort.countActiveEmployeesByDepartment(tenantId, deptId);
+
+        // 3. 직속 하위 부서 수 조회
+        long childDeptCount = departmentRepository.findAllByTenantId(tenantId).stream()
+                .filter(dept -> dept.getParent() != null
+                        && dept.getParent().getDeptId().equals(deptId))
+                .count();
+
+        // 4. 전체 하위 부서 수 조회 (orgPath 기반)
+        String pathPrefix = department.getOrgPath();
+        long descendantDeptCount = departmentRepository
+                .findByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix).stream()
+                .filter(dept -> !dept.getDeptId().equals(deptId)) // 자기 자신 제외
+                .count();
+
+        // 5. 통계 DTO 반환
+        return DepartmentDto.Statistics.builder()
+                .deptId(department.getDeptId())
+                .name(department.getName())
+                .type(department.getType())
+                .depth(department.getDepth())
+                .totalEmployees(totalEmployees)
+                .activeEmployees(activeEmployees)
+                .childDeptCount(childDeptCount)
+                .descendantDeptCount(descendantDeptCount)
+                .build();
+    }
+
+    /* ============================================================
+     * 내부 헬퍼 메서드
+     * ============================================================ */
 }
 

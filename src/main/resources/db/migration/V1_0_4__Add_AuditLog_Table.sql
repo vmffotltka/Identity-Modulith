@@ -62,7 +62,7 @@ INSERT INTO audit_logs (
     changes,
     timestamp
 ) VALUES (
-    UUID(),
+    gen_random_uuid()::VARCHAR(36),
     'default-tenant',
     'CREATE',
     'ROLE',
@@ -83,7 +83,7 @@ INSERT INTO audit_logs (
     changes,
     timestamp
 ) VALUES (
-    UUID(),
+    gen_random_uuid()::VARCHAR(36),
     'default-tenant',
     'ASSIGN',
     'ROLE_PERMISSION',
@@ -105,7 +105,7 @@ INSERT INTO audit_logs (
     timestamp,
     ip_address
 ) VALUES (
-    UUID(),
+    gen_random_uuid()::VARCHAR(36),
     'default-tenant',
     'ASSIGN',
     'AGENT_ROLE',

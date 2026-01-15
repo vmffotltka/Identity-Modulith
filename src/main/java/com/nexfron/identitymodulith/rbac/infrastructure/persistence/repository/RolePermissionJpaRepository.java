@@ -44,6 +44,14 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
     Set<String> findPermissionIdsByRoleId(@Param("roleId") String roleId);
 
     /**
+     * 특정 역할의 모든 권한 매핑 엔티티 조회
+     *
+     * @param roleId 역할 ID
+     * @return 역할-권한 매핑 엔티티 리스트
+     */
+    List<RolePermissionJpaEntity> findByRoleId(String roleId);
+
+    /**
      * 주어진 역할 ID들에 대한 모든 권한을 조회합니다.
      *
      * 사용 시나리오:
@@ -100,47 +108,77 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
      * @return 권한 엔티티 리스트
      */
     @Query("""
-        SELECT DISTINCT p FROM PermissionJpaEntity p 
+        SELECT DISTINCT p FROM PermissionJpaEntity p
         WHERE p.permissionId IN (
-            SELECT rp.permissionId FROM RolePermissionJpaEntity rp 
+            SELECT rp.permissionId FROM RolePermissionJpaEntity rp
             WHERE rp.roleId = :roleId
-        )
+          )
+          AND p.tenantId = :tenantId
     """)
     List<com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity>
-        findPermissionsByRoleId(@Param("roleId") String roleId);
+        findPermissionsByRoleIdAndTenant(@Param("roleId") String roleId,
+                                          @Param("tenantId") String tenantId);
+
+    @Query("""
+        SELECT rp.permissionId FROM RolePermissionJpaEntity rp
+        WHERE rp.roleId IN :roleIds
+    """)
+    List<String> findPermissionIdsByRoleIds(@Param("roleIds") Collection<String> roleIds);
+
+    @Query("""
+        SELECT rp.permissionId FROM RolePermissionJpaEntity rp
+        WHERE rp.roleId IN :roleIds
+    """)
+    List<String> findPermissionIdsByRoleIdsAndTenant(@Param("roleIds") Collection<String> roleIds,
+                                                     @Param("tenantId") String tenantId);
 
     /**
-     * 특정 역할의 모든 권한 할당을 제거합니다.
+     * 특정 역할의 권한 코드를 DTO 프로젝션으로 조회 (성능 최적화)
      *
      * 사용 시나리오:
-     * - 역할을 삭제하기 전에 관련된 모든 권한 매핑을 삭제할 때
-     * - 주의: 이 작업은 돌이킬 수 없으므로 신중하게 사용해야 합니다.
+     * - getPermissionsByRole()에서 권한 코드만 필요할 때
+     * - N+1 문제를 방지하고 한 번의 JOIN 쿼리로 조회
+     *
+     * 성능 이점:
+     * - 기존: 2개 쿼리 (role_permissions 조회 + permissions 조회)
+     * - 개선: 1개 쿼리 (JOIN으로 한 번에 조회)
      *
      * @param roleId 역할 ID
-     *
-     * @apiNote
-     *  쿼리: DELETE FROM role_permissions WHERE role_id = ?
-     *
-     * @see com.nexfron.identitymodulith.rbac.application.RbacManagementService#deleteRole(String)
+     * @param tenantId 테넌트 ID
+     * @return 권한 코드 목록
      */
-    void deleteByRoleId(String roleId);
+    @Query("""
+        SELECT p.code 
+        FROM RolePermissionJpaEntity rp
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        WHERE rp.roleId = :roleId 
+          AND p.tenantId = :tenantId
+    """)
+    List<String> findPermissionCodesByRoleIdAndTenant(@Param("roleId") String roleId,
+                                                       @Param("tenantId") String tenantId);
 
     /**
-     * 특정 권한이 할당된 모든 역할-권한 매핑을 제거합니다.
+     * 여러 역할의 권한 코드를 DTO 프로젝션으로 조회 (성능 최적화)
      *
      * 사용 시나리오:
-     * - 권한을 삭제하기 전에 관련된 모든 역할 매핑을 삭제할 때
-     * - 권한 업그레이드나 이름 변경 시 기존 매핑 정리
-     * - 주의: 이 작업은 돌이킬 수 없으므로 신중하게 사용해야 합니다.
+     * - 사용자가 가진 여러 역할의 모든 권한을 한 번에 조회
+     * - permissionsOfRoles() 메서드 최적화용
      *
-     * @param permissionId 권한 ID
-     *
-     * @apiNote
-     *  쿼리: DELETE FROM role_permissions WHERE permission_id = ?
-     *
-     * @see com.nexfron.identitymodulith.rbac.application.RbacManagementService#deletePermission(String)
+     * @param roleIds 역할 ID 목록
+     * @param tenantId 테넌트 ID
+     * @return 권한 코드 목록 (중복 포함)
      */
+    @Query("""
+        SELECT DISTINCT p.code 
+        FROM RolePermissionJpaEntity rp
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        WHERE rp.roleId IN :roleIds 
+          AND p.tenantId = :tenantId
+    """)
+    List<String> findPermissionCodesByRoleIdsAndTenant(@Param("roleIds") Collection<String> roleIds,
+                                                        @Param("tenantId") String tenantId);
+
+    void deleteByRoleId(String roleId);
+
     void deleteByPermissionId(String permissionId);
 }
-
-

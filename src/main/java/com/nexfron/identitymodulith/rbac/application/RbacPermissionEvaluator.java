@@ -44,6 +44,7 @@ import java.util.UUID;
 public class RbacPermissionEvaluator {
 
     private final RbacQueryService rbacQueryService;
+    private final AuditLogService auditLogService;
 
     /**
      * 주어진 권한을 사용자가 보유하고 있는지 검증합니다.
@@ -114,6 +115,15 @@ public class RbacPermissionEvaluator {
             } else {
                 log.warn("[RBAC 권한 검증 실패] agentId={}, 요청권한={}, 보유권한={}, 소요시간={}ms",
                         agentId, permissionCode, userPermissions, duration);
+
+                // 🔴 권한 거부 감사 로그 기록 (보안 감시)
+                try {
+                    auditLogService.recordAccessDenied(tenantId, agentId.toString(), permissionCode, userPermissions);
+                } catch (Exception auditEx) {
+                    // 감사 로그 기록 실패는 권한 검사 결과에 영향을 주지 않음
+                    log.error("[RBAC] 감사 로그 기록 실패: agentId={}, permissionCode={}",
+                            agentId, permissionCode, auditEx);
+                }
             }
 
             return hasPermission;
