@@ -3,7 +3,7 @@ package com.nexfron.identitymodulith.organization.domain.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import com.nexfron.identitymodulith.organization.common.exception.InvalidDepartmentMoveException;
+import com.nexfron.identitymodulith.organization.exception.InvalidDepartmentMoveException;
 import java.time.LocalDateTime;
 
 /**
@@ -173,6 +173,17 @@ public class Department {
      */
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * 버전 (Optimistic Locking)
+     * - 동시성 제어를 위한 낙관적 락
+     * - 동시에 여러 트랜잭션이 같은 부서를 수정하려 할 때 충돌 방지
+     * - 업데이트할 때마다 자동으로 증가
+     * - 충돌 발생 시 OptimisticLockException 발생
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     public static Department create(String tenantId, String name, String type, Department parent) {
         /**

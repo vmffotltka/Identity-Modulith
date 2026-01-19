@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.rbac.application;
 
+import com.nexfron.identitymodulith.common.cache.CacheKeyGenerator;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
@@ -186,7 +187,11 @@ public class RbacQueryServiceImpl implements RbacQueryService {
      * @see RolePermissionJpaRepository
      */
     @Override
-    @Cacheable(value = "userPermissions", key = "#tenantId + ':' + #agentId", unless = "#result.isEmpty()")
+    @Cacheable(
+        value = "userPermissions",
+        key = "T(com.nexfron.identitymodulith.common.cache.CacheKeyGenerator).userPermissions(#tenantId, #agentId.toString())",
+        unless = "#result.isEmpty()"
+    )
     public Set<String> permissionsOf(String tenantId, UUID agentId) {
         if (tenantId == null || tenantId.isBlank() || agentId == null) {
             log.warn("[RBAC] 권한 조회 입력이 올바르지 않습니다: tenantId={}, agentId={} (빈 Set 반환)", tenantId, agentId);

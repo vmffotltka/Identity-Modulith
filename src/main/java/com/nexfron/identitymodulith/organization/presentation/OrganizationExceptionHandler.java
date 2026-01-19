@@ -1,8 +1,8 @@
 package com.nexfron.identitymodulith.organization.presentation;
 
-import com.nexfron.identitymodulith.organization.common.exception.OrganizationException;
-import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
-import com.nexfron.identitymodulith.organization.common.exception.BusinessException;
+import com.nexfron.identitymodulith.organization.exception.OrganizationException;
+import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

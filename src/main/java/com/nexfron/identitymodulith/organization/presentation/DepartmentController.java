@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +19,16 @@ import java.util.UUID;
 /**
  * DepartmentController - 조직(부서) 관리 REST API
  *
- * 조직 구조(부서)의 CRUD, 이동, 조회 기능을 제공합니다.
- * Level 2 RBAC 기반 스코프 조회도 지원합니다.
+ * <h2>제공 기능:</h2>
+ * <ul>
+ *   <li>조직 구조(부서)의 CRUD</li>
+ *   <li>부서 이동 (조직 구조 변경)</li>
+ *   <li>조직도 조회 (전체 및 스코프 기반)</li>
+ * </ul>
+ *
+ * <h2>RBAC 통합:</h2>
+ * - 데이터 범위 기반 스코프 조회 지원
+ * - DataScopeLevel (ADMIN, TEAM_LEAD, MEMBER)에 따른 접근 제어
  *
  * @author Organization Module Team
  * @version 1.0
@@ -84,7 +93,7 @@ public class DepartmentController {
     @PostMapping
     public ResponseEntity<DepartmentDto.Response> createDepartment(
             @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
-            @RequestBody DepartmentDto.CreateRequest request) {
+            @Valid @RequestBody DepartmentDto.CreateRequest request) {
         // tenantId 없으면 SecurityContext에서 추출 (SecurityContext 통합 시)
         if (tenantId == null || tenantId.isEmpty()) {
             tenantId = "default-tenant";
@@ -124,7 +133,7 @@ public class DepartmentController {
             @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId,
-            @RequestBody DepartmentDto.UpdateRequest request) {
+            @Valid @RequestBody DepartmentDto.UpdateRequest request) {
         if (tenantId == null || tenantId.isEmpty()) {
             tenantId = "default-tenant";
         }

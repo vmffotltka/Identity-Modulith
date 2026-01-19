@@ -3,6 +3,7 @@ package com.nexfron.identitymodulith.rbac.presentation;
 import com.nexfron.identitymodulith.rbac.application.RbacManagementService;
 import com.nexfron.identitymodulith.rbac.application.RbacManagementService.*;
 import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -69,7 +70,7 @@ public class RbacController {
             @ApiResponse(responseCode = "400", description = "이미 존재하는 역할 또는 잘못된 요청")
     })
     @PostMapping("/roles")
-    public ResponseEntity<RoleDto> createRole(@RequestBody CreateRoleRequest request) {
+    public ResponseEntity<RoleDto> createRole(@Valid @RequestBody CreateRoleRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(rbacManagementService.createRole(request));
     }
@@ -83,7 +84,7 @@ public class RbacController {
     public ResponseEntity<RoleDto> updateRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
-            @RequestBody UpdateRoleRequest request) {
+            @Valid @RequestBody UpdateRoleRequest request) {
         return ResponseEntity.ok(rbacManagementService.updateRole(roleName, request));
     }
 
@@ -143,7 +144,7 @@ public class RbacController {
             @ApiResponse(responseCode = "400", description = "이미 존재하는 권한 또는 잘못된 요청")
     })
     @PostMapping("/permissions")
-    public ResponseEntity<PermissionDto> createPermission(@RequestBody CreatePermissionRequest request) {
+    public ResponseEntity<PermissionDto> createPermission(@Valid @RequestBody CreatePermissionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(rbacManagementService.createPermission(request));
     }
@@ -158,7 +159,7 @@ public class RbacController {
     public ResponseEntity<PermissionDto> updatePermission(
             @Parameter(description = "권한 코드", example = "user:create", required = true)
             @PathVariable String code,
-            @RequestBody UpdatePermissionRequest request) {
+            @Valid @RequestBody UpdatePermissionRequest request) {
         return ResponseEntity.ok(rbacManagementService.updatePermission(code, request));
     }
 

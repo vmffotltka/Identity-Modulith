@@ -118,7 +118,7 @@ class RbacCacheEvictIntegrationTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
         when(permissionRepository.findByTenantIdAndCode(tenantId, "sample:perm")).thenReturn(Optional.of(perm));
-        when(rolePermissionRepository.existsByRoleIdAndPermissionId("role-1", "perm-1")).thenReturn(false);
+        // ✅ P0: existsByRoleIdAndPermissionId 제거
 
         Cache cache = cacheManager.getCache("userPermissions");
         assert cache != null;

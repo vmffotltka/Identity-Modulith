@@ -11,30 +11,41 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
  * [Organization ↔ User 연동 어댑터]
  *
+ * <h2>목적:</h2>
  * Organization 모듈에서 사용자 정보를 직접 참조하지 않기 위해
- * OrgUserPort 인터페이스를 통해 User(Agent) 모듈을 조회하는 실제 구현체.
+ * OrgUserPort 인터페이스를 통해 User(Agent) 모듈을 조회하는 실제 구현체입니다.
  *
- * - DummyOrgUserAdapter 를 대체하는 "실제" 구현
- * - Agent 정보를 기반으로 조직 스코프 / 권한 판단에 필요한 최소 정보만 제공
+ * <h2>책임:</h2>
+ * <ul>
+ *   <li>User 모듈의 Agent 정보를 Organization 모듈이 필요로 하는 형태로 변환</li>
+ *   <li>조직 스코프 / 권한 판단에 필요한 최소 정보만 제공</li>
+ *   <li>모듈 간 결합도 최소화 (포트-어댑터 패턴)</li>
+ * </ul>
  *
- * 역할 요약:
- * 1. userId(UUID) → Agent 조회
- * 2. Agent.organizationId(String) → Department.deptId(Long) 변환
- * 3. Agent role 정보 → OrgRoleLevel 매핑
+ * <h2>주요 변환 작업:</h2>
+ * <ol>
+ *   <li>userId(UUID) → Agent 조회 (UserModuleApi 사용)</li>
+ *   <li>Agent.organizationId(String) → Department.deptId 매핑</li>
+ *   <li>Agent.roles → DataScopeLevel 매핑 (RoleScopeMappingConfig 사용)</li>
+ * </ol>
  *
- * 주의:
- * - Agent.organizationId 는 "부서 ID를 문자열로 저장"하는 구조임
- * - Organization 모듈은 부서 트리/경로 계산만 담당하고,
- *   사용자 활성 여부/권한은 이 어댑터에서 해석함
+ * <h2>주의사항:</h2>
+ * <ul>
+ *   <li>Agent.organizationId는 부서 ID를 문자열(UUID)로 저장</li>
+ *   <li>Organization 모듈은 부서 트리/경로 계산만 담당</li>
+ *   <li>사용자 활성 여부/권한은 이 어댑터에서 해석</li>
+ * </ul>
+ *
+ * @author Identity System Team
+ * @version 1.0
  */
 @Service
-@Primary // DummyOrgUserAdapter 보다 우선 적용되도록 설정
+@Primary  // OrgUserPort의 기본 구현체로 지정
 @RequiredArgsConstructor
 public class AgentOrgUserAdapter implements OrgUserPort {
 
@@ -66,16 +77,16 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      *
      * - 부서 이동 / 조직 조회 등 대부분의 Organization API 에서 사용됨
      * - userId 는 HTTP Header(X-User-Id) 로 전달됨
+     * - <b>Optional 반환으로 null 안전성 확보</b>
      *
      * @param tenantId 테넌트 ID
      * @param userId   사용자(Agent) UUID
-     * @return OrgUserView (없으면 null)
+     * @return OrgUserView Optional (사용자가 없으면 empty)
      */
     @Override
-    public OrgUserView findOrgInfoByUserId(String tenantId, UUID userId) {
+    public java.util.Optional<OrgUserView> findOrgInfoByUserId(String tenantId, UUID userId) {
         return userModuleApi.findAgentById(tenantId, userId)
-                .map(this::toViewFromExternal)
-                .orElse(null);
+                .map(this::toViewFromExternal);
     }
 
     /**
@@ -155,30 +166,32 @@ public class AgentOrgUserAdapter implements OrgUserPort {
 
     /**
      * Agent 역할 정보를 Organization 권한 레벨로 매핑
-     * <p>
-     * 현재 정책:
-     * - role 이름에 "ADMIN" 포함 → ADMIN
-     * - role 이름에 "LEAD" / "TEAM_LEAD" 포함 → TEAM_LEAD
-     * - 그 외 → MEMBER
-     * <p>
-     * 향후 RBAC 정책이 정교해지면 이 메서드만 수정하면 됨
+     *
+     * <p><b>개선된 매핑 방식:</b>
+     * 문자열 포함 여부 대신 {@link com.nexfron.identitymodulith.organization.infrastructure.config.RoleScopeMappingConfig}의
+     * 명시적 매핑 테이블을 사용합니다.
+     *
+     * <p><b>매핑 규칙:</b>
+     * <ul>
+     *   <li>사용자가 가진 모든 역할의 스코프 레벨 중 <b>최고 레벨</b>을 반환</li>
+     *   <li>ADMIN > TEAM_LEAD > MEMBER 순서</li>
+     *   <li>매핑되지 않은 역할은 MEMBER로 간주 (최소 권한 원칙)</li>
+     * </ul>
+     *
+     * <p><b>예시:</b>
+     * <pre>
+     * 역할 [MEMBER, PHONE_AGENT] → MEMBER (둘 다 MEMBER 레벨)
+     * 역할 [TEAM_LEAD, PHONE_AGENT] → TEAM_LEAD (TEAM_LEAD > MEMBER)
+     * 역할 [ADMIN, TEAM_LEAD] → ADMIN (ADMIN > TEAM_LEAD)
+     * </pre>
+     *
+     * @param info Agent 외부 정보
+     * @return 최고 데이터 스코프 레벨
      */
     private DataScopeLevel mapRoleLevelFromExternal(AgentExternalInfo info) {
-        boolean isAdmin = info.getRoles().stream()
-                .anyMatch(role ->
-                        role.getName() != null && role.getName().toUpperCase(Locale.ROOT).contains("ADMIN")
-                );
-
-        if (isAdmin) return DataScopeLevel.ADMIN;
-
-        boolean isLead = info.getRoles().stream()
-                .anyMatch(role -> role.getName() != null && (
-                        role.getName().toUpperCase(Locale.ROOT).contains("LEAD") ||
-                                role.getName().toUpperCase(Locale.ROOT).contains("TEAM_LEAD")
-                ));
-
-        if (isLead) return DataScopeLevel.TEAM_LEAD;
-
-        return DataScopeLevel.MEMBER;
+        return info.getRoles().stream()
+                .map(role -> com.nexfron.identitymodulith.organization.infrastructure.config.RoleScopeMappingConfig.getDataScope(role.getName()))
+                .max(java.util.Comparator.naturalOrder())  // ADMIN > TEAM_LEAD > MEMBER
+                .orElse(DataScopeLevel.MEMBER);  // 역할이 없으면 MEMBER (최소 권한)
     }
 }

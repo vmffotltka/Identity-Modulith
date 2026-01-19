@@ -89,6 +89,22 @@ public interface AgentRoleJpaRepository extends JpaRepository<AgentRoleJpaEntity
     boolean existsByAgentIdAndRoleId(String agentId, String roleId);
 
     /**
+     * 특정 역할이 할당된 에이전트 수를 조회합니다.
+     *
+     * <h3>사용 시나리오:</h3>
+     * <ul>
+     *   <li>역할 삭제 전 영향받을 사용자 수 확인</li>
+     *   <li>역할 통계 정보 제공</li>
+     * </ul>
+     *
+     * @param roleId 역할 ID
+     * @return 해당 역할이 할당된 에이전트 수
+     *
+     * @apiNote 쿼리: SELECT COUNT(*) FROM agent_roles WHERE role_id = ?
+     */
+    long countByRoleId(String roleId);
+
+    /**
      * 특정 에이전트의 모든 역할 할당을 제거합니다.
      *
      * 사용 시나리오:
@@ -100,8 +116,6 @@ public interface AgentRoleJpaRepository extends JpaRepository<AgentRoleJpaEntity
      *
      * @apiNote
      *  쿼리: DELETE FROM agent_roles WHERE agent_id = ?
-     *
-     * @see com.nexfron.identitymodulith.rbac.application.RbacManagementService#deleteRole(String)
      */
     void deleteByAgentId(String agentId);
 
@@ -135,4 +149,3 @@ public interface AgentRoleJpaRepository extends JpaRepository<AgentRoleJpaEntity
      */
     void deleteByAgentIdAndRoleId(String agentId, String roleId);
 }
-

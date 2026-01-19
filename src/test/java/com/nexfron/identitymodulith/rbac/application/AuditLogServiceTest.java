@@ -2,7 +2,6 @@ package com.nexfron.identitymodulith.rbac.application;
 
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AuditLogJpaRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,8 +44,8 @@ class AuditLogServiceTest {
     @InjectMocks
     private AuditLogService auditLogService;
 
-    private String tenantId = "test-tenant";
-    private String operatorId = "admin-user";
+    private final String tenantId = "test-tenant";
+    private final String operatorId = "admin-user";
 
     @BeforeEach
     void setup() {

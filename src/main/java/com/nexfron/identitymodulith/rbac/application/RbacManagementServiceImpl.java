@@ -17,6 +17,7 @@ import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.R
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +61,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RbacManagementServiceImpl implements RbacManagementService {
 
+    private final RetryTemplate retryTemplate;
     private final RoleJpaRepository roleRepository;
     private final PermissionJpaRepository permissionRepository;
     private final RolePermissionJpaRepository rolePermissionRepository;
@@ -72,35 +74,28 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     /**
      * 현재 요청의 tenantId 추출
      *
-     * @return tenantId (Authentication 객체의 principal에서 추출)
+     * <p>TenantContextHolder를 사용하여 안전하게 테넌트 ID를 추출합니다.
+     * 인증 정보가 없거나 테넌트 ID를 추출할 수 없는 경우 예외가 발생합니다.
+     *
+     * @return tenantId
+     * @throws com.nexfron.identitymodulith.common.security.UnauthorizedException 인증 정보가 없거나 테넌트 ID를 찾을 수 없는 경우
      */
     private String getTenantId() {
-        // SecurityContext에서 tenantId 추출 (프로젝트의 인증 모델에 따라 확장 필요)
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof String) {
-            return principal.toString();
-        }
-        // TODO: CustomPrincipal 도입 시 tenantId 추출 로직 교체
-        return "default-tenant";
+        return com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
     }
 
     /**
      * 현재 사용자 ID 조회
      *
-     * @return 현재 인증된 사용자의 ID (없으면 "system")
+     * <p>TenantContextHolder를 사용하여 안전하게 사용자 ID를 추출합니다.
+     * 감사 로그 기록 시 사용됩니다.
+     *
+     * @return 현재 인증된 사용자의 ID
+     * @throws com.nexfron.identitymodulith.common.security.UnauthorizedException 인증 정보가 없는 경우
      */
     private String getCurrentUserId() {
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (principal instanceof String) {
-                return principal.toString();
-            }
-            // principal이 Custom 객체라면 getId() 또는 유사 메서드 호출 필요
-            return "system";
-        } catch (Exception e) {
-            // 인증 정보가 없을 경우
-            return "system";
-        }
+        // ✅ P0-1: system 폴백 제거 - 인증 실패 시 명확하게 예외 발생
+        return com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
     }
 
     @Override
@@ -134,37 +129,51 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     @Transactional
     public RoleDto createRole(CreateRoleRequest request) {
         String tenantId = getTenantId();
+        log.info("[RBAC] 역할 생성 요청 - tenantId: {}, name: {}, type: {}",
+            tenantId, request.name(), request.type());
 
-        // 1. 중복 확인
-        if (roleRepository.existsByTenantIdAndName(tenantId, request.name())) {
-            throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
+        try {
+            return retryTemplate.execute(context -> {
+                // 1. 중복 확인
+                if (roleRepository.existsByTenantIdAndName(tenantId, request.name())) {
+                    throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
+                }
+
+                // 2. 역할 생성
+                RoleJpaEntity role = RoleJpaEntity.builder()
+                        .roleId(UUID.randomUUID().toString())
+                        .tenantId(tenantId)
+                        .name(request.name())
+                        .type(request.type())
+                        .description(null)
+                        .isActive(true)
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build();
+
+                // 3. 저장
+                RoleJpaEntity savedRole = roleRepository.save(role);
+
+                // 4. 감사 로그 기록
+                String operatorId = getCurrentUserId();
+                auditLogService.recordRoleCreation(tenantId, savedRole.getName(), savedRole.getType(), operatorId);
+
+                log.info("[RBAC] 역할 생성 완료 - roleId: {}, name: {}",
+                    savedRole.getRoleId(), savedRole.getName());
+
+                return new RoleDto(
+                        savedRole.getName(),
+                        savedRole.getType(),
+                        savedRole.getDescription(),
+                        savedRole.getIsActive()
+                );
+            });
+        } catch (RbacException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("[RBAC] 역할 생성 실패 - name: {}, 오류: {}", request.name(), e.getMessage(), e);
+            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
         }
-
-        // 2. 역할 생성
-        RoleJpaEntity role = RoleJpaEntity.builder()
-                .roleId(UUID.randomUUID().toString())
-                .tenantId(tenantId)
-                .name(request.name())
-                .type(request.type())
-                .description(null)  // CreateRoleRequest에는 description 필드가 없음
-                .isActive(true)  // 기본값: 활성
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
-        // 3. 저장
-        RoleJpaEntity savedRole = roleRepository.save(role);
-
-        // 4. 감사 로그 기록
-        String operatorId = getCurrentUserId();
-        auditLogService.recordRoleCreation(tenantId, savedRole.getName(), savedRole.getType(), operatorId);
-
-        return new RoleDto(
-                savedRole.getName(),
-                savedRole.getType(),
-                savedRole.getDescription(),
-                savedRole.getIsActive()
-        );
     }
 
     /**
@@ -242,28 +251,41 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     @Transactional
     public PermissionDto createPermission(CreatePermissionRequest request) {
         String tenantId = getTenantId();
+        log.info("[RBAC] 권한 생성 요청 - tenantId: {}, code: {}", tenantId, request.code());
 
-        // 1. 중복 확인
-        if (permissionRepository.existsByTenantIdAndCode(tenantId, request.code())) {
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_EXISTS);
+        try {
+            return retryTemplate.execute(context -> {
+                // 1. 중복 확인
+                if (permissionRepository.existsByTenantIdAndCode(tenantId, request.code())) {
+                    throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_EXISTS);
+                }
+
+                // 2. 권한 생성
+                PermissionJpaEntity permission = PermissionJpaEntity.builder()
+                        .permissionId(UUID.randomUUID().toString())
+                        .tenantId(tenantId)
+                        .code(request.code())
+                        .createdAt(LocalDateTime.now())
+                        .build();
+
+                // 3. 저장
+                PermissionJpaEntity savedPermission = permissionRepository.save(permission);
+
+                // 4. 감사 로그 기록
+                String operatorId = getCurrentUserId();
+                auditLogService.recordPermissionCreation(tenantId, savedPermission.getCode(), operatorId);
+
+                log.info("[RBAC] 권한 생성 완료 - permissionId: {}, code: {}",
+                    savedPermission.getPermissionId(), savedPermission.getCode());
+
+                return new PermissionDto(savedPermission.getCode(), savedPermission.getDescription());
+            });
+        } catch (RbacException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("[RBAC] 권한 생성 실패 - code: {}, 오류: {}", request.code(), e.getMessage(), e);
+            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
         }
-
-        // 2. 권한 생성
-        PermissionJpaEntity permission = PermissionJpaEntity.builder()
-                .permissionId(UUID.randomUUID().toString())
-                .tenantId(tenantId)
-                .code(request.code())
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        // 3. 저장
-        PermissionJpaEntity savedPermission = permissionRepository.save(permission);
-
-        // 4. 감사 로그 기록
-        String operatorId = getCurrentUserId();
-        auditLogService.recordPermissionCreation(tenantId, savedPermission.getCode(), operatorId);
-
-        return new PermissionDto(savedPermission.getCode(), savedPermission.getDescription());
     }
 
     /**
@@ -328,19 +350,23 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, permissionCode)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
 
-        // 3. 중복 할당 확인
-        if (rolePermissionRepository.existsByRoleIdAndPermissionId(role.getRoleId(), permission.getPermissionId())) {
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
-        }
-
-        // 4. 매핑 생성
+        // ✅ P0: 동시성 제어 - 중복 체크 제거, DB UNIQUE 제약에 의존
+        // 3. 매핑 생성
         RolePermissionJpaEntity mapping = RolePermissionJpaEntity.builder()
                 .roleId(role.getRoleId())
                 .permissionId(permission.getPermissionId())
                 .assignedAt(LocalDateTime.now())
                 .build();
 
-        rolePermissionRepository.save(mapping);
+        // 4. 저장 (DB UNIQUE 제약으로 중복 방지)
+        try {
+            rolePermissionRepository.save(mapping);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // ✅ P0: 중복 할당 시 명확한 예외 (동시성 안전)
+            log.warn("[RBAC 동시성 제어] 중복 권한 할당 차단 - roleName={}, permissionCode={}, roleId={}, permissionId={}",
+                    roleName, permissionCode, role.getRoleId(), permission.getPermissionId());
+            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
+        }
 
         // 5. 감사 로그 기록 (권한 변경 이력 추적)
         String operatorId = getCurrentUserId();
@@ -410,45 +436,71 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     @CacheEvict(value = "userPermissions", allEntries = true)
     public void assignRoleToAgent(String agentId, String roleName) {
         String tenantId = getTenantId();
+        String operatorId = getCurrentUserId();
         long startTime = System.currentTimeMillis();
 
-        // 1. 역할 조회 (테넌트 범위)
-        RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
-                .orElseThrow(() -> {
-                    log.warn("[RBAC] 역할 할당 실패: roleName={}, 존재하지 않음", roleName);
-                    return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
-                });
+        // ✅ P0-4: 권한 검증 시작 로깅
+        log.info("[RBAC 권한 검증 시작] 역할 할당 - tenantId={}, agentId={}, roleName={}, operator={}",
+            tenantId, agentId, roleName, operatorId);
 
-        // 1-1. 비활성 역할 할당 차단
-        if (role.getIsActive() == null || !role.getIsActive()) {
-            log.warn("[RBAC] 비활성 역할 할당 시도: agentId={}, roleName={}, isActive={}",
-                    agentId, roleName, role.getIsActive());
-            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
+        try {
+            retryTemplate.execute(context -> {
+                // 1. 역할 조회 (테넌트 범위)
+                RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
+                        .orElseThrow(() -> {
+                            // ✅ P0-4: 권한 검증 실패 로깅
+                            log.warn("[RBAC 권한 검증 실패] 역할 없음 - tenantId={}, roleName={}, operator={}",
+                                tenantId, roleName, operatorId);
+                            return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
+                        });
+
+                // 1-1. 비활성 역할 할당 차단
+                if (role.getIsActive() == null || !role.getIsActive()) {
+                    // ✅ P0-4: 권한 검증 실패 로깅
+                    log.warn("[RBAC 권한 검증 실패] 비활성 역할 - tenantId={}, agentId={}, roleName={}, isActive={}, operator={}",
+                            tenantId, agentId, roleName, role.getIsActive(), operatorId);
+                    throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
+                }
+
+                // ✅ P0: 동시성 제어 - DB UNIQUE 제약에 의존하여 Race Condition 방지
+                // 중복 체크 제거하고 바로 저장 시도
+                log.info("[RBAC 권한 검증 통과] 역할 할당 시도 - tenantId={}, agentId={}, roleName={}, roleId={}",
+                    tenantId, agentId, roleName, role.getRoleId());
+
+                // 2. 매핑 생성
+                AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
+                        .agentId(agentId)
+                        .roleId(role.getRoleId())
+                        .assignedAt(LocalDateTime.now())
+                        .build();
+
+                // 3. 저장 (DB UNIQUE 제약으로 중복 방지)
+                try {
+                    agentRoleRepository.save(mapping);
+                } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                    // ✅ P0: 중복 할당 시 명확한 예외 (동시성 안전)
+                    log.warn("[RBAC 동시성 제어] 중복 할당 차단 - tenantId={}, agentId={}, roleName={}, roleId={}, operator={}",
+                            tenantId, agentId, roleName, role.getRoleId(), operatorId);
+                    throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
+                }
+
+                // 4. 감사 로그 기록 (사용자-역할 변경 이력)
+                auditLogService.recordAgentRoleAssignment(tenantId, agentId, roleName, operatorId);
+
+                long duration = System.currentTimeMillis() - startTime;
+                // ✅ P0-4: 성공 로깅 강화
+                log.info("[RBAC 역할 할당 성공] tenantId={}, agentId={}, roleName={}, roleId={}, operator={}, 소요시간={}ms",
+                    tenantId, agentId, roleName, role.getRoleId(), operatorId, duration);
+
+                return null;
+            });
+        } catch (RbacException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("[RBAC] 역할 할당 실패 - agentId: {}, roleName: {}, 오류: {}",
+                agentId, roleName, e.getMessage(), e);
+            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
         }
-
-        // 2. 중복 할당 확인
-        if (agentRoleRepository.existsByAgentIdAndRoleId(agentId, role.getRoleId())) {
-            log.warn("[RBAC] 중복 역할 할당 시도: agentId={}, roleName={}, roleId={}",
-                    agentId, roleName, role.getRoleId());
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
-        }
-
-        // 3. 매핑 생성
-        AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
-                .agentId(agentId)
-                .roleId(role.getRoleId())
-                .assignedAt(LocalDateTime.now())
-                .build();
-
-        // 4. 저장
-        agentRoleRepository.save(mapping);
-
-        // 5. 감사 로그 기록 (사용자-역할 변경 이력)
-        String operatorId = getCurrentUserId();
-        auditLogService.recordAgentRoleAssignment(tenantId, agentId, roleName, operatorId);
-
-        long duration = System.currentTimeMillis() - startTime;
-        log.info("[RBAC 역할 할당] agentId={}, roleName={}, roleId={}, 소요시간={}ms", agentId, roleName, role.getRoleId(), duration);
     }
 
     @Override

@@ -4,14 +4,22 @@ package com.nexfron.identitymodulith.organization.domain.model;
 /**
  * DataScopeLevel (데이터 범위 레벨) Enum
  *
- * Level 2 RBAC (Role-Based Access Control)의 데이터 범위 관점에서
- * 사용자가 조직 데이터에 접근할 수 있는 범위를 정의합니다.
+ * <h2>목적:</h2>
+ * RBAC (Role-Based Access Control)에서 사용자가 조직 데이터에
+ * 접근할 수 있는 범위를 정의합니다.
  *
- * 개념:
- * - Level 1 RBAC: 기능 기반 접근 제어 (Permission → Role → Agent)
- * - Level 2 RBAC: 조직 범위 기반 데이터 접근 제어 (DataScopeLevel로 관리)
+ * <h2>RBAC 구조 (Flat RBAC):</h2>
+ * <ul>
+ *   <li><b>기능 기반 접근 제어</b>: Permission → Role → Agent</li>
+ *   <li><b>데이터 범위 기반 접근 제어</b>: DataScopeLevel로 조직 범위 관리</li>
+ * </ul>
  *
- * 계층 구조:
+ * <h2>특징:</h2>
+ * - 계층형 RBAC이 아닌 Flat RBAC 구조
+ * - 각 역할은 독립적이며 상하 관계 없음
+ * - 상담사는 채널별 권한(PHONE, CHAT, EMAIL) + 직책별 범위(MEMBER, TEAM_LEAD)를 조합
+ *
+ * <h2>계층 구조:</h2>
  * 조직 트리에서 사용자의 위치에 따라 보이는 범위가 달라집니다:
  *
  * 전체 조직:
@@ -23,7 +31,7 @@ package com.nexfron.identitymodulith.organization.domain.model;
  * ├─ 본부B ← ADMIN (전체 조직 조회 가능)
  * └─ 본부C
  *
- * 사용 예시:
+ * <h2>사용 예시:</h2>
  *
  * 1. MEMBER (일반 사원)
  *    - 자신이 속한 부서의 데이터만 접근 가능

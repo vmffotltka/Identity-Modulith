@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.common.exception;
+package com.nexfron.identitymodulith.organization.exception;
 
 /**
  * Organization 비즈니스 예외
@@ -33,7 +33,8 @@ public class OrganizationException extends RuntimeException {
         CHILD_DEPARTMENT_EXISTS("CHILD_DEPT_EXISTS", "하위 부서가 존재하여 삭제할 수 없습니다", 409),
         ACTIVE_USERS_EXIST("ACTIVE_USERS_EXIST", "소속 구성원이 존재하여 삭제할 수 없습니다", 409),
         INSUFFICIENT_PERMISSION("INSUFFICIENT_PERMISSION", "권한이 없습니다", 403),
-        INVALID_REQUEST("INVALID_REQUEST", "잘못된 요청입니다", 400);
+        INVALID_REQUEST("INVALID_REQUEST", "잘못된 요청입니다", 400),
+        INTERNAL_ERROR("INTERNAL_ERROR", "내부 서버 오류가 발생했습니다", 500);
 
         private final String code;
         private final String message;

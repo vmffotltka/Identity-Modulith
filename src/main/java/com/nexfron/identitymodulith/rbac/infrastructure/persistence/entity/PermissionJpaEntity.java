@@ -145,6 +145,17 @@ public class PermissionJpaEntity {
     private LocalDateTime createdAt;
 
     /**
+     * 버전 (Optimistic Locking)
+     * - 동시성 제어를 위한 낙관적 락
+     * - 동시에 여러 트랜잭션이 같은 권한을 수정하려 할 때 충돌 방지
+     * - 업데이트할 때마다 자동으로 증가
+     * - 충돌 발생 시 OptimisticLockException 발생
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
+
+    /**
      * 마지막 수정 일시
      * - 권한의 설명이나 설정이 마지막으로 변경된 시간
      * - 데이터베이스에서 자동 업데이트 (수정 시)

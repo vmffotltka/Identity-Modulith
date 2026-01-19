@@ -1,13 +1,16 @@
 // organization.application.service.OrgScopeService.java
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.common.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
 import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,13 +18,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * OrgScopeService - Level 2 RBAC (데이터 범위 기반 접근 제어) 핵심 로직
+ * OrgScopeService - 데이터 범위 기반 접근 제어 핵심 로직
  *
  * <h2>목표:</h2>
- * RBAC의 2단계 접근 제어를 구현합니다:
- * - Level 1: 기능 기반 (RBAC Module)
+ * RBAC에서 데이터 범위 기반 접근 제어를 구현합니다:
+ * - <b>기능 기반 접근 제어</b> (RBAC Module):
  *   "이 사용자가 이 기능(권한)을 사용할 수 있는가?" → Permission으로 제어
- * - Level 2: 데이터 범위 기반 (이 클래스)
+ * - <b>데이터 범위 기반 접근 제어</b> (이 클래스):
  *   "이 사용자가 이 조직 데이터를 볼 수 있는가?" → DataScopeLevel로 제어
  *
  * <h2>핵심 질문:</h2>
@@ -103,6 +106,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Slf4j
 public class OrgScopeService {
 
     private final JpaDepartmentRepository jpaDepartmentRepository;
@@ -121,6 +125,14 @@ public class OrgScopeService {
      *   </li>
      *   <li>접근 가능한 부서 ID 집합 반환</li>
      * </ol>
+     *
+     * <h3>캐싱 전략:</h3>
+     * <ul>
+     *   <li>캐시명: "accessibleDepts"</li>
+     *   <li>캐시 키: "tenantId:userId"</li>
+     *   <li>동일 사용자의 반복 조회 시 DB 조회 생략</li>
+     *   <li>부서 구조 변경 시 {@link #invalidateAccessibleDeptCache()} 호출 필요</li>
+     * </ul>
      *
      * <h3>사용 예시:</h3>
      * <pre>
@@ -151,18 +163,29 @@ public class OrgScopeService {
      *
      * @see DataScopeLevel
      * @see OrgUserPort#findOrgInfoByUserId(String, UUID)
+     * @see #invalidateAccessibleDeptCache()
      */
+    @Cacheable(
+        value = "accessibleDepts",
+        key = "#tenantId + ':' + #userId",
+        unless = "#result == null || #result.isEmpty()"
+    )
     public Set<String> getAccessibleDepartmentIds(String tenantId, UUID userId) {
-        OrgUserView userView = orgUserPort.findOrgInfoByUserId(tenantId, userId);
-        if (userView == null || !userView.isActive()) {
-            throw new EntityNotFoundException("사용자의 조직 정보를 찾을 수 없습니다.");
+        log.debug("[OrgScope] 접근 가능 부서 계산 시작: tenantId={}, userId={}", tenantId, userId);
+
+        // Optional을 사용하여 null 안전성 확보
+        OrgUserView userView = orgUserPort.findOrgInfoByUserId(tenantId, userId)
+                .orElseThrow(() -> new EntityNotFoundException("사용자의 조직 정보를 찾을 수 없습니다. userId=" + userId));
+
+        if (!userView.isActive()) {
+            throw new EntityNotFoundException("비활성화된 사용자입니다. userId=" + userId);
         }
 
         DataScopeLevel level = userView.getRoleLevel();
         String myDeptId = userView.getDeptId();
 
         if (myDeptId == null) {
-            throw new EntityNotFoundException("사용자의 소속 부서를 찾을 수 없습니다.");
+            throw new EntityNotFoundException("사용자의 소속 부서를 찾을 수 없습니다. userId=" + userId);
         }
 
         // ADMIN: 전체 조직 조회
@@ -261,5 +284,27 @@ public class OrgScopeService {
     public boolean canAccessAllDepartments(String tenantId, UUID userId, Collection<String> deptIds) {
         Set<String> scope = getAccessibleDepartmentIds(tenantId, userId);
         return deptIds.stream().allMatch(scope::contains);
+    }
+
+    /**
+     * 접근 가능 부서 캐시 무효화
+     *
+     * <h3>호출 시점:</h3>
+     * <ul>
+     *   <li>부서 생성/삭제 시</li>
+     *   <li>부서 이동 (orgPath 변경) 시</li>
+     *   <li>조직 구조 변경 시</li>
+     * </ul>
+     *
+     * <h3>주의사항:</h3>
+     * - 전체 캐시를 무효화하므로 성능 영향 고려 필요
+     * - 부서 조회 같은 읽기 작업에서는 호출하지 않음
+     * - 트랜잭션 커밋 후 호출 권장 (AOP 활용 시 자동화 가능)
+     *
+     * @see #getAccessibleDepartmentIds(String, UUID)
+     */
+    @CacheEvict(value = "accessibleDepts", allEntries = true)
+    public void invalidateAccessibleDeptCache() {
+        log.info("[OrgScope] 접근 가능 부서 캐시 무효화 수행");
     }
 }

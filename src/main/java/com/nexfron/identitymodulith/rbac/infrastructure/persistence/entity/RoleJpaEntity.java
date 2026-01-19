@@ -150,6 +150,7 @@ public class RoleJpaEntity {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+
     /**
      * 생성 일시
      * - 역할이 생성된 정확한 시간

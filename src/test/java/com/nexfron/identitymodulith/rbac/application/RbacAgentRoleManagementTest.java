@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -44,6 +45,9 @@ import static org.mockito.Mockito.*;
 class RbacAgentRoleManagementTest {
 
     @Mock
+    private RetryTemplate retryTemplate;
+
+    @Mock
     private RoleJpaRepository roleRepository;
 
     @Mock
@@ -68,10 +72,18 @@ class RbacAgentRoleManagementTest {
 
     @BeforeEach
     void setup() {
-        // SecurityContext 설정
+        // RetryTemplate 설정 (즉시 실행되도록)
+        lenient().when(retryTemplate.execute(any())).thenAnswer(invocation -> {
+            org.springframework.retry.RetryCallback<?, ?> callback = invocation.getArgument(0);
+            return callback.doWithRetry(null);
+        });
+
+        // SecurityContext 설정 (TenantContextHolder가 인식할 수 있는 형식)
         SecurityContextHolder.setContext(securityContext);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.getPrincipal()).thenReturn(tenantId);
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(authentication.isAuthenticated()).thenReturn(true);
+        // "tenantId:userId" 형식으로 설정
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":test-user");
     }
 
     // ============================================================
@@ -92,8 +104,7 @@ class RbacAgentRoleManagementTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
-                .thenReturn(false);
+        // ✅ P0: existsByAgentIdAndRoleId 제거 (DB 제약으로 동시성 제어)
         when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenReturn(new AgentRoleJpaEntity());
 
@@ -133,8 +144,9 @@ class RbacAgentRoleManagementTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
-                .thenReturn(true);
+        // ✅ P0: DB 제약 위반 시뮬레이션 (동시성 제어)
+        when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate key"));
 
         // When & Then
         assertThrows(RbacException.class, () -> {
@@ -225,11 +237,13 @@ class RbacAgentRoleManagementTest {
                 .thenReturn(Optional.of(role2));
 
         // When
-        Set<RbacManagementService.RoleDto> roles = rbacManagementService.getRolesByAgent(agentId);
+        Set<String> roleNames = rbacManagementService.getRolesByAgent(agentId);
 
         // Then
-        assertNotNull(roles);
-        assertEquals(2, roles.size());
+        assertNotNull(roleNames);
+        assertEquals(2, roleNames.size());
+        assertTrue(roleNames.contains("ADMIN"));
+        assertTrue(roleNames.contains("MANAGER"));
     }
 
     @Test
@@ -240,11 +254,11 @@ class RbacAgentRoleManagementTest {
                 .thenReturn(List.of());
 
         // When
-        Set<RbacManagementService.RoleDto> roles = rbacManagementService.getRolesByAgent(agentId);
+        Set<String> roleNames = rbacManagementService.getRolesByAgent(agentId);
 
         // Then
-        assertNotNull(roles);
-        assertTrue(roles.isEmpty());
+        assertNotNull(roleNames);
+        assertTrue(roleNames.isEmpty());
     }
 
     // ============================================================

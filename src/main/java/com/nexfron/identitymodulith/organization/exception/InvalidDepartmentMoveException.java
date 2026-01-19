@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.organization.common.exception;
+package com.nexfron.identitymodulith.organization.exception;
 /**
  * InvalidDepartmentMoveException
  *

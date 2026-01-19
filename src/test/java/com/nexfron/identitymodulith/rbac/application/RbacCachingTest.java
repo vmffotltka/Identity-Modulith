@@ -185,8 +185,7 @@ class RbacCachingTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
-                .thenReturn(false);
+        // ✅ P0: existsByAgentIdAndRoleId 제거
         when(agentRoleRepository.save(any()))
                 .thenReturn(null);
 
@@ -300,7 +299,7 @@ class RbacCachingTest {
                 .build();
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
-        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId)).thenReturn(false);
+        // ✅ P0: existsByAgentIdAndRoleId 제거
 
         rbacManagementService.assignRoleToAgent(agentId, roleName);
 

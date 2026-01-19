@@ -3,6 +3,7 @@ package com.nexfron.identitymodulith.rbac.application;
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
+import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
@@ -198,7 +199,7 @@ class RbacManagementServiceImplTest {
                 .thenReturn(Optional.of(role));
 
         // When
-        rbacManagementService.deleteRole("ADMIN");
+        rbacManagementService.deleteRole("ADMIN", false);
 
         // Then
         verify(rolePermissionRepository, times(1)).deleteByRoleId(roleId);
@@ -236,7 +237,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 성공")
     void testCreatePermission_Success() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest("user:manage");
+        var request = new RbacManagementService.CreatePermissionRequest(tenantId, "user:manage");
 
         when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(false);
@@ -263,7 +264,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 실패 (중복 권한)")
     void testCreatePermission_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest("user:create");
+        var request = new RbacManagementService.CreatePermissionRequest(tenantId, "user:create");
 
         when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:create"))
                 .thenReturn(true);
@@ -330,8 +331,9 @@ class RbacManagementServiceImplTest {
                 .thenReturn(Optional.of(role));
         when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(Optional.of(permission));
-        when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId))
-                .thenReturn(true);
+        // ✅ P0: DataIntegrityViolationException 시뮬레이션
+        when(rolePermissionRepository.save(any(RolePermissionJpaEntity.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate key"));
 
         // When & Then
         assertThrows(RbacException.class, () -> {

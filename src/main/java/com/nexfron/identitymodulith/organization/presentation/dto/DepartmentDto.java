@@ -1,7 +1,10 @@
 package com.nexfron.identitymodulith.organization.presentation.dto;
 
+import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,12 +25,24 @@ public class DepartmentDto {
     @Schema(description = "부서 생성 요청")
     public static class CreateRequest {
 
+        @NotBlank(message = "부서명은 필수입니다")
+        @Size(
+                min = OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH,
+                max = OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH,
+                message = "부서명은 " + OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH +
+                        "-" + OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH + "자 사이여야 합니다"
+        )
         @Schema(
                 description = "부서명",
                 example = "플랫폼개발팀"
         )
         private String name;
 
+        @NotBlank(message = "부서 타입은 필수입니다")
+        @Size(
+                max = OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH,
+                message = "부서 타입은 " + OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH + "자 이하여야 합니다"
+        )
         @Schema(
                 description = "부서 타입 (TEAM, DIVISION 등)",
                 example = "TEAM"
@@ -50,12 +65,22 @@ public class DepartmentDto {
     @Schema(description = "부서 업데이트 요청")
     public static class UpdateRequest {
 
+        @Size(
+                min = OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH,
+                max = OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH,
+                message = "부서명은 " + OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH +
+                        "-" + OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH + "자 사이여야 합니다"
+        )
         @Schema(
                 description = "변경할 부서명 (선택)",
                 example = "AI개발팀"
         )
         private String name;
 
+        @Size(
+                max = OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH,
+                message = "부서 타입은 " + OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH + "자 이하여야 합니다"
+        )
         @Schema(
                 description = "변경할 부서 타입 (선택)",
                 example = "TEAM"

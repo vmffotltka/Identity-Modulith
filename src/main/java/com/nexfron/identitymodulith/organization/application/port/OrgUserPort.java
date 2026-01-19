@@ -4,15 +4,25 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * User 모듈 ↔ Organization 모듈 사이의 경계
+ * User 모듈 ↔ Organization 모듈 사이의 경계 (포트-어댑터 패턴)
  *
- * - 구현체는 나중에 User 모듈로 옮길 예정.
- * - 지금은 Dummy 구현체 하나만 만들어서 테스트한다.
+ * <h2>목적:</h2>
+ * Organization 모듈이 User 모듈의 구현에 직접 의존하지 않도록
+ * 추상화 계층을 제공합니다.
  *
- * 데이터 타입 표준:
- * - deptId: UUID 문자열 (String, VARCHAR(36))
- * - tenantId: 문자열 (String)
- * - userId: UUID (java.util.UUID)
+ * <h2>구현체:</h2>
+ * - {@link com.nexfron.identitymodulith.organization.infrastructure.adapter.AgentOrgUserAdapter}
+ *   User 모듈의 Agent 정보를 Organization 모듈이 필요로 하는 형태로 변환
+ *
+ * <h2>데이터 타입 표준:</h2>
+ * <ul>
+ *   <li>deptId: UUID 문자열 (String, VARCHAR(36))</li>
+ *   <li>tenantId: 문자열 (String)</li>
+ *   <li>userId: UUID (java.util.UUID)</li>
+ * </ul>
+ *
+ * @author Identity System Team
+ * @version 1.0
  */
 public interface OrgUserPort {
 
@@ -31,15 +41,27 @@ public interface OrgUserPort {
     /**
      * 특정 유저의 조직/역할 정보 조회
      *
+     * <p><b>반환 타입 변경:</b> null 대신 {@link java.util.Optional}을 반환하여 null 안전성을 확보합니다.
+     *
      * @param tenantId 테넌트 ID
      * @param userId 사용자 ID (UUID)
-     * @return 사용자의 조직 정보 및 권한 레벨
+     * @return 사용자의 조직 정보 및 권한 레벨 (Optional)
+     *         <ul>
+     *           <li>사용자가 존재하면: {@link java.util.Optional#of(Object)}</li>
+     *           <li>사용자가 없으면: {@link java.util.Optional#empty()}</li>
+     *         </ul>
      *
      * 사용처:
      * - Level 2 RBAC 스코프 계산
      * - OrgScopeService에서 사용
+     *
+     * 사용 예시:
+     * <pre>
+     * OrgUserView user = orgUserPort.findOrgInfoByUserId(tenantId, userId)
+     *         .orElseThrow(() -> new UserNotFoundException("사용자를 찾을 수 없습니다."));
+     * </pre>
      */
-    OrgUserView findOrgInfoByUserId(String tenantId, UUID userId);
+    java.util.Optional<OrgUserView> findOrgInfoByUserId(String tenantId, UUID userId);
 
     /**
      * (옵션) 여러 부서에 속한 활성 유저들 목록 조회

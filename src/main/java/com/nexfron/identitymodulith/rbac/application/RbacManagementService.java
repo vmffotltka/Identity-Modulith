@@ -1,6 +1,11 @@
 package com.nexfron.identitymodulith.rbac.application;
 
 import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
+import com.nexfron.identitymodulith.rbac.domain.RbacConstants;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -81,9 +86,25 @@ public interface RbacManagementService {
 
     record RoleDto(String name, String type, String description, Boolean isActive) {}
 
-    record CreateRoleRequest(String name, String type) {}
+    record CreateRoleRequest(
+            @NotBlank(message = "역할명은 필수입니다")
+            @Size(min = 2, max = 64, message = "역할명은 2-64자 사이여야 합니다")
+            String name,
 
-    record UpdateRoleRequest(String type, String description, Boolean isActive) {
+            @NotBlank(message = "역할 타입은 필수입니다")
+            @Pattern(regexp = "POSITION|CHANNEL|SKILL", message = "역할 타입은 POSITION, CHANNEL, SKILL 중 하나여야 합니다")
+            String type
+    ) {}
+
+    record UpdateRoleRequest(
+            @Pattern(regexp = "POSITION|CHANNEL|SKILL", message = "역할 타입은 POSITION, CHANNEL, SKILL 중 하나여야 합니다")
+            String type,
+
+            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            String description,
+
+            Boolean isActive
+    ) {
         public UpdateRoleRequest(String type) {
             this(type, null, null);
         }
@@ -91,9 +112,24 @@ public interface RbacManagementService {
 
     record PermissionDto(String code, String description) {}
 
-    record CreatePermissionRequest(String code, String description) {}
+    record CreatePermissionRequest(
+            @NotBlank(message = "권한 코드는 필수입니다")
+            @Pattern(regexp = "^[a-z]+:[a-z_]+$", message = "권한 코드는 'domain:action' 형식이어야 합니다 (예: user:create)")
+            @Size(max = 128, message = "권한 코드는 128자 이하여야 합니다")
+            String code,
 
-    record UpdatePermissionRequest(String code, String description) {}
+            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            String description
+    ) {}
+
+    record UpdatePermissionRequest(
+            @Pattern(regexp = "^[a-z]+:[a-z_]+$", message = "권한 코드는 'domain:action' 형식이어야 합니다")
+            @Size(max = 128, message = "권한 코드는 128자 이하여야 합니다")
+            String code,
+
+            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            String description
+    ) {}
 
     record PermissionGroupDto(String name, String description, Boolean isActive) {
         public PermissionGroupDto(String name) {
@@ -101,7 +137,14 @@ public interface RbacManagementService {
         }
     }
 
-    record CreatePermissionGroupRequest(String name, String description) {
+    record CreatePermissionGroupRequest(
+            @NotBlank(message = "권한 그룹명은 필수입니다")
+            @Size(min = 2, max = 64, message = "권한 그룹명은 2-64자 사이여야 합니다")
+            String name,
+
+            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            String description
+    ) {
         public CreatePermissionGroupRequest(String name) {
             this(name, null);
         }
