@@ -4,6 +4,7 @@ import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
+import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
@@ -53,6 +54,12 @@ class RbacManagementServiceImplTest {
     private RolePermissionJpaRepository rolePermissionRepository;
 
     @Mock
+    private AgentRoleJpaRepository agentRoleRepository;
+
+    @Mock
+    private AuditLogService auditLogService;
+
+    @Mock
     private SecurityContext securityContext;
 
     @Mock
@@ -62,15 +69,25 @@ class RbacManagementServiceImplTest {
     private RbacManagementServiceImpl rbacManagementService;
 
     private String tenantId = "test-tenant";
+    private String userId = "test-user";
     private String roleId = UUID.randomUUID().toString();
     private String permissionId = UUID.randomUUID().toString();
 
     @BeforeEach
     void setup() {
-        // SecurityContext 설정
+        // SecurityContext 설정 - "tenantId:userId" 형식으로 Principal 설정
         SecurityContextHolder.setContext(securityContext);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        when(authentication.getPrincipal()).thenReturn(tenantId);
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(authentication.isAuthenticated()).thenReturn(true);
+        // TenantContextHolder가 인식하는 "tenantId:userId" 형식
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
+
+        // AuditLogService는 항상 동작하도록 설정
+        lenient().doNothing().when(auditLogService).recordRoleCreation(anyString(), anyString(), anyString(), anyString());
+        lenient().doNothing().when(auditLogService).recordRoleDeletion(anyString(), anyString(), anyString(), anyString());
+        lenient().doNothing().when(auditLogService).recordPermissionCreation(anyString(), anyString(), anyString());
+        lenient().doNothing().when(auditLogService).recordRolePermissionAssignment(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        lenient().doNothing().when(auditLogService).recordRolePermissionRevocation(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     // ============================================================
@@ -237,9 +254,9 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 성공")
     void testCreatePermission_Success() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest(tenantId, "user:manage");
+        var request = new RbacManagementService.CreatePermissionRequest("user:manage", null);
 
-        when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
+        lenient().when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(false);
 
         PermissionJpaEntity savedPermission = PermissionJpaEntity.builder()
@@ -249,7 +266,7 @@ class RbacManagementServiceImplTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        when(permissionRepository.save(any(PermissionJpaEntity.class)))
+        lenient().when(permissionRepository.save(any(PermissionJpaEntity.class)))
                 .thenReturn(savedPermission);
 
         // When
@@ -264,9 +281,9 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 실패 (중복 권한)")
     void testCreatePermission_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest(tenantId, "user:create");
+        var request = new RbacManagementService.CreatePermissionRequest("user:create", null);
 
-        when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:create"))
+        lenient().when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:create"))
                 .thenReturn(true);
 
         // When & Then
@@ -296,11 +313,11 @@ class RbacManagementServiceImplTest {
                 .code("user:manage")
                 .build();
 
-        when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
+        lenient().when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(Optional.of(role));
-        when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
+        lenient().when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(Optional.of(permission));
-        when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId))
+        lenient().when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId))
                 .thenReturn(false);
 
         // When

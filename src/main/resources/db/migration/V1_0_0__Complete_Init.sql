@@ -1,15 +1,23 @@
 -- ============================================================
 -- Identity Modulith 데이터베이스 통합 초기화 스크립트
--- 버전: FINAL (PostgreSQL 정확 문법)
--- 날짜: 2026-01-14
--- DB: PostgreSQL
--- 설명: RBAC, Organization, User 모듈의 전체 데이터 초기화 및 표준 데이터 삽입
+-- 버전: 2.0.0 CLEAN (PostgreSQL)
+-- 날짜: 2026-01-21
+-- DB: PostgreSQL 18+
+-- 설명: RBAC, Organization 모듈의 전체 스키마 + 표준 데이터
 -- ============================================================
 
 -- ============================================================
 -- Phase 1: 전체 데이터 정리 (존재하면 삭제)
 -- ============================================================
 
+-- PermissionGroup 관련 (삭제된 기능)
+DROP TABLE IF EXISTS role_permission_groups CASCADE;
+DROP TABLE IF EXISTS permission_group_permissions CASCADE;
+DROP TABLE IF EXISTS permission_groups CASCADE;
+
+-- 기존 테이블
+DROP TABLE IF EXISTS audit_logs_archive CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS agent_roles CASCADE;
 DROP TABLE IF EXISTS role_permissions CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
@@ -179,6 +187,60 @@ ALTER TABLE agent_roles ADD CONSTRAINT fk_agent_roles_agent
 ALTER TABLE agent_roles ADD CONSTRAINT fk_agent_roles_role
     FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE;
 
+-- Audit Logs 테이블 (감사 로그)
+CREATE TABLE audit_logs (
+    audit_id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(50) NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    resource_type VARCHAR(64) NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    operator_id VARCHAR(255) NOT NULL,
+    changes TEXT,
+    timestamp TIMESTAMP NOT NULL,
+    remarks TEXT,
+    ip_address VARCHAR(45)
+);
+
+COMMENT ON TABLE audit_logs IS '감사 로그 - 권한 관련 모든 변경사항 추적';
+COMMENT ON COLUMN audit_logs.audit_id IS '감사 로그 ID (UUID)';
+COMMENT ON COLUMN audit_logs.tenant_id IS '테넌트 ID';
+COMMENT ON COLUMN audit_logs.action IS '작업 유형 (CREATE, UPDATE, DELETE, ASSIGN, REVOKE)';
+COMMENT ON COLUMN audit_logs.resource_type IS '대상 리소스 타입 (ROLE, PERMISSION, AGENT_ROLE 등)';
+COMMENT ON COLUMN audit_logs.resource_id IS '대상 리소스 ID';
+COMMENT ON COLUMN audit_logs.operator_id IS '작업 수행자 ID';
+COMMENT ON COLUMN audit_logs.changes IS '변경 내용 (JSON 형식)';
+COMMENT ON COLUMN audit_logs.timestamp IS '작업 발생 일시';
+COMMENT ON COLUMN audit_logs.remarks IS '추가 정보 (메모, 실패 원인 등)';
+COMMENT ON COLUMN audit_logs.ip_address IS '클라이언트 IP 주소';
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON audit_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_type ON audit_logs(resource_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_operator_id ON audit_logs(operator_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+
+-- Audit Logs Archive 테이블 (6개월 이상 오래된 로그 보관)
+CREATE TABLE audit_logs_archive (
+    audit_id VARCHAR(36) NOT NULL PRIMARY KEY,
+    tenant_id VARCHAR(50) NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    resource_type VARCHAR(64) NOT NULL,
+    resource_id VARCHAR(255) NOT NULL,
+    operator_id VARCHAR(255) NOT NULL,
+    changes TEXT,
+    timestamp TIMESTAMP NOT NULL,
+    remarks TEXT,
+    ip_address VARCHAR(45),
+    archived_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE audit_logs_archive IS '감사 로그 아카이브 - 6개월 이상 경과한 로그';
+COMMENT ON COLUMN audit_logs_archive.archived_at IS '아카이브 일시';
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_tenant ON audit_logs_archive(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_timestamp ON audit_logs_archive(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_resource ON audit_logs_archive(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_operator ON audit_logs_archive(operator_id);
+
 -- ============================================================
 -- Phase 3: RBAC 표준 데이터 삽입 (35권한 + 8역할 + 77매핑)
 -- ============================================================
@@ -223,15 +285,15 @@ INSERT INTO permissions (permission_id, tenant_id, code, created_at) VALUES
 ON CONFLICT DO NOTHING;
 
 -- Roles (8개)
-INSERT INTO roles (role_id, tenant_id, name, type, created_at) VALUES
-('660e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'ADMIN', 'POSITION', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'MANAGER', 'POSITION', NOW()),
-('660e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'TEAM_LEAD', 'POSITION', NOW()),
-('660e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'MEMBER', 'POSITION', NOW()),
-('660e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'PHONE_AGENT', 'CHANNEL', NOW()),
-('660e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', NOW()),
-('660e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'EMAIL_AGENT', 'CHANNEL', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', 'tenant-001', 'SUPERVISOR', 'CHANNEL', NOW())
+INSERT INTO roles (role_id, tenant_id, name, type, description, is_active, version, created_at, updated_at) VALUES
+('660e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'ADMIN', 'POSITION', '시스템 전체 관리자 - 모든 권한 보유', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'MANAGER', 'POSITION', '부서 관리자 - 조직 및 사용자 관리', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'TEAM_LEAD', 'POSITION', '팀 리더 - 팀원 조회 및 보고서 확인', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'MEMBER', 'POSITION', '일반 사용자 - 기본 조회 권한', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'PHONE_AGENT', 'CHANNEL', '전화 상담사 - 인바운드/아웃바운드 통화', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', '채팅 상담사 - 실시간 채팅 응대', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'EMAIL_AGENT', 'CHANNEL', '이메일 상담사 - 이메일 응대', true, 0, NOW(), NOW()),
+('660e8400-e29b-41d4-a716-446655440008', 'tenant-001', 'SUPERVISOR', 'CHANNEL', '슈퍼바이저 - 실시간 모니터링 및 큐 관리', true, 0, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
 -- Role-Permission 매핑 (77개)
@@ -473,5 +535,7 @@ UNION ALL
 SELECT 'role_permissions', COUNT(*) FROM role_permissions
 UNION ALL
 SELECT 'agent_roles', COUNT(*) FROM agent_roles
+UNION ALL
+SELECT 'audit_logs', COUNT(*) FROM audit_logs
 ORDER BY table_name;
 

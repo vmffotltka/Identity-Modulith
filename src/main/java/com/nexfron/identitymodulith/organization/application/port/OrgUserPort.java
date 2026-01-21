@@ -52,7 +52,7 @@ public interface OrgUserPort {
      *         </ul>
      *
      * 사용처:
-     * - Level 2 RBAC 스코프 계산
+     * - Level 1 RBAC 스코프 계산
      * - OrgScopeService에서 사용
      *
      * 사용 예시:

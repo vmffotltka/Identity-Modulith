@@ -326,11 +326,11 @@ public class DepartmentController {
     }
 
     // ============================================================
-    // 부서 조회 (스코프 기반, Level 2 RBAC)
+    // 부서 조회 (스코프 기반, Level 1 RBAC)
     // ============================================================
 
     /**
-     * 사용자의 접근 가능 범위 내 조직도 조회 (Level 2 RBAC)
+     * 사용자의 접근 가능 범위 내 조직도 조회 (Level 1 RBAC)
      *
      * <h3>동작:</h3>
      * 1. X-User-Id 헤더에서 사용자 ID 추출
@@ -356,7 +356,7 @@ public class DepartmentController {
      */
     @Operation(
             summary = "스코프 기반 조직도 조회",
-            description = "현재 사용자의 접근 가능 범위 내에서 조직도를 조회합니다. (Level 2 RBAC)"
+            description = "현재 사용자의 접근 가능 범위 내에서 조직도를 조회합니다. (Level 1 RBAC)"
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
@@ -390,7 +390,7 @@ public class DepartmentController {
      * 3. 순환 참조 방지 검사 (자신의 하위로 이동 불가)
      * 4. 부모 변경
      * 5. 하위 부서들의 orgPath 일괄 재계산
-     * 6. Level 2 RBAC 권한 검증
+     * 6. Level 1 RBAC 권한 검증
      *
      * <h3>주의:</h3>
      * - 자신의 하위 부서로 이동할 수 없음 (순환 참조 방지)

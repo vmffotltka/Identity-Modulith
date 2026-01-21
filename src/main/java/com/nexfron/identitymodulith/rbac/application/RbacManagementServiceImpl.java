@@ -4,21 +4,15 @@ import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
 import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionGroupJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionGroupPermissionJpaRepository;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionGroupJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionGroupJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.retry.support.RetryTemplate;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,31 +23,9 @@ import java.util.stream.Collectors;
 /**
  * RBAC 관리 서비스 구현체
  *
- * <h2>책임:</h2>
- * <ul>
- *   <li>역할(Role) CRUD 관리</li>
- *   <li>권한(Permission) CRUD 관리</li>
- *   <li>역할-권한 매핑 관리</li>
- *   <li>데이터 일관성 보장</li>
- *   <li>멀티테넌시 격리</li>
- * </ul>
- *
- * <h2>트랜잭션 전략:</h2>
- * <ul>
- *   <li>모든 쓰기 작업: @Transactional (필수)</li>
- *   <li>읽기 작업: readOnly=true</li>
- *   <li>관계 변경: 원자성 보장</li>
- * </ul>
- *
- * <h2>에러 처리:</h2>
- * <ul>
- *   <li>역할/권한 중복 검증</li>
- *   <li>참조 무결성 검증</li>
- *   <li>테넌트 격리 검증</li>
- * </ul>
- *
- * <h2>tenantId 획득:</h2>
- * SecurityContext의 Authentication 객체에서 tenantId를 추출합니다.
+ * 역할(Role), 권한(Permission) CRUD 관리
+ * 역할-권한, 사용자-역할 매핑 관리
+ * 감사 로그 기록 및 멀티테넌시 격리
  */
 @Service
 @RequiredArgsConstructor
@@ -61,40 +33,23 @@ import java.util.stream.Collectors;
 @Slf4j
 public class RbacManagementServiceImpl implements RbacManagementService {
 
-    private final RetryTemplate retryTemplate;
     private final RoleJpaRepository roleRepository;
     private final PermissionJpaRepository permissionRepository;
     private final RolePermissionJpaRepository rolePermissionRepository;
     private final AgentRoleJpaRepository agentRoleRepository;
-    private final PermissionGroupJpaRepository permissionGroupRepository;
-    private final PermissionGroupPermissionJpaRepository permissionGroupPermissionRepository;
-    private final RolePermissionGroupJpaRepository rolePermissionGroupRepository;
     private final AuditLogService auditLogService;
 
     /**
      * 현재 요청의 tenantId 추출
-     *
-     * <p>TenantContextHolder를 사용하여 안전하게 테넌트 ID를 추출합니다.
-     * 인증 정보가 없거나 테넌트 ID를 추출할 수 없는 경우 예외가 발생합니다.
-     *
-     * @return tenantId
-     * @throws com.nexfron.identitymodulith.common.security.UnauthorizedException 인증 정보가 없거나 테넌트 ID를 찾을 수 없는 경우
      */
     private String getTenantId() {
         return com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
     }
 
     /**
-     * 현재 사용자 ID 조회
-     *
-     * <p>TenantContextHolder를 사용하여 안전하게 사용자 ID를 추출합니다.
-     * 감사 로그 기록 시 사용됩니다.
-     *
-     * @return 현재 인증된 사용자의 ID
-     * @throws com.nexfron.identitymodulith.common.security.UnauthorizedException 인증 정보가 없는 경우
+     * 현재 사용자 ID 조회 (감사 로그용)
      */
     private String getCurrentUserId() {
-        // ✅ P0-1: system 폴백 제거 - 인증 실패 시 명확하게 예외 발생
         return com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
     }
 
@@ -129,63 +84,48 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     @Transactional
     public RoleDto createRole(CreateRoleRequest request) {
         String tenantId = getTenantId();
-        log.info("[RBAC] 역할 생성 요청 - tenantId: {}, name: {}, type: {}",
-            tenantId, request.name(), request.type());
+        log.info("[RBAC] 역할 생성 - tenantId={}, name={}", tenantId, request.name());
 
-        try {
-            return retryTemplate.execute(context -> {
-                // 1. 중복 확인
-                if (roleRepository.existsByTenantIdAndName(tenantId, request.name())) {
-                    throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
-                }
-
-                // 2. 역할 생성
-                RoleJpaEntity role = RoleJpaEntity.builder()
-                        .roleId(UUID.randomUUID().toString())
-                        .tenantId(tenantId)
-                        .name(request.name())
-                        .type(request.type())
-                        .description(null)
-                        .isActive(true)
-                        .createdAt(LocalDateTime.now())
-                        .updatedAt(LocalDateTime.now())
-                        .build();
-
-                // 3. 저장
-                RoleJpaEntity savedRole = roleRepository.save(role);
-
-                // 4. 감사 로그 기록
-                String operatorId = getCurrentUserId();
-                auditLogService.recordRoleCreation(tenantId, savedRole.getName(), savedRole.getType(), operatorId);
-
-                log.info("[RBAC] 역할 생성 완료 - roleId: {}, name: {}",
-                    savedRole.getRoleId(), savedRole.getName());
-
-                return new RoleDto(
-                        savedRole.getName(),
-                        savedRole.getType(),
-                        savedRole.getDescription(),
-                        savedRole.getIsActive()
-                );
-            });
-        } catch (RbacException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[RBAC] 역할 생성 실패 - name: {}, 오류: {}", request.name(), e.getMessage(), e);
-            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
+        // 1. 중복 확인
+        if (roleRepository.existsByTenantIdAndName(tenantId, request.name())) {
+            throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
         }
+
+        // 2. 역할 생성
+        RoleJpaEntity role = RoleJpaEntity.builder()
+                .roleId(UUID.randomUUID().toString())
+                .tenantId(tenantId)
+                .name(request.name())
+                .type(request.type())
+                .description(null)
+                .isActive(true)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        // 3. 저장
+        RoleJpaEntity savedRole = roleRepository.save(role);
+
+        // 4. 감사 로그 기록
+        String operatorId = getCurrentUserId();
+        auditLogService.recordRoleCreation(tenantId, savedRole.getName(), savedRole.getType(), operatorId);
+
+        log.info("[RBAC] 역할 생성 완료 - roleId={}", savedRole.getRoleId());
+
+        return new RoleDto(
+                savedRole.getName(),
+                savedRole.getType(),
+                savedRole.getDescription(),
+                savedRole.getIsActive()
+        );
     }
 
     /**
-     * 역할 정보 업데이트
-     *
-     * @param roleName 업데이트할 역할명
-     * @param request 업데이트 요청 (type, description, isActive 중 변경할 항목만 포함)
-     * @return 업데이트된 역할 정보
+     * 역할 정보 업데이트 (type, description, isActive 중 변경할 항목만 포함)
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)  // 역할 정보 변경 시 캐시 무효화
+    @CacheEvict(value = "userPermissions", allEntries = true)
     public RoleDto updateRole(String roleName, UpdateRoleRequest request) {
         String tenantId = getTenantId();
 
@@ -251,53 +191,39 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     @Transactional
     public PermissionDto createPermission(CreatePermissionRequest request) {
         String tenantId = getTenantId();
-        log.info("[RBAC] 권한 생성 요청 - tenantId: {}, code: {}", tenantId, request.code());
+        log.info("[RBAC] 권한 생성 - tenantId={}, code={}", tenantId, request.code());
 
-        try {
-            return retryTemplate.execute(context -> {
-                // 1. 중복 확인
-                if (permissionRepository.existsByTenantIdAndCode(tenantId, request.code())) {
-                    throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_EXISTS);
-                }
-
-                // 2. 권한 생성
-                PermissionJpaEntity permission = PermissionJpaEntity.builder()
-                        .permissionId(UUID.randomUUID().toString())
-                        .tenantId(tenantId)
-                        .code(request.code())
-                        .createdAt(LocalDateTime.now())
-                        .build();
-
-                // 3. 저장
-                PermissionJpaEntity savedPermission = permissionRepository.save(permission);
-
-                // 4. 감사 로그 기록
-                String operatorId = getCurrentUserId();
-                auditLogService.recordPermissionCreation(tenantId, savedPermission.getCode(), operatorId);
-
-                log.info("[RBAC] 권한 생성 완료 - permissionId: {}, code: {}",
-                    savedPermission.getPermissionId(), savedPermission.getCode());
-
-                return new PermissionDto(savedPermission.getCode(), savedPermission.getDescription());
-            });
-        } catch (RbacException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[RBAC] 권한 생성 실패 - code: {}, 오류: {}", request.code(), e.getMessage(), e);
-            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
+        // 1. 중복 확인
+        if (permissionRepository.existsByTenantIdAndCode(tenantId, request.code())) {
+            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_EXISTS);
         }
+
+        // 2. 권한 생성
+        PermissionJpaEntity permission = PermissionJpaEntity.builder()
+                .permissionId(UUID.randomUUID().toString())
+                .tenantId(tenantId)
+                .code(request.code())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        // 3. 저장
+        PermissionJpaEntity savedPermission = permissionRepository.save(permission);
+
+        // 4. 감사 로그 기록
+        String operatorId = getCurrentUserId();
+        auditLogService.recordPermissionCreation(tenantId, savedPermission.getCode(), operatorId);
+
+        log.info("[RBAC] 권한 생성 완료 - permissionId={}", savedPermission.getPermissionId());
+
+        return new PermissionDto(savedPermission.getCode(), savedPermission.getDescription());
     }
 
     /**
-     * 권한 정보 업데이트
-     *
-     * @param code 업데이트할 권한 코드
-     * @param request 업데이트 요청 (code, description 중 변경할 항목만 포함)
-     * @return 업데이트된 권한 정보
+     * 권한 정보 업데이트 (code, description 중 변경할 항목만 포함)
      */
     @Override
     @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)  // 권한 정보 변경 시 캐시 무효화
+    @CacheEvict(value = "userPermissions", allEntries = true)
     public PermissionDto updatePermission(String code, UpdatePermissionRequest request) {
         String tenantId = getTenantId();
 
@@ -350,30 +276,27 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, permissionCode)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
 
-        // ✅ P0: 동시성 제어 - 중복 체크 제거, DB UNIQUE 제약에 의존
-        // 3. 매핑 생성
+        // 3. 매핑 생성 (DB UNIQUE 제약으로 중복 방지)
         RolePermissionJpaEntity mapping = RolePermissionJpaEntity.builder()
                 .roleId(role.getRoleId())
                 .permissionId(permission.getPermissionId())
                 .assignedAt(LocalDateTime.now())
                 .build();
 
-        // 4. 저장 (DB UNIQUE 제약으로 중복 방지)
+        // 4. 저장
         try {
             rolePermissionRepository.save(mapping);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // ✅ P0: 중복 할당 시 명확한 예외 (동시성 안전)
-            log.warn("[RBAC 동시성 제어] 중복 권한 할당 차단 - roleName={}, permissionCode={}, roleId={}, permissionId={}",
-                    roleName, permissionCode, role.getRoleId(), permission.getPermissionId());
+            log.warn("[RBAC] 중복 권한 할당 차단 - roleName={}, permissionCode={}", roleName, permissionCode);
             throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
         }
 
-        // 5. 감사 로그 기록 (권한 변경 이력 추적)
+        // 5. 감사 로그 기록
         String operatorId = getCurrentUserId();
         auditLogService.recordRolePermissionAssignment(tenantId, roleName, role.getRoleId(),
                 permissionCode, permission.getPermissionId(), operatorId);
 
-        log.info("[RBAC] 역할-권한 할당: roleName={}, permissionCode={}, 모든 사용자 캐시 무효화", roleName, permissionCode);
+        log.info("[RBAC] 역할-권한 할당: roleName={}, permissionCode={}", roleName, permissionCode);
     }
 
     @Override
@@ -393,23 +316,16 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         // 3. 매핑 삭제
         rolePermissionRepository.deleteByRoleIdAndPermissionId(role.getRoleId(), permission.getPermissionId());
 
-        // 4. 감사 로그 기록 (권한 회수 이력)
+        // 4. 감사 로그 기록
         String operatorId = getCurrentUserId();
         auditLogService.recordRolePermissionRevocation(tenantId, roleName, role.getRoleId(),
                 permissionCode, operatorId);
 
-        log.info("[RBAC] 역할-권한 회수: roleName={}, permissionCode={}, 모든 사용자 캐시 무효화", roleName, permissionCode);
+        log.info("[RBAC] 역할-권한 회수: roleName={}, permissionCode={}", roleName, permissionCode);
     }
 
     /**
-     * 특정 역할의 모든 권한 조회 (성능 최적화됨)
-     *
-     * 개선 사항:
-     * - 기존: 2개 쿼리 (role_permissions 조회 + permissions 조회)
-     * - 개선: 1개 쿼리 (JOIN으로 한 번에 조회)
-     *
-     * @param roleName 역할명
-     * @return 역할에 할당된 권한 DTO 집합
+     * 특정 역할의 모든 권한 조회
      */
     @Override
     @Transactional(readOnly = true)
@@ -425,7 +341,7 @@ public class RbacManagementServiceImpl implements RbacManagementService {
                 .findPermissionCodesByRoleIdAndTenant(role.getRoleId(), tenantId);
 
         return permissionCodes.stream()
-                .map(code -> new PermissionDto(code, null)) // 코드만 있고 설명은 나중에 추가할 수 있음
+                .map(code -> new PermissionDto(code, null))
                 .collect(Collectors.toSet());
     }
 
@@ -437,70 +353,41 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     public void assignRoleToAgent(String agentId, String roleName) {
         String tenantId = getTenantId();
         String operatorId = getCurrentUserId();
-        long startTime = System.currentTimeMillis();
 
-        // ✅ P0-4: 권한 검증 시작 로깅
-        log.info("[RBAC 권한 검증 시작] 역할 할당 - tenantId={}, agentId={}, roleName={}, operator={}",
-            tenantId, agentId, roleName, operatorId);
+        log.info("[RBAC] 역할 할당 시작 - agentId={}, roleName={}", agentId, roleName);
 
-        try {
-            retryTemplate.execute(context -> {
-                // 1. 역할 조회 (테넌트 범위)
-                RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
-                        .orElseThrow(() -> {
-                            // ✅ P0-4: 권한 검증 실패 로깅
-                            log.warn("[RBAC 권한 검증 실패] 역할 없음 - tenantId={}, roleName={}, operator={}",
-                                tenantId, roleName, operatorId);
-                            return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
-                        });
+        // 1. 역할 조회
+        RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
+                .orElseThrow(() -> {
+                    log.warn("[RBAC] 역할 없음 - roleName={}", roleName);
+                    return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
+                });
 
-                // 1-1. 비활성 역할 할당 차단
-                if (role.getIsActive() == null || !role.getIsActive()) {
-                    // ✅ P0-4: 권한 검증 실패 로깅
-                    log.warn("[RBAC 권한 검증 실패] 비활성 역할 - tenantId={}, agentId={}, roleName={}, isActive={}, operator={}",
-                            tenantId, agentId, roleName, role.getIsActive(), operatorId);
-                    throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
-                }
-
-                // ✅ P0: 동시성 제어 - DB UNIQUE 제약에 의존하여 Race Condition 방지
-                // 중복 체크 제거하고 바로 저장 시도
-                log.info("[RBAC 권한 검증 통과] 역할 할당 시도 - tenantId={}, agentId={}, roleName={}, roleId={}",
-                    tenantId, agentId, roleName, role.getRoleId());
-
-                // 2. 매핑 생성
-                AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
-                        .agentId(agentId)
-                        .roleId(role.getRoleId())
-                        .assignedAt(LocalDateTime.now())
-                        .build();
-
-                // 3. 저장 (DB UNIQUE 제약으로 중복 방지)
-                try {
-                    agentRoleRepository.save(mapping);
-                } catch (org.springframework.dao.DataIntegrityViolationException e) {
-                    // ✅ P0: 중복 할당 시 명확한 예외 (동시성 안전)
-                    log.warn("[RBAC 동시성 제어] 중복 할당 차단 - tenantId={}, agentId={}, roleName={}, roleId={}, operator={}",
-                            tenantId, agentId, roleName, role.getRoleId(), operatorId);
-                    throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
-                }
-
-                // 4. 감사 로그 기록 (사용자-역할 변경 이력)
-                auditLogService.recordAgentRoleAssignment(tenantId, agentId, roleName, operatorId);
-
-                long duration = System.currentTimeMillis() - startTime;
-                // ✅ P0-4: 성공 로깅 강화
-                log.info("[RBAC 역할 할당 성공] tenantId={}, agentId={}, roleName={}, roleId={}, operator={}, 소요시간={}ms",
-                    tenantId, agentId, roleName, role.getRoleId(), operatorId, duration);
-
-                return null;
-            });
-        } catch (RbacException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[RBAC] 역할 할당 실패 - agentId: {}, roleName: {}, 오류: {}",
-                agentId, roleName, e.getMessage(), e);
-            throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR, e);
+        // 2. 비활성 역할 할당 차단
+        if (role.getIsActive() == null || !role.getIsActive()) {
+            log.warn("[RBAC] 비활성 역할 - roleName={}", roleName);
+            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
         }
+
+        // 3. 매핑 생성
+        AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
+                .agentId(agentId)
+                .roleId(role.getRoleId())
+                .assignedAt(LocalDateTime.now())
+                .build();
+
+        // 4. 저장 (DB UNIQUE 제약으로 중복 방지)
+        try {
+            agentRoleRepository.save(mapping);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("[RBAC] 중복 할당 차단 - agentId={}, roleName={}", agentId, roleName);
+            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
+        }
+
+        // 5. 감사 로그 기록
+        auditLogService.recordAgentRoleAssignment(tenantId, agentId, roleName, operatorId);
+
+        log.info("[RBAC] 역할 할당 완료 - agentId={}, roleName={}", agentId, roleName);
     }
 
     @Override
@@ -608,13 +495,10 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         // 6. 역할-권한 매핑 삭제
         rolePermissionRepository.deleteByRoleId(role.getRoleId());
 
-        // 7. 역할-권한그룹 매핑 삭제
-        rolePermissionGroupRepository.deleteByRoleId(role.getRoleId());
-
-        // 8. 역할 삭제
+        // 7. 역할 삭제
         roleRepository.delete(role);
 
-        // 9. 감사 로그 기록
+        // 8. 감사 로그 기록
         String operatorId = getCurrentUserId();
         auditLogService.recordRoleDeletion(tenantId, roleName, role.getRoleId(), operatorId);
 
@@ -765,267 +649,6 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         log.info("[RBAC] 권한 삭제: code={}, tenantId={}, 모든 사용자 캐시 무효화", code, tenantId);
     }
 
-    // ========== 권한 그룹 관리 메서드 ==========
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<PermissionGroupDto> getAllPermissionGroups() {
-        String tenantId = getTenantId();
-        return permissionGroupRepository.findByTenantIdAndIsActive(tenantId, true).stream()
-                .map(group -> new PermissionGroupDto(group.getName(), group.getDescription(), group.getIsActive()))
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public PermissionGroupDto getPermissionGroupByName(String groupName) {
-        String tenantId = getTenantId();
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-        return new PermissionGroupDto(group.getName(), group.getDescription(), group.getIsActive());
-    }
-
-    @Override
-    @Transactional
-    public PermissionGroupDto createPermissionGroup(CreatePermissionGroupRequest request) {
-        String tenantId = getTenantId();
-
-        // 1. 중복 확인
-        if (permissionGroupRepository.existsByTenantIdAndName(tenantId, request.name())) {
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND);  // TODO: PERMISSION_GROUP_ALREADY_EXISTS 에러 코드 추가 필요
-        }
-
-        // 2. 권한 그룹 생성
-        PermissionGroupJpaEntity group = PermissionGroupJpaEntity.builder()
-                .permissionGroupId(UUID.randomUUID().toString())
-                .tenantId(tenantId)
-                .name(request.name())
-                .description(request.description())
-                .isActive(true)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
-        // 3. 저장
-        PermissionGroupJpaEntity savedGroup = permissionGroupRepository.save(group);
-
-        // 4. 감사 로그 기록
-        String operatorId = getCurrentUserId();
-        log.info("[RBAC] 권한 그룹 생성: groupName={}, tenantId={}, operatorId={}",
-                savedGroup.getName(), tenantId, operatorId);
-
-        return new PermissionGroupDto(savedGroup.getName(), savedGroup.getDescription(), savedGroup.getIsActive());
-    }
-
-    /**
-     * 권한 그룹 정보 업데이트
-     */
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public PermissionGroupDto updatePermissionGroup(String groupName, UpdatePermissionGroupRequest request) {
-        String tenantId = getTenantId();
-
-        // 1. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 2. 변경할 필드만 업데이트
-        if (request.description() != null) {
-            group.setDescription(request.description());
-        }
-        if (request.isActive() != null) {
-            group.setIsActive(request.isActive());
-        }
-        group.setUpdatedAt(LocalDateTime.now());
-
-        // 3. 저장
-        PermissionGroupJpaEntity updatedGroup = permissionGroupRepository.save(group);
-
-        // 4. 감사 로그 기록 (새 메서드 필요 - 임시로 로그만)
-        String operatorId = getCurrentUserId();
-        log.info("[RBAC] 권한 그룹 업데이트: groupName={}, description={}, isActive={}, tenantId={}, operatorId={}",
-                groupName, request.description(), request.isActive(), tenantId, operatorId);
-
-        return new PermissionGroupDto(
-                updatedGroup.getName(),
-                updatedGroup.getDescription(),
-                updatedGroup.getIsActive()
-        );
-    }
-
-    /**
-     * 권한 그룹 비활성화
-     */
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void deactivatePermissionGroup(String groupName) {
-        String tenantId = getTenantId();
-
-        // 1. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 2. 이미 비활성화된 경우 예외
-        if (group.getIsActive() != null && !group.getIsActive()) {
-            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
-        }
-
-        // 3. 비활성화
-        group.setIsActive(false);
-        group.setUpdatedAt(LocalDateTime.now());
-        permissionGroupRepository.save(group);
-
-        // 4. 로그
-        String operatorId = getCurrentUserId();
-        log.info("[RBAC] 권한 그룹 비활성화: groupName={}, tenantId={}, operatorId={}",
-                groupName, tenantId, operatorId);
-    }
-
-    /**
-     * 권한 그룹 활성화
-     */
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void activatePermissionGroup(String groupName) {
-        String tenantId = getTenantId();
-
-        // 1. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 2. 이미 활성화된 경우 예외
-        if (group.getIsActive() != null && group.getIsActive()) {
-            log.warn("[RBAC] 이미 활성화된 권한 그룹: groupName={}", groupName);
-            return; // 이미 활성화되어 있으면 아무것도 하지 않음
-        }
-
-        // 3. 활성화
-        group.setIsActive(true);
-        group.setUpdatedAt(LocalDateTime.now());
-        permissionGroupRepository.save(group);
-
-        // 4. 로그
-        String operatorId = getCurrentUserId();
-        log.info("[RBAC] 권한 그룹 활성화: groupName={}, tenantId={}, operatorId={}",
-                groupName, tenantId, operatorId);
-    }
-
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void addPermissionToGroup(String groupName, String permissionCode) {
-        String tenantId = getTenantId();
-
-        // 1. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 2. 권한 조회
-        PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, permissionCode)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 3. 중복 확인
-        if (permissionGroupPermissionRepository.existsByPermissionGroupIdAndPermissionId(group.getPermissionGroupId(), permission.getPermissionId())) {
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
-        }
-
-        // 4. 매핑 생성 및 저장
-        com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionGroupPermissionJpaEntity mapping =
-                com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionGroupPermissionJpaEntity.builder()
-                        .permissionGroupId(group.getPermissionGroupId())
-                        .permissionId(permission.getPermissionId())
-                        .addedAt(LocalDateTime.now())
-                        .build();
-
-        permissionGroupPermissionRepository.save(mapping);
-
-        log.info("[RBAC] 권한을 그룹에 추가: groupName={}, permissionCode={}, tenantId={}",
-                groupName, permissionCode, tenantId);
-    }
-
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void removePermissionFromGroup(String groupName, String permissionCode) {
-        String tenantId = getTenantId();
-
-        // 1. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 2. 권한 조회
-        PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, permissionCode)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 3. 매핑 삭제
-        permissionGroupPermissionRepository.deleteByPermissionGroupIdAndPermissionId(
-                group.getPermissionGroupId(), permission.getPermissionId());
-
-        log.info("[RBAC] 권한을 그룹에서 제거: groupName={}, permissionCode={}, tenantId={}",
-                groupName, permissionCode, tenantId);
-    }
-
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void assignPermissionGroupToRole(String roleName, String groupName) {
-        String tenantId = getTenantId();
-
-        // 1. 역할 조회
-        RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
-
-        // 2. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 3. 비활성 그룹 할당 차단
-        if (group.getIsActive() == null || !group.getIsActive()) {
-            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
-        }
-
-        // 4. 중복 할당 확인
-        if (rolePermissionGroupRepository.existsByRoleIdAndPermissionGroupId(role.getRoleId(), group.getPermissionGroupId())) {
-            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_ASSIGNED);
-        }
-
-        // 5. 매핑 생성 및 저장
-        com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionGroupJpaEntity mapping =
-                com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionGroupJpaEntity.builder()
-                        .roleId(role.getRoleId())
-                        .permissionGroupId(group.getPermissionGroupId())
-                        .assignedAt(LocalDateTime.now())
-                        .build();
-
-        rolePermissionGroupRepository.save(mapping);
-
-        log.info("[RBAC] 권한 그룹을 역할에 할당: roleName={}, groupName={}, tenantId={}",
-                roleName, groupName, tenantId);
-    }
-
-    @Override
-    @Transactional
-    @CacheEvict(value = "userPermissions", allEntries = true)
-    public void revokePermissionGroupFromRole(String roleName, String groupName) {
-        String tenantId = getTenantId();
-
-        // 1. 역할 조회
-        RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
-
-        // 2. 권한 그룹 조회
-        PermissionGroupJpaEntity group = permissionGroupRepository.findByTenantIdAndName(tenantId, groupName)
-                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
-
-        // 3. 매핑 삭제
-        rolePermissionGroupRepository.deleteByRoleIdAndPermissionGroupId(role.getRoleId(), group.getPermissionGroupId());
-
-        log.info("[RBAC] 권한 그룹을 역할에서 회수: roleName={}, groupName={}, tenantId={}",
-                roleName, groupName, tenantId);
-    }
 
     // ============================================================
     // 권한 변경 이력 조회 (Audit Log) 구현

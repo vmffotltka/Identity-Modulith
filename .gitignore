@@ -58,4 +58,13 @@ nohup.out
 *_temp.sql
 *_local.sql
 CHECK_CURRENT_DB_STRUCTURE.sql
+reset_database_clean.sql
+reset_flyway.sql
+
+### 테스트 출력 파일 ###
+test-output.txt
+test_output.txt
+
+### 프로젝트 임시 문서 ###
+PROJECT_COMPLETION_SUMMARY.md
 

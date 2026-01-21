@@ -8,191 +8,39 @@ import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartment
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * DepartmentService - 조직(부서) 관리 핵심 비즈니스 로직
+ * 부서 관리 서비스
  *
- * <h2>주요 책임:</h2>
- * <ul>
- *   <li><b>부서 생성</b>: 새로운 부서를 조직 트리에 추가</li>
- *   <li><b>부서 이동</b>: 부서를 다른 부모 하위로 이동 (순환 참조 방지, 자식 경로 재계산)</li>
- *   <li><b>부서 삭제</b>: 부서 삭제 전 하위 부서/소속 인원 검증</li>
- *   <li><b>조직도 조회</b>: 전체 트리 또는 사용자 권한 범위(Level 2 RBAC) 내의 트리 조회</li>
- * </ul>
- *
- * <h2>핵심 개념:</h2>
- * <ul>
- *   <li><b>orgPath</b>: "/" 구분자로 계층을 표현하는 경로
- *       <br/>예: /총무부ID, /총무부ID/HR팀ID, /총무부ID/HR팀ID/채용팀ID
- *       <br/>용도: 빠른 범위 검색 (LIKE 쿼리로 하위 부서 조회)
- *   </li>
- *   <li><b>depth</b>: 루트로부터의 깊이
- *       <br/>루트=0, 루트의 자식=1, 루트의 손자=2
- *       <br/>용도: 조직도 들여쓰기, 계층 조회 필터링
- *   </li>
- *   <li><b>parent_id</b>: 자기참조 외래키로 상위 부서 지정
- *       <br/>NULL인 경우 루트 부서 (최상위 조직)
- *   </li>
- *   <li><b>Level 2 RBAC</b>: DataScopeLevel을 사용한 사용자별 접근 범위 제어
- *       <br/>MEMBER: 자신의 부서만 조회
- *       <br/>TEAM_LEAD: 자신 + 하위 부서 조회
- *       <br/>ADMIN: 전체 조직 조회
- *   </li>
- *   <li><b>모듈 간 통신</b>: OrgUserPort를 통해 user 모듈의 사용자 정보 조회</li>
- * </ul>
- *
- * <h2>조직 구조 예시:</h2>
- * <pre>
- * 총무부 (deptId: "a1", depth: 0, orgPath: "/a1")
- * ├─ HR팀 (deptId: "b1", depth: 1, orgPath: "/a1/b1")
- * │  ├─ 채용팀 (deptId: "c1", depth: 2, orgPath: "/a1/b1/c1")
- * │  └─ 교육팀 (deptId: "c2", depth: 2, orgPath: "/a1/b1/c2")
- * ├─ 경리팀 (deptId: "b2", depth: 1, orgPath: "/a1/b2")
- * └─ 총무팀 (deptId: "b3", depth: 1, orgPath: "/a1/b3")
- *
- * 마케팅부 (deptId: "a2", depth: 0, orgPath: "/a2")
- * └─ 디지털팀 (deptId: "d1", depth: 1, orgPath: "/a2/d1")
- * </pre>
- *
- * <h2>트랜잭션 전략:</h2>
- * <ul>
- *   <li>클래스 레벨: 기본적으로 읽기 전용 (@Transactional(readOnly = true))
- *       <br/>→ 데이터베이스 최적화 (읽기 성능 향상)
- *   </li>
- *   <li>개별 메서드: 쓰기 작업(create/update/delete)에 대해서만 @Transactional 명시
- *       <br/>→ 트랜잭션 관리 명확화
- *   </li>
- * </ul>
- *
- * <h2>데이터 무결성 보장:</h2>
- * <ul>
- *   <li>부서 이동: 순환 참조 방지 (자신의 하위 부서로 이동 불가)</li>
- *   <li>부서 삭제: 하위 부서가 있는 경우 삭제 불가</li>
- *   <li>부서 삭제: 소속 직원이 있는 경우 경고 또는 삭제 불가</li>
- *   <li>경로 일관성: parent 변경 시 자동으로 depth, orgPath 재계산</li>
- * </ul>
- *
- * <h2>성능 최적화:</h2>
- * <ul>
- *   <li>orgPath의 LIKE 쿼리로 하위 부서 범위 검색 (인덱스 활용)</li>
- *   <li>depth로 조직 레벨 필터링 (COUNT, GROUP BY 최적화)</li>
- *   <li>LAZY 로딩으로 필요한 부서만 조회</li>
- * </ul>
- *
- * <h2>연동 모듈:</h2>
- * <ul>
- *   <li><b>User Module</b>: OrgUserPort를 통해 사용자 정보 조회</li>
- *   <li><b>RBAC Module</b>: 사용자의 역할(role)에 따른 접근 범위 제어</li>
- * </ul>
- *
- * @author Identity System Team
- * @version 1.0
+ * 주요 기능:
+ * - 부서 CRUD (생성, 조회, 수정, 삭제)
+ * - 부서 이동 (재조직)
+ * - 조직도 트리 조회
+ * - Level 1 RBAC 권한 기반 접근 제어
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-// ✅ P0: 트랜잭션 명시화 - 클래스 레벨 트랜잭션 제거, 메서드별로 명시적 설정
 public class DepartmentService {
 
-    /** Retry 템플릿 (DB 일시적 장애 시 자동 재시도) */
-    private final RetryTemplate retryTemplate;
-
-    /** 부서 데이터 접근 리포지토리 */
     private final JpaDepartmentRepository departmentRepository;
-
-    /** Level 2 RBAC 스코프 계산 및 권한 검증 서비스 */
     private final OrgScopeService orgScopeService;
-
-    /** User 모듈의 사용자 정보 조회 (포트-어댑터 패턴) */
     private final OrgUserPort orgUserPort;
 
-    /* ============================================================
-     * CRUD: 부서 생성
-     * ============================================================ */
-
     /**
-     * 새로운 부서를 조직 트리에 생성합니다.
+     * 부서 생성
+     * - parentId 검증 → 도메인 엔티티 생성 → DB 저장
      *
-     * <h3>부서 생성 처리 흐름:</h3>
-     * <ol>
-     *   <li>parentId가 지정되면 상위 부서 존재 여부 검증
-     *       <br/>→ 없으면 INVALID_PARENT 예외 발생
-     *   </li>
-     *   <li>Department 도메인 엔티티 생성 (팩토리 메서드 Department.create() 사용)
-     *       <br/>→ UUID로 deptId 자동 생성
-     *       <br/>→ parent, depth, orgPath 자동 계산
-     *   </li>
-     *   <li>@PrePersist 콜백: createdAt, depth, orgPath 임시값 설정</li>
-     *   <li>DB에 저장 (INSERT)</li>
-     *   <li>@PostPersist 콜백: UUID 기반 정확한 orgPath 확정</li>
-     *   <li>DTO 변환 후 응답</li>
-     * </ol>
-     *
-     * <h3>생성 결과 예시:</h3>
-     * <pre>
-     * 루트 부서 생성:
-     * - 요청: name="총무부", type="본부", parentId=null
-     * - 결과: deptId="550e8400-...", depth=0, orgPath="/{deptId}"
-     *
-     * 자식 부서 생성:
-     * - 요청: name="HR팀", type="팀", parentId="550e8400-..." (총무부)
-     * - 결과: deptId="550e8401-...", depth=1, orgPath="/550e8400-.../550e8401-..."
-     * </pre>
-     *
-     * <h3>예외 처리:</h3>
-     * <ul>
-     *   <li>INVALID_PARENT (HTTP 400): parentId가 유효하지 않거나 존재하지 않는 경우</li>
-     * </ul>
-     *
-     * <h3>멀티테넌시:</h3>
-     * - 생성된 부서는 지정된 tenantId에만 속함
-     * - 다른 테넌트의 부서와 독립적으로 관리됨
-     * - 다른 테넌트에서 같은 이름의 부서를 생성해도 다른 엔티티
-     *
-     * @param tenantId  테넌트 ID (멀티테넌시 환경에서 조직 격리)
-     *                  예: "tenant-001", "acme-corp"
-     * @param name      부서명 (필수, 중복 허용)
-     *                  예: "총무부", "HR팀", "채용팀"
-     * @param type      부서 타입 (선택, 부서 분류용)
-     *                  예: "본부", "팀", "센터", "팀장실"
-     * @param parentId  상위 부서 ID (선택)
-     *                  - null인 경우 루트 부서로 생성 (depth=0)
-     *                  - Long 값인 경우 해당 부서의 자식으로 생성 (depth=parent+1)
-     *
-     * @return 생성된 부서 정보 DTO
-     *         { deptId, tenantId, name, type, depth, orgPath, createdAt }
-     *
-     * @throws OrganizationException
-     *         - INVALID_PARENT: 상위 부서(parentId)가 존재하지 않거나 유효하지 않은 경우
-     *
-     * @see Department#create(String, String, String, Department)
-     * @see DepartmentDto.Response
-     *
-     * @apiNote
-     * HTTP 요청 예시:
-     * POST /api/organization/{tenantId}/departments
-     * {
-     *   "name": "마케팅부",
-     *   "type": "본부",
-     *   "parentId": null
-     * }
-     *
-     * HTTP 응답 예시:
-     * {
-     *   "deptId": "550e8400-e29b-41d4-a716-446655440000",
-     *   "name": "마케팅부",
-     *   "type": "본부",
-     *   "depth": 0,
-     *   "orgPath": "/550e8400-e29b-41d4-a716-446655440000",
-     *   "createdAt": "2026-01-14T10:30:00"
-     * }
+     * @param tenantId 테넌트 ID
+     * @param name 부서명 (필수)
+     * @param type 부서 타입 (선택)
+     * @param parentId 상위 부서 ID (null이면 루트 부서)
+     * @return 생성된 부서 정보
      */
     @Transactional
     public DepartmentDto.Response createDepartment(
@@ -201,7 +49,6 @@ public class DepartmentService {
             String type,
             String parentId) {
 
-        // ✅ P0-3: Null 체크 강화
         Objects.requireNonNull(tenantId, "tenantId는 null일 수 없습니다");
         Objects.requireNonNull(name, "name은 null일 수 없습니다");
 
@@ -209,68 +56,35 @@ public class DepartmentService {
             throw new IllegalArgumentException("name은 빈 문자열일 수 없습니다");
         }
 
-        log.info("[ORG] 부서 생성 요청 - tenantId: {}, name: {}, type: {}, parentId: {}",
-            tenantId, name, type, parentId);
+        log.info("[ORG] 부서 생성 - tenantId={}, name={}, parentId={}", tenantId, name, parentId);
 
-        try {
-            return retryTemplate.execute(context -> {
-                // 1) 상위 부서 존재 여부 검증 (있는 경우만)
-                Department parent = null;
-                if (parentId != null && !parentId.trim().isEmpty()) {
-                    // tenant-aware 조회로 테넌트 격리 보장
-                    parent = departmentRepository.findByDeptIdAndTenantId(parentId, tenantId)
-                            .orElseThrow(() -> new OrganizationException(
-                                    OrganizationErrorCode.INVALID_PARENT
-                            ));
-                }
-
-                // 2) 도메인 엔티티 생성 (팩토리 메서드)
-                Department department = Department.create(tenantId, name, type, parent);
-
-                // 3) 저장 (JPA @PostPersist에서 orgPath가 확정됨)
-                Department savedDept = departmentRepository.save(department);
-
-                log.info("[ORG] 부서 생성 완료 - deptId: {}, name: {}, orgPath: {}",
-                    savedDept.getDeptId(), savedDept.getName(), savedDept.getOrgPath());
-
-                // 4) DTO 변환 후 반환
-                return DepartmentDto.Response.from(savedDept);
-            });
-        } catch (OrganizationException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[ORG] 부서 생성 실패 - name: {}, 오류: {}", name, e.getMessage(), e);
-            throw new OrganizationException(OrganizationErrorCode.INTERNAL_ERROR, e);
+        // 상위 부서 검증
+        Department parent = null;
+        if (parentId != null && !parentId.trim().isEmpty()) {
+            parent = departmentRepository.findByDeptIdAndTenantId(parentId, tenantId)
+                    .orElseThrow(() -> new OrganizationException(
+                            OrganizationErrorCode.INVALID_PARENT
+                    ));
         }
+
+        // 도메인 엔티티 생성 및 저장
+        Department department = Department.create(tenantId, name, type, parent);
+        Department savedDept = departmentRepository.save(department);
+
+        log.info("[ORG] 부서 생성 완료 - deptId={}", savedDept.getDeptId());
+
+        return DepartmentDto.Response.from(savedDept);
     }
 
-    /* ============================================================
-     * UPDATE: 부서 정보 수정
-     * ============================================================ */
-
     /**
-     * 부서 정보를 업데이트합니다.
-     *
-     * <h3>업데이트 가능한 필드:</h3>
-     * <ul>
-     *   <li>name: 부서명</li>
-     *   <li>type: 부서 타입</li>
-     * </ul>
-     *
-     * <h3>처리 흐름:</h3>
-     * <ol>
-     *   <li>부서 존재 여부 검증</li>
-     *   <li>변경할 필드만 업데이트</li>
-     *   <li>updatedAt 갱신</li>
-     *   <li>DB 저장</li>
-     * </ol>
+     * 부서 정보 수정
+     * - name, type 필드만 수정 가능
      *
      * @param tenantId 테넌트 ID
      * @param deptId 부서 ID
-     * @param name 새로운 부서명 (null이면 변경하지 않음)
-     * @param type 새로운 부서 타입 (null이면 변경하지 않음)
-     * @return 업데이트된 부서 정보
-     * @throws OrganizationException DEPARTMENT_NOT_FOUND - 부서가 존재하지 않는 경우
+     * @param name 새 부서명 (null이면 변경 안 함)
+     * @param type 새 부서 타입 (null이면 변경 안 함)
+     * @return 수정된 부서 정보
      */
     @Transactional
     public DepartmentDto.Response updateDepartment(
@@ -279,54 +93,27 @@ public class DepartmentService {
             String name,
             String type) {
 
-        // 1. 부서 조회
         Department department = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
                         OrganizationException.OrganizationErrorCode.DEPARTMENT_NOT_FOUND));
 
-        // 2. 도메인 메서드를 사용하여 업데이트
         department.updateInfo(name, type);
-
-        // 3. 저장
         department = departmentRepository.save(department);
 
-        log.info("[ORG] 부서 정보 업데이트 완료 - tenantId: {}, deptId: {}, name: {}, type: {}",
-                tenantId, deptId, name, type);
+        log.info("[ORG] 부서 수정 완료 - deptId={}, name={}", deptId, name);
 
-        // 4. DTO 변환
         return DepartmentDto.Response.from(department);
     }
 
-    /* ============================================================
-     * CRUD: 부서 이동 (재조직)
-     * ============================================================ */
-
     /**
-     * 부서를 다른 부모 부서 하위로 이동합니다.
+     * 부서 이동 (재조직)
+     * - 부서를 다른 부모 부서 하위로 이동
+     * - 순환 참조 검사, 하위 부서 경로 일괄 업데이트
      *
-     * <h3>처리 흐름:</h3>
-     * <ol>
-     *   <li>이동 대상 부서 조회 및 존재 여부 검증</li>
-     *   <li>새 상위 부서 조회 및 존재 여부 검증</li>
-     *   <li>순환 참조 방지 검사 (자신의 하위로 이동 불가)</li>
-     *   <li>부모 변경 및 자신의 orgPath/depth 업데이트</li>
-     *   <li>하위 부서들의 orgPath 일괄 재계산</li>
-     *   <li>Level 2 RBAC 권한 검증</li>
-     * </ol>
-     *
-     * <h3>예외:</h3>
-     * <ul>
-     *   <li>DEPARTMENT_NOT_FOUND (404) - 이동 대상 부서 없음</li>
-     *   <li>INVALID_PARENT (400) - 새 상위 부서 없음</li>
-     *   <li>CIRCULAR_REFERENCE (400) - 순환 참조 시도</li>
-     *   <li>INSUFFICIENT_PERMISSION (403) - 권한 없음</li>
-     * </ul>
-     *
-     * @param tenantId      멀티테넌트 ID
-     * @param actorUserId   작업 수행 사용자 ID (권한 검증용)
-     * @param deptId        이동할 부서 ID
-     * @param newParentId   새 상위 부서 ID
-     * @throws OrganizationException 위의 4가지 에러 중 하나
+     * @param tenantId 테넌트 ID
+     * @param actorUserId 작업 수행 사용자 ID (권한 검증용)
+     * @param deptId 이동할 부서 ID
+     * @param newParentId 새 상위 부서 ID
      */
     public void moveDepartment(
             String tenantId,
@@ -334,24 +121,16 @@ public class DepartmentService {
             String deptId,
             String newParentId) {
 
-        // ✅ P0-2: Step 1 - 읽기 전용 검증 (트랜잭션 외부)
+        // 검증 (읽기 전용)
         validateMoveDepartment(tenantId, actorUserId, deptId, newParentId);
 
-        // ✅ P0-2: Step 2 - 쓰기 작업만 트랜잭션 내부
+        // 실행 (쓰기 트랜잭션)
         executeMoveDepartment(tenantId, deptId, newParentId);
     }
 
     /**
      * 부서 이동 검증 (읽기 전용)
-     *
-     * <p>권한 검증과 순환 참조 체크를 수행합니다.
-     * 트랜잭션 외부에서 실행되어 Lock을 최소화합니다.
-     *
-     * @param tenantId 테넌트 ID
-     * @param actorUserId 작업 수행 사용자 ID
-     * @param deptId 이동할 부서 ID
-     * @param newParentId 새 상위 부서 ID
-     * @throws OrganizationException 검증 실패 시
+     * - 권한 검증, 순환 참조 체크
      */
     @Transactional(readOnly = true)
     private void validateMoveDepartment(
@@ -360,33 +139,30 @@ public class DepartmentService {
             String deptId,
             String newParentId) {
 
-        // 1) 이동 대상 부서 존재 여부 확인
         Department target = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
                         OrganizationErrorCode.DEPARTMENT_NOT_FOUND
                 ));
 
-        // 2) 권한 검증: Level 2 RBAC
+        // 권한 검증
         Set<String> accessibleDeptIds = orgScopeService.getAccessibleDepartmentIds(
                 tenantId,
                 actorUserId
         );
         if (!accessibleDeptIds.contains(deptId)) {
-            log.warn("[ORG] 부서 이동 권한 없음 - tenantId={}, userId={}, deptId={}",
-                tenantId, actorUserId, deptId);
+            log.warn("[ORG] 부서 이동 권한 없음 - userId={}, deptId={}", actorUserId, deptId);
             throw new OrganizationException(
                     OrganizationErrorCode.INSUFFICIENT_PERMISSION
             );
         }
 
-        // 3) 새 상위 부서 검증
+        // 순환 참조 방지
         if (newParentId != null) {
             Department newParent = departmentRepository.findByDeptIdAndTenantId(newParentId, tenantId)
                     .orElseThrow(() -> new OrganizationException(
                             OrganizationErrorCode.INVALID_PARENT
                     ));
 
-            // 순환 참조 방지
             if (newParent.getOrgPath().startsWith(target.getOrgPath())) {
                 log.warn("[ORG] 순환 참조 감지 - deptId={}, newParentId={}", deptId, newParentId);
                 throw new OrganizationException(
@@ -395,17 +171,12 @@ public class DepartmentService {
             }
         }
 
-        log.debug("[ORG] 부서 이동 검증 완료 - deptId={}, newParentId={}", deptId, newParentId);
+        log.debug("[ORG] 부서 이동 검증 완료 - deptId={}", deptId);
     }
 
     /**
      * 부서 이동 실행 (쓰기 트랜잭션)
-     *
-     * <p>부서의 상위 부서를 변경하고, 하위 부서들의 경로를 일괄 업데이트합니다.
-     *
-     * @param tenantId 테넌트 ID
-     * @param deptId 이동할 부서 ID
-     * @param newParentId 새 상위 부서 ID
+     * - 부서 상위 변경, 하위 부서 경로 일괄 업데이트
      */
     @Transactional
     private void executeMoveDepartment(
@@ -413,7 +184,6 @@ public class DepartmentService {
             String deptId,
             String newParentId) {
 
-        // 1) 이동 대상 부서 조회
         Department target = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
                         OrganizationErrorCode.DEPARTMENT_NOT_FOUND
@@ -421,7 +191,6 @@ public class DepartmentService {
 
         String originalOrgPath = target.getOrgPath();
 
-        // 2) 새 상위 부서 조회
         Department newParent = null;
         if (newParentId != null) {
             newParent = departmentRepository.findByDeptIdAndTenantId(newParentId, tenantId)
@@ -430,19 +199,17 @@ public class DepartmentService {
                     ));
         }
 
-        // 3) 부서 부모 변경
         target.changeParent(newParent);
         departmentRepository.save(target);
 
-        // 4) 하위 부서들의 경로 일괄 업데이트
+        // 하위 부서 경로 일괄 업데이트
         String newParentPath = newParent != null ? newParent.getOrgPath() : "";
         List<Department> childDepts = departmentRepository
                 .findByTenantIdAndOrgPathStartsWith(tenantId, originalOrgPath)
                 .stream()
-                .filter(d -> !d.getDeptId().equals(target.getDeptId())) // 자신 제외
+                .filter(d -> !d.getDeptId().equals(target.getDeptId()))
                 .collect(Collectors.toList());
 
-        // ✅ P0-2: Batch Update로 N+1 개선
         for (Department child : childDepts) {
             String relativeSubPath = child.getOrgPath()
                     .substring(originalOrgPath.length());
@@ -456,41 +223,20 @@ public class DepartmentService {
             child.setDepth(newDepth);
         }
 
-        // ✅ Batch save (JPA가 자동으로 최적화)
         departmentRepository.saveAll(childDepts);
 
-        log.info("[ORG] 부서 이동 완료 - deptId={}, newParentId={}, 하위부서={}개",
-            deptId, newParentId, childDepts.size());
+        log.info("[ORG] 부서 이동 완료 - deptId={}, 하위={}개", deptId, childDepts.size());
     }
 
 
-    /* ============================================================
-     * CRUD: 부서 삭제
-     * ============================================================ */
-
     /**
-     * 부서를 삭제합니다.
+     * 부서 삭제
+     * - 하위 부서, 소속 사용자 존재 여부 검증
+     * - Level 1 RBAC 권한 검증
      *
-     * <h3>삭제 전 검증 사항:</h3>
-     * <ol>
-     *   <li>부서 존재 여부</li>
-     *   <li>사용자 권한 (Level 2 RBAC)</li>
-     *   <li>하위 부서 존재 여부</li>
-     *   <li>소속 활성 사용자 존재 여부</li>
-     * </ol>
-     *
-     * <h3>예외:</h3>
-     * <ul>
-     *   <li>DEPARTMENT_NOT_FOUND (404) - 부서 없음</li>
-     *   <li>INSUFFICIENT_PERMISSION (403) - 권한 없음</li>
-     *   <li>CHILD_DEPARTMENT_EXISTS (409) - 하위 부서 존재</li>
-     *   <li>ACTIVE_USERS_EXIST (409) - 소속 사용자 존재</li>
-     * </ul>
-     *
-     * @param tenantId      멀티테넌트 ID
-     * @param actorUserId   작업 수행 사용자 ID
-     * @param deptId        삭제할 부서 ID
-     * @throws OrganizationException 위의 4가지 에러 중 하나
+     * @param tenantId 테넌트 ID
+     * @param actorUserId 작업 수행 사용자 ID
+     * @param deptId 삭제할 부서 ID
      */
     @Transactional
     public void deleteDepartment(
@@ -498,128 +244,79 @@ public class DepartmentService {
             UUID actorUserId,
             String deptId) {
 
-        log.info("[ORG] 부서 삭제 요청 - tenantId: {}, deptId: {}, actorUserId: {}",
-            tenantId, deptId, actorUserId);
+        log.info("[ORG] 부서 삭제 요청 - deptId={}", deptId);
 
-        try {
-            retryTemplate.execute(context -> {
-                // 1) 부서 존재 여부 검증 (tenant-aware)
-                Department dept = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
-                        .orElseThrow(() -> new OrganizationException(
-                                OrganizationErrorCode.DEPARTMENT_NOT_FOUND
-                        ));
+        // 부서 조회
+        Department dept = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
+                .orElseThrow(() -> new OrganizationException(
+                        OrganizationErrorCode.DEPARTMENT_NOT_FOUND
+                ));
 
-                // 2) 권한 검증
-                Set<String> accessibleDeptIds = orgScopeService.getAccessibleDepartmentIds(
-                        tenantId,
-                        actorUserId
-                );
-                if (!accessibleDeptIds.contains(deptId)) {
-                    log.warn("[ORG] 부서 삭제 권한 없음 - actorUserId: {}, deptId: {}", actorUserId, deptId);
-                    throw new OrganizationException(
-                            OrganizationErrorCode.INSUFFICIENT_PERMISSION
-                    );
-                }
-
-                // 3) 하위 부서 존재 여부 검증
-                if (departmentRepository.existsByParent(dept)) {
-                    log.warn("[ORG] 하위 부서 존재로 삭제 불가 - deptId: {}", deptId);
-                    throw new OrganizationException(
-                            OrganizationErrorCode.CHILD_DEPARTMENT_EXISTS
-                    );
-                }
-
-                // 4) 소속 활성 사용자 존재 여부 검증 (포트를 통한 간접 접근)
-                boolean hasActiveUsers = orgUserPort.existsActiveUserInDepartment(
-                        tenantId,
-                        deptId
-                );
-                if (hasActiveUsers) {
-                    log.warn("[ORG] 소속 활성 사용자 존재로 삭제 불가 - deptId: {}", deptId);
-                    throw new OrganizationException(
-                            OrganizationErrorCode.ACTIVE_USERS_EXIST
-                    );
-                }
-
-                // 5) 모든 검증 통과 후 삭제
-                departmentRepository.delete(dept);
-
-                log.info("[ORG] 부서 삭제 완료 - deptId: {}, name: {}", deptId, dept.getName());
-
-                return null;
-            });
-        } catch (OrganizationException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[ORG] 부서 삭제 실패 - deptId: {}, 오류: {}", deptId, e.getMessage(), e);
-            throw new OrganizationException(OrganizationErrorCode.INTERNAL_ERROR, e);
+        // 권한 검증
+        Set<String> accessibleDeptIds = orgScopeService.getAccessibleDepartmentIds(
+                tenantId,
+                actorUserId
+        );
+        if (!accessibleDeptIds.contains(deptId)) {
+            log.warn("[ORG] 부서 삭제 권한 없음 - userId={}, deptId={}", actorUserId, deptId);
+            throw new OrganizationException(
+                    OrganizationErrorCode.INSUFFICIENT_PERMISSION
+            );
         }
+
+        // 하위 부서 존재 여부 검증
+        if (departmentRepository.existsByParent(dept)) {
+            log.warn("[ORG] 하위 부서 존재로 삭제 불가 - deptId={}", deptId);
+            throw new OrganizationException(
+                    OrganizationErrorCode.CHILD_DEPARTMENT_EXISTS
+            );
+        }
+
+        // 소속 활성 사용자 존재 여부 검증
+        boolean hasActiveUsers = orgUserPort.existsActiveUserInDepartment(
+                tenantId,
+                deptId
+        );
+        if (hasActiveUsers) {
+            log.warn("[ORG] 소속 활성 사용자 존재로 삭제 불가 - deptId={}", deptId);
+            throw new OrganizationException(
+                    OrganizationErrorCode.ACTIVE_USERS_EXIST
+            );
+        }
+
+        // 삭제
+        departmentRepository.delete(dept);
+
+        log.info("[ORG] 부서 삭제 완료 - deptId={}", deptId);
     }
 
-    /* ============================================================
-     * Query: 조직도 트리 조회 (전체)
-     * ============================================================ */
-
     /**
-     * 특정 테넌트의 <b>전체 조직도 트리</b>를 조회합니다.
+     * 전체 조직도 트리 조회
+     * - 권한 검증 없이 모든 부서 반환
      *
-     * <p>
-     * 권한 검증 없이 모든 부서를 반환하므로,
-     * 시스템 관리자나 권한이 충분한 사용자만 호출해야 합니다.
-     * </p>
-     *
-     * <h3>반환 구조:</h3>
-     * <ul>
-     *   <li>루트 부서들이 최상위 리스트</li>
-     *   <li>각 부서는 children 리스트로 자식 부서 포함</li>
-     *   <li>orgPath 순서로 정렬됨</li>
-     * </ul>
-     *
-     * @param tenantId 멀티테넌트 ID
-     * @return 조직도 트리 DTO 리스트 (루트부터)
+     * @param tenantId 테넌트 ID
+     * @return 조직도 트리 (루트부터)
      */
-    @Transactional(readOnly = true)  // ✅ P0: 읽기 전용 트랜잭션 명시
+    @Transactional(readOnly = true)
     public List<DepartmentDto.Response> getDepartmentTree(String tenantId) {
-        // 모든 부서 조회
         List<Department> allDepts = departmentRepository.findAllByTenantId(tenantId);
-        // 트리 구조로 변환
         return buildTree(allDepts);
     }
 
-    /* ============================================================
-     * Query: 조직도 트리 조회 (스코프 기반, Level 2 RBAC)
-     * ============================================================ */
-
     /**
-     * 사용자의 <b>접근 가능한 범위 내에서만</b> 조직도 트리를 조회합니다.
+     * 사용자 권한 범위 내 조직도 트리 조회 (Level 1 RBAC)
+     * - 접근 가능한 부서만 필터링하여 반환
      *
-     * <p>
-     * Level 2 RBAC(Data Scope) 기반으로, 특정 사용자가 접근할 수 있는 부서들만
-     * 필터링하여 트리를 구성합니다.
-     * </p>
-     *
-     * <h3>동작:</h3>
-     * <ol>
-     *   <li>OrgScopeService를 통해 사용자의 접근 가능 부서 ID 집합 조회</li>
-     *   <li>해당 부서들만 필터링</li>
-     *   <li>필터링된 부서들로 트리 구성</li>
-     * </ol>
-     *
-     * <p>
-     * <b>주의:</b> 스코프 필터링으로 인해 부모 부서가 범위 밖에 있으면,
-     * 자식 부서들이 루트로 표시될 수 있습니다.
-     * </p>
-     *
-     * @param tenantId    멀티테넌트 ID
+     * @param tenantId 테넌트 ID
      * @param actorUserId 조회하는 사용자 ID
-     * @return 사용자 권한 범위 내 조직도 트리
+     * @return 권한 범위 내 조직도 트리
      */
-    @Transactional(readOnly = true)  // ✅ P0: 읽기 전용 트랜잭션 명시
+    @Transactional(readOnly = true)
     public List<DepartmentDto.Response> getDepartmentTreeWithinScope(
             String tenantId,
             UUID actorUserId) {
 
-        // 1) 사용자가 접근 가능한 부서 ID 집합 조회 (Level 2 RBAC)
+        // 사용자가 접근 가능한 부서 ID 집합 조회
         Set<String> scopeDeptIds = orgScopeService.getAccessibleDepartmentIds(
                 tenantId,
                 actorUserId
@@ -629,42 +326,21 @@ public class DepartmentService {
             return Collections.emptyList();
         }
 
-        // 2) 모든 부서 중 접근 가능한 부서만 필터링
+        // 접근 가능한 부서만 필터링
         List<Department> allDepts = departmentRepository.findAllByTenantId(tenantId);
         List<Department> scopedDepts = allDepts.stream()
                 .filter(d -> scopeDeptIds.contains(d.getDeptId()))
                 .collect(Collectors.toList());
 
-        // 3) 필터링된 부서들로 트리 구성
         return buildTree(scopedDepts);
     }
 
-    /* ============================================================
-     * Helper: 부서 리스트를 트리 구조 DTO로 변환
-     * ============================================================ */
-
     /**
-     * Department 리스트를 계층 구조(트리) DTO로 변환합니다.
-     *
-     * <h3>알고리즘:</h3>
-     * <ol>
-     *   <li>모든 Department를 DTO로 변환하고 ID-DTO 맵 구성</li>
-     *   <li>각 DTO의 parentId를 기준으로 부모-자식 관계 연결</li>
-     *   <li>부모가 없는(또는 부모 정보가 누락된) DTO를 루트로 추가</li>
-     *   <li>orgPath 순서로 정렬</li>
-     * </ol>
-     *
-     * <p>
-     * <b>데이터 불일치 처리:</b> 부모 정보가 누락된 경우(예: 스코프 필터링으로 인해
-     * 부모 부서가 범위 밖), 해당 부서를 루트로 취급합니다.
-     * </p>
-     *
-     * @param depts 변환할 부서 리스트
-     * @return 루트부터 시작하는 트리 구조 DTO 리스트
+     * 부서 리스트를 트리 구조 DTO로 변환
+     * - ID-DTO 맵 구성 → 부모-자식 관계 연결 → 루트 추출
      */
     private List<DepartmentDto.Response> buildTree(List<Department> depts) {
-        // 1) ID -> DTO 맵 구성 (빠른 조회용)
-        // Key: deptId (String - UUID), Value: Response DTO
+        // ID -> DTO 맵 구성
         Map<String, DepartmentDto.Response> dtoMap = depts.stream()
                 .map(DepartmentDto.Response::from)
                 .collect(Collectors.toMap(
@@ -674,26 +350,23 @@ public class DepartmentService {
 
         List<DepartmentDto.Response> roots = new ArrayList<>();
 
-        // 2) 부모-자식 관계 구성
+        // 부모-자식 관계 구성
         for (DepartmentDto.Response dto : dtoMap.values()) {
             String parentId = dto.getParentId();
 
             if (parentId == null) {
-                // 루트 노드 (부모가 없음)
                 roots.add(dto);
             } else {
-                // 부모 노드에 자식 추가
                 DepartmentDto.Response parent = dtoMap.get(parentId);
                 if (parent != null) {
                     parent.addChild(dto);
                 } else {
-                    // 부모 정보가 누락된 경우 루트로 처리 (데이터 불일치 대응)
-                    roots.add(dto);
+                    roots.add(dto); // 부모 누락 시 루트로 처리
                 }
             }
         }
 
-        // 3) orgPath 순서로 정렬 (가독성 향상)
+        // orgPath 순서로 정렬
         roots.sort(Comparator.comparing(
                 DepartmentDto.Response::getOrgPath,
                 Comparator.nullsFirst(String::compareTo)
@@ -702,24 +375,8 @@ public class DepartmentService {
         return roots;
     }
 
-    /* ============================================================
-     * 부서 검색 기능
-     * ============================================================ */
-
     /**
-     * 키워드로 부서 검색
-     *
-     * <h3>검색 방식:</h3>
-     * - 부서명(name)에 키워드가 포함된 모든 부서 조회
-     * - 대소문자 구분 없음 (IGNORE CASE)
-     *
-     * <h3>사용 예시:</h3>
-     * - keyword = "개발" → "개발팀", "AI개발팀", "플랫폼개발부" 등
-     * - keyword = "team" → "TEAM_A", "Sales Team" 등
-     *
-     * @param tenantId 테넌트 ID
-     * @param keyword  검색 키워드
-     * @return 검색된 부서 목록 (DTO)
+     * 키워드로 부서 검색 (부서명 기준)
      */
     @Transactional(readOnly = true)
     public List<DepartmentDto.Response> searchDepartments(String tenantId, String keyword) {
@@ -738,17 +395,8 @@ public class DepartmentService {
 
     /**
      * 특정 깊이(depth)의 부서 조회
-     *
-     * <h3>사용 예시:</h3>
-     * - depth = 0 → 최상위(루트) 부서만 조회
-     * - depth = 1 → 1단계 하위 부서만 조회
-     * - depth = 2 → 2단계 하위 부서만 조회
-     *
-     * @param tenantId 테넌트 ID
-     * @param depth    조회할 깊이 (0부터 시작)
-     * @return 해당 깊이의 부서 목록 (DTO)
      */
-    @Transactional(readOnly = true)  // ✅ P0: 읽기 전용 트랜잭션 명시
+    @Transactional(readOnly = true)
     public List<DepartmentDto.Response> getDepartmentsByDepth(String tenantId, int depth) {
         if (depth < 0) {
             throw new IllegalArgumentException("depth는 0 이상이어야 합니다.");
@@ -765,17 +413,8 @@ public class DepartmentService {
 
     /**
      * 특정 타입의 부서 조회
-     *
-     * <h3>사용 예시:</h3>
-     * - type = "TEAM" → 팀 단위 부서만 조회
-     * - type = "DIVISION" → 사업부 단위만 조회
-     * - type = "DEPARTMENT" → 부서 단위만 조회
-     *
-     * @param tenantId 테넌트 ID
-     * @param type     부서 타입
-     * @return 해당 타입의 부서 목록 (DTO)
      */
-    @Transactional(readOnly = true)  // ✅ P0: 읽기 전용 트랜잭션 명시
+    @Transactional(readOnly = true)
     public List<DepartmentDto.Response> getDepartmentsByType(String tenantId, String type) {
         if (type == null || type.trim().isEmpty()) {
             return List.of();
@@ -790,50 +429,35 @@ public class DepartmentService {
                 .collect(Collectors.toList());
     }
 
-    /* ============================================================
-     * 부서 통계 조회
-     * ============================================================ */
-
     /**
      * 부서 통계 정보 조회
-     *
-     * <h3>제공 통계:</h3>
-     * - 전체 직원 수 (활성 + 비활성)
-     * - 활성 직원 수 (ACTIVE 상태만)
-     * - 직속 하위 부서 수 (direct children)
-     * - 전체 하위 부서 수 (모든 descendants)
-     *
-     * @param tenantId 테넌트 ID
-     * @param deptId 조회할 부서 ID
-     * @return 부서 통계 정보
-     * @throws OrganizationException DEPARTMENT_NOT_FOUND: 부서가 존재하지 않을 때
+     * - 전체/활성 직원 수, 직속/전체 하위 부서 수
      */
-    @Transactional(readOnly = true)  // ✅ P0: 읽기 전용 트랜잭션 명시
+    @Transactional(readOnly = true)
     public DepartmentDto.Statistics getDepartmentStatistics(String tenantId, String deptId) {
-        // 1. 부서 조회
+        // 부서 조회
         Department department = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
                         OrganizationErrorCode.DEPARTMENT_NOT_FOUND
                 ));
 
-        // 2. 직원 수 조회 (OrgUserPort 사용)
+        // 직원 수 조회
         long totalEmployees = orgUserPort.countEmployeesByDepartment(tenantId, deptId);
         long activeEmployees = orgUserPort.countActiveEmployeesByDepartment(tenantId, deptId);
 
-        // 3. 직속 하위 부서 수 조회
+        // 직속 하위 부서 수
         long childDeptCount = departmentRepository.findAllByTenantId(tenantId).stream()
                 .filter(dept -> dept.getParent() != null
                         && dept.getParent().getDeptId().equals(deptId))
                 .count();
 
-        // 4. 전체 하위 부서 수 조회 (orgPath 기반)
+        // 전체 하위 부서 수 (orgPath 기반)
         String pathPrefix = department.getOrgPath();
         long descendantDeptCount = departmentRepository
                 .findByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix).stream()
-                .filter(dept -> !dept.getDeptId().equals(deptId)) // 자기 자신 제외
+                .filter(dept -> !dept.getDeptId().equals(deptId))
                 .count();
 
-        // 5. 통계 DTO 반환
         return DepartmentDto.Statistics.builder()
                 .deptId(department.getDeptId())
                 .name(department.getName())
@@ -845,9 +469,5 @@ public class DepartmentService {
                 .descendantDeptCount(descendantDeptCount)
                 .build();
     }
-
-    /* ============================================================
-     * 내부 헬퍼 메서드
-     * ============================================================ */
 }
 

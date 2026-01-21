@@ -35,7 +35,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>404 Not Found: 부서를 찾을 수 없는 경우</li>
  *   <li>400 Bad Request: 부서 이동 실패, 순환 참조 등</li>
  *   <li>409 Conflict: 하위 부서나 활성 사용자가 존재하여 삭제 불가</li>
- *   <li>403 Forbidden: 권한 없음 (Level 2 RBAC)</li>
+ *   <li>403 Forbidden: 권한 없음 (Level 1 RBAC)</li>
  *   <li>500 Internal Server Error: 예측하지 못한 서버 오류</li>
  * </ul>
  *

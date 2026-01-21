@@ -12,7 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,24 +27,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * RbacManagementServiceImpl - 사용자-역할 관리 기능 테스트
- *
- * <h2>테스트 범위:</h2>
- * - assignRoleToAgent() - 사용자에게 역할 할당
- * - revokeRoleFromAgent() - 사용자에게서 역할 회수
- * - getRolesByAgent() - 사용자가 가진 역할 조회
- * - getAgentCountByRole() - 역할을 가진 사용자 수 조회
- * - 캐시 무효화 (@CacheEvict)
- * - 감사 로그 기록 (AuditLogService)
- *
- * @author Test Team
- * @version 1.0
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RBAC 사용자-역할 관리 테스트")
 class RbacAgentRoleManagementTest {
 
-    @Mock
-    private RetryTemplate retryTemplate;
 
     @Mock
     private RoleJpaRepository roleRepository;
@@ -72,11 +58,6 @@ class RbacAgentRoleManagementTest {
 
     @BeforeEach
     void setup() {
-        // RetryTemplate 설정 (즉시 실행되도록)
-        lenient().when(retryTemplate.execute(any())).thenAnswer(invocation -> {
-            org.springframework.retry.RetryCallback<?, ?> callback = invocation.getArgument(0);
-            return callback.doWithRetry(null);
-        });
 
         // SecurityContext 설정 (TenantContextHolder가 인식할 수 있는 형식)
         SecurityContextHolder.setContext(securityContext);
@@ -322,11 +303,11 @@ class RbacAgentRoleManagementTest {
                 .type("POSITION")
                 .build();
 
-        when(roleRepository.findByTenantIdAndName(tenantId, roleName))
+        lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
+        lenient().when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
                 .thenReturn(false);
-        when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
+        lenient().when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenReturn(new AgentRoleJpaEntity());
 
         // When

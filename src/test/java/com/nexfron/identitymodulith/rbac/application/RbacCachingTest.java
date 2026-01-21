@@ -77,8 +77,22 @@ class RbacCachingTest {
     private RbacQueryServiceImpl rbacQueryService;
 
     private final String tenantId = "test-tenant";
+    private final String userId = "test-user";
     private final String roleName = "ADMIN";
     private final String roleId = "role-001";
+
+    @BeforeEach
+    void setup() {
+        // SecurityContext 설정 - "tenantId:userId" 형식
+        SecurityContextHolder.setContext(securityContext);
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(authentication.isAuthenticated()).thenReturn(true);
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
+
+        // AuditLogService Mock 설정
+        lenient().doNothing().when(auditLogService).recordAgentRoleAssignment(anyString(), anyString(), anyString(), anyString());
+        lenient().doNothing().when(auditLogService).recordRolePermissionAssignment(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+    }
 
     // ============================================================
     // 캐시 애노테이션 적용 확인 테스트
@@ -152,14 +166,11 @@ class RbacCachingTest {
                 .thenReturn(Optional.of(role));
         when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(Optional.of(permission));
-        when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, "perm-001"))
+        lenient().when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, "perm-001"))
                 .thenReturn(false);
-        when(rolePermissionRepository.save(any(RolePermissionJpaEntity.class)))
+        lenient().when(rolePermissionRepository.save(any(RolePermissionJpaEntity.class)))
                 .thenReturn(new RolePermissionJpaEntity());
 
-        // AuditLogService Mock 설정 (void 메서드)
-        doNothing().when(auditLogService).recordRolePermissionAssignment(
-                anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         // When: 역할-권한 할당
         rbacManagementService.assignPermissionToRole(roleName, "user:manage");
@@ -183,15 +194,12 @@ class RbacCachingTest {
                 .type("POSITION")
                 .build();
 
-        when(roleRepository.findByTenantIdAndName(tenantId, roleName))
+        lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
         // ✅ P0: existsByAgentIdAndRoleId 제거
-        when(agentRoleRepository.save(any()))
+        lenient().when(agentRoleRepository.save(any()))
                 .thenReturn(null);
 
-        // AuditLogService Mock 설정 (void 메서드)
-        doNothing().when(auditLogService).recordAgentRoleAssignment(
-                anyString(), anyString(), anyString(), anyString());
 
         // When: 사용자-역할 할당
         rbacManagementService.assignRoleToAgent(agentId, roleName);
@@ -211,24 +219,17 @@ class RbacCachingTest {
                 .type("POSITION")
                 .build();
 
-        when(roleRepository.findByTenantIdAndNameIn(eq(tenantId), anySet()))
+        lenient().when(roleRepository.findByTenantIdAndNameIn(eq(tenantId), anySet()))
                 .thenReturn(List.of(role));
-        when(rolePermissionRepository.findPermissionIdsByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId)))
-                .thenReturn(List.of("perm-001"));
-        when(permissionRepository.findByTenantIdAndPermissionIdIn(eq(tenantId), anySet()))
-                .thenReturn(List.of(PermissionJpaEntity.builder()
-                        .permissionId("perm-001")
-                        .tenantId(tenantId)
-                        .code("user:manage")
-                        .build()));
+        lenient().when(rolePermissionRepository.findPermissionCodesByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId)))
+                .thenReturn(List.of("user:manage"));
 
         // When
         Set<String> codes = rbacQueryService.permissionsOfRoles(tenantId, Set.of(roleName));
 
         // Then: 다른 테넌트 데이터가 섞이지 않고, 기대 코드만 반환
         assertEquals(Set.of("user:manage"), codes);
-        verify(rolePermissionRepository).findPermissionIdsByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId));
-        verify(permissionRepository).findByTenantIdAndPermissionIdIn(eq(tenantId), eq(Set.of("perm-001")));
+        verify(rolePermissionRepository).findPermissionCodesByRoleIdsAndTenant(eq(Set.of(roleId)), eq(tenantId));
     }
 
     @Test
@@ -255,7 +256,7 @@ class RbacCachingTest {
     @DisplayName("역할-권한 할당 시 감사 로그가 기록된다")
     void assignPermissionToRole_recordsAuditLog() {
         lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
-        lenient().when(authentication.getPrincipal()).thenReturn(tenantId);
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
         SecurityContextHolder.setContext(securityContext);
 
         RoleJpaEntity role = RoleJpaEntity.builder()
@@ -271,10 +272,10 @@ class RbacCachingTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
-        when(permissionRepository.findByTenantIdAndCode(tenantId, "sample:perm"))
+        lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
+        lenient().when(permissionRepository.findByTenantIdAndCode(tenantId, "sample:perm"))
                 .thenReturn(Optional.of(permission));
-        when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, "perm-010"))
+        lenient().when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, "perm-010"))
                 .thenReturn(false);
 
         rbacManagementService.assignPermissionToRole(roleName, "sample:perm");
@@ -287,7 +288,7 @@ class RbacCachingTest {
     @DisplayName("사용자-역할 할당 시 감사 로그가 기록된다")
     void assignRoleToAgent_recordsAuditLog() {
         lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
-        lenient().when(authentication.getPrincipal()).thenReturn(tenantId);
+        lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
         SecurityContextHolder.setContext(securityContext);
 
         String agentId = "agent-999";
@@ -298,7 +299,7 @@ class RbacCachingTest {
                 .type("POSITION")
                 .build();
 
-        when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
+        lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName)).thenReturn(Optional.of(role));
         // ✅ P0: existsByAgentIdAndRoleId 제거
 
         rbacManagementService.assignRoleToAgent(agentId, roleName);

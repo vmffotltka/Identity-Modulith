@@ -1,6 +1,8 @@
 package com.nexfron.identitymodulith.rbac.application.batch;
 
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AuditLogJpaRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,6 +40,9 @@ import java.time.LocalDateTime;
 public class AuditLogArchivingBatchService {
 
     private final AuditLogJpaRepository auditLogRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     /**
      * 감사 로그 아카이빙 배치 작업 스케줄
@@ -93,11 +98,26 @@ public class AuditLogArchivingBatchService {
      * @return 복사된 행 수
      */
     private int copyToArchive(LocalDateTime cutoffDate) {
-        // 실제 구현 시 네이티브 쿼리 또는 배치 처리
-        // INSERT INTO audit_logs_archive SELECT * FROM audit_logs WHERE timestamp < ?
         log.debug("[감사 로그 아카이빙] 아카이브 테이블로 복사 중: {}", cutoffDate);
-        // TODO: DB에서 직접 INSERT...SELECT 수행
-        return 0;
+
+        // 네이티브 쿼리로 audit_logs → audit_logs_archive 복사
+        String sql = """
+            INSERT INTO audit_logs_archive 
+                (audit_id, tenant_id, action, resource_type, resource_id, 
+                 operator_id, changes, timestamp, remarks, ip_address, archived_at)
+            SELECT 
+                audit_id, tenant_id, action, resource_type, resource_id, 
+                operator_id, changes, timestamp, remarks, ip_address, CURRENT_TIMESTAMP
+            FROM audit_logs
+            WHERE timestamp < :cutoffDate
+            """;
+
+        int copiedCount = entityManager.createNativeQuery(sql)
+                .setParameter("cutoffDate", cutoffDate)
+                .executeUpdate();
+
+        log.info("[감사 로그 아카이빙] 아카이브 테이블 복사 완료: {}건", copiedCount);
+        return copiedCount;
     }
 
     /**

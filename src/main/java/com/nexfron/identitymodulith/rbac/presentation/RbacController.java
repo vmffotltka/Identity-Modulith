@@ -223,50 +223,6 @@ public class RbacController {
         return ResponseEntity.noContent().build();
     }
 
-    // ============================================================
-    // 권한 그룹(Permission Group) 관리 엔드포인트
-    // ============================================================
-
-    @Operation(summary = "권한 그룹 업데이트", description = "권한 그룹의 설명이나 활성화 상태를 수정합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "권한 그룹 업데이트 성공"),
-            @ApiResponse(responseCode = "404", description = "권한 그룹을 찾을 수 없음")
-    })
-    @PatchMapping("/permission-groups/{groupName}")
-    public ResponseEntity<PermissionGroupDto> updatePermissionGroup(
-            @Parameter(description = "권한 그룹명", example = "USER_FULL_ACCESS", required = true)
-            @PathVariable String groupName,
-            @RequestBody UpdatePermissionGroupRequest request) {
-        return ResponseEntity.ok(rbacManagementService.updatePermissionGroup(groupName, request));
-    }
-
-    @Operation(summary = "권한 그룹 비활성화", description = "특정 권한 그룹을 비활성화합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "권한 그룹 비활성화 성공"),
-            @ApiResponse(responseCode = "404", description = "권한 그룹을 찾을 수 없음"),
-            @ApiResponse(responseCode = "400", description = "이미 비활성화된 권한 그룹")
-    })
-    @PostMapping("/permission-groups/{groupName}/deactivate")
-    public ResponseEntity<Void> deactivatePermissionGroup(
-            @Parameter(description = "권한 그룹명", example = "USER_FULL_ACCESS", required = true)
-            @PathVariable String groupName) {
-        rbacManagementService.deactivatePermissionGroup(groupName);
-        return ResponseEntity.noContent().build();
-    }
-
-    @Operation(summary = "권한 그룹 활성화", description = "비활성화된 권한 그룹을 다시 활성화합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "권한 그룹 활성화 성공"),
-            @ApiResponse(responseCode = "404", description = "권한 그룹을 찾을 수 없음"),
-            @ApiResponse(responseCode = "400", description = "이미 활성화된 권한 그룹")
-    })
-    @PostMapping("/permission-groups/{groupName}/activate")
-    public ResponseEntity<Void> activatePermissionGroup(
-            @Parameter(description = "권한 그룹명", example = "USER_FULL_ACCESS", required = true)
-            @PathVariable String groupName) {
-        rbacManagementService.activatePermissionGroup(groupName);
-        return ResponseEntity.noContent().build();
-    }
 
     // ============================================================
     // 권한 변경 이력 조회 (Audit Log) 엔드포인트

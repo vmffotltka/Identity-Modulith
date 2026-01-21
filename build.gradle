@@ -31,9 +31,6 @@ dependencies {
     implementation "org.apache.commons:commons-lang3:3.18.0"
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
-    // Spring Retry (DB 일시적 장애 재시도)
-    implementation 'org.springframework.retry:spring-retry'
-    implementation 'org.springframework:spring-aspects'
 
     // Database
     runtimeOnly 'org.postgresql:postgresql'

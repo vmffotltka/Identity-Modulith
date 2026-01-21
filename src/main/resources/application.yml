@@ -61,4 +61,16 @@ spring:
     enabled: true                    # Flyway 활성화
     baseline-on-migrate: true        # 기존 DB에 Flyway 적용 시
     locations: classpath:db/migration # 마이그레이션 스크립트 위치
-    validate-on-migrate: false       # 🔴 체크섬 검증 비활성화 (V1_0_8 문제 해결)
+    validate-on-migrate: false       # 🔴 체크섬 검증 비활성화
+    encoding: UTF-8                  # SQL 파일 인코딩 설정
+    detect-encoding: true            # 자동 인코딩 감지 활성화
+    clean-disabled: false            # Flyway clean 명령 활성화 (개발 환경)
+
+  # ---------------------------------------------------------------------------
+  # Spring Security 기본 인증 설정 (개발 환경용)
+  # ---------------------------------------------------------------------------
+  security:
+    user:
+      name: admin                    # Swagger UI 접속 username
+      password: admin123             # Swagger UI 접속 password
+

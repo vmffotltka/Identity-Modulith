@@ -55,21 +55,6 @@ public interface RbacManagementService {
     Set<String> getRolesByAgent(String agentId);
     int getAgentCountByRole(String roleName);
 
-    // ============================================================
-    // 권한 그룹 관리
-    // ============================================================
-
-    List<PermissionGroupDto> getAllPermissionGroups();
-    PermissionGroupDto getPermissionGroupByName(String groupName);
-    PermissionGroupDto createPermissionGroup(CreatePermissionGroupRequest request);
-    PermissionGroupDto updatePermissionGroup(String groupName, UpdatePermissionGroupRequest request);
-    void deactivatePermissionGroup(String groupName);
-    void activatePermissionGroup(String groupName);
-
-    void addPermissionToGroup(String groupName, String permissionCode);
-    void removePermissionFromGroup(String groupName, String permissionCode);
-    void assignPermissionGroupToRole(String roleName, String groupName);
-    void revokePermissionGroupFromRole(String roleName, String groupName);
 
     // ============================================================
     // 권한 변경 이력 조회 (Audit Log)
@@ -88,7 +73,11 @@ public interface RbacManagementService {
 
     record CreateRoleRequest(
             @NotBlank(message = "역할명은 필수입니다")
-            @Size(min = 2, max = 64, message = "역할명은 2-64자 사이여야 합니다")
+            @Size(
+                min = RbacConstants.ROLE_NAME_MIN_LENGTH,
+                max = RbacConstants.ROLE_NAME_MAX_LENGTH,
+                message = "역할명은 2-64자 사이여야 합니다"
+            )
             String name,
 
             @NotBlank(message = "역할 타입은 필수입니다")
@@ -100,7 +89,7 @@ public interface RbacManagementService {
             @Pattern(regexp = "POSITION|CHANNEL|SKILL", message = "역할 타입은 POSITION, CHANNEL, SKILL 중 하나여야 합니다")
             String type,
 
-            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            @Size(max = RbacConstants.ROLE_DESCRIPTION_MAX_LENGTH, message = "설명은 255자 이하여야 합니다")
             String description,
 
             Boolean isActive
@@ -115,42 +104,22 @@ public interface RbacManagementService {
     record CreatePermissionRequest(
             @NotBlank(message = "권한 코드는 필수입니다")
             @Pattern(regexp = "^[a-z]+:[a-z_]+$", message = "권한 코드는 'domain:action' 형식이어야 합니다 (예: user:create)")
-            @Size(max = 128, message = "권한 코드는 128자 이하여야 합니다")
+            @Size(max = RbacConstants.PERMISSION_CODE_MAX_LENGTH, message = "권한 코드는 128자 이하여야 합니다")
             String code,
 
-            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            @Size(max = RbacConstants.PERMISSION_DESCRIPTION_MAX_LENGTH, message = "설명은 500자 이하여야 합니다")
             String description
     ) {}
 
     record UpdatePermissionRequest(
             @Pattern(regexp = "^[a-z]+:[a-z_]+$", message = "권한 코드는 'domain:action' 형식이어야 합니다")
-            @Size(max = 128, message = "권한 코드는 128자 이하여야 합니다")
+            @Size(max = RbacConstants.PERMISSION_CODE_MAX_LENGTH, message = "권한 코드는 128자 이하여야 합니다")
             String code,
 
-            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
+            @Size(max = RbacConstants.PERMISSION_DESCRIPTION_MAX_LENGTH, message = "설명은 500자 이하여야 합니다")
             String description
     ) {}
 
-    record PermissionGroupDto(String name, String description, Boolean isActive) {
-        public PermissionGroupDto(String name) {
-            this(name, null, true);
-        }
-    }
-
-    record CreatePermissionGroupRequest(
-            @NotBlank(message = "권한 그룹명은 필수입니다")
-            @Size(min = 2, max = 64, message = "권한 그룹명은 2-64자 사이여야 합니다")
-            String name,
-
-            @Size(max = 255, message = "설명은 255자 이하여야 합니다")
-            String description
-    ) {
-        public CreatePermissionGroupRequest(String name) {
-            this(name, null);
-        }
-    }
-
-    record UpdatePermissionGroupRequest(String description, Boolean isActive) {}
 
     record RoleDeletionResult(
             String roleName,
