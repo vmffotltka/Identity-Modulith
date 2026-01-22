@@ -359,7 +359,151 @@ COMMENT ON TABLE rbac_role_permissions IS '역할-권한 매핑 (M:N)';
 
 ---
 
-## 6. 초기 데이터 (Seed Data)
+## 6. Audit 모듈 테이블 (감사 로그)
+
+### 6.1 audit_logs (감사 로그)
+
+```sql
+CREATE TABLE audit_logs (
+    -- 식별
+    audit_id            VARCHAR(36)     PRIMARY KEY,    -- UUID
+    tenant_id           VARCHAR(50)     NOT NULL,
+
+    -- 작업 정보
+    action              VARCHAR(32)     NOT NULL,       -- CREATE, UPDATE, DELETE, ASSIGN, REVOKE
+    resource_type       VARCHAR(64)     NOT NULL,       -- ROLE, PERMISSION, AGENT_ROLE, DEPARTMENT 등
+    resource_id         VARCHAR(255)    NOT NULL,
+
+    -- 작업자
+    operator_id         VARCHAR(255)    NOT NULL,       -- 작업 수행자 ID
+
+    -- 변경 내용
+    changes             TEXT,                           -- JSON 형식 (변경 전후 값)
+
+    -- 메타데이터
+    timestamp           TIMESTAMP       NOT NULL,       -- 작업 발생 일시
+    remarks             TEXT,                           -- 추가 정보 (메모, 실패 원인 등)
+    ip_address          VARCHAR(45),                    -- 클라이언트 IP
+
+    -- 제약조건
+    CONSTRAINT chk_audit_action CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'ASSIGN', 'REVOKE', 'ACTIVATE', 'DEACTIVATE'))
+);
+
+-- 인덱스
+CREATE INDEX idx_audit_logs_tenant_id ON audit_logs (tenant_id);
+CREATE INDEX idx_audit_logs_resource_type ON audit_logs (resource_type);
+CREATE INDEX idx_audit_logs_operator_id ON audit_logs (operator_id);
+CREATE INDEX idx_audit_logs_timestamp ON audit_logs (timestamp DESC);
+CREATE INDEX idx_audit_logs_resource ON audit_logs (resource_type, resource_id);
+
+-- 코멘트
+COMMENT ON TABLE audit_logs IS '감사 로그 - 권한 관련 모든 변경사항 추적';
+COMMENT ON COLUMN audit_logs.action IS '작업 유형 (CREATE: 생성, UPDATE: 수정, DELETE: 삭제, ASSIGN: 할당, REVOKE: 회수)';
+COMMENT ON COLUMN audit_logs.resource_type IS '대상 리소스 타입 (ROLE, PERMISSION, AGENT_ROLE, DEPARTMENT 등)';
+COMMENT ON COLUMN audit_logs.changes IS '변경 내용 (JSON 형식) - 예: {"before": {...}, "after": {...}}';
+COMMENT ON COLUMN audit_logs.ip_address IS 'IPv4/IPv6 주소 (최대 45자)';
+```
+
+### 6.2 audit_logs_archive (감사 로그 아카이브)
+
+```sql
+CREATE TABLE audit_logs_archive (
+    -- audit_logs와 동일한 구조
+    audit_id            VARCHAR(36)     PRIMARY KEY,
+    tenant_id           VARCHAR(50)     NOT NULL,
+    action              VARCHAR(32)     NOT NULL,
+    resource_type       VARCHAR(64)     NOT NULL,
+    resource_id         VARCHAR(255)    NOT NULL,
+    operator_id         VARCHAR(255)    NOT NULL,
+    changes             TEXT,
+    timestamp           TIMESTAMP       NOT NULL,
+    remarks             TEXT,
+    ip_address          VARCHAR(45),
+
+    -- 아카이브 정보
+    archived_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- 제약조건
+    CONSTRAINT chk_audit_archive_action CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'ASSIGN', 'REVOKE', 'ACTIVATE', 'DEACTIVATE'))
+);
+
+-- 인덱스
+CREATE INDEX idx_audit_logs_archive_tenant ON audit_logs_archive (tenant_id);
+CREATE INDEX idx_audit_logs_archive_timestamp ON audit_logs_archive (timestamp DESC);
+CREATE INDEX idx_audit_logs_archive_resource ON audit_logs_archive (resource_type, resource_id);
+CREATE INDEX idx_audit_logs_archive_operator ON audit_logs_archive (operator_id);
+
+-- 코멘트
+COMMENT ON TABLE audit_logs_archive IS '감사 로그 아카이브 - 6개월 이상 경과한 로그';
+COMMENT ON COLUMN audit_logs_archive.archived_at IS '아카이브 일시';
+```
+
+### 6.3 아카이빙 배치 작업
+
+```sql
+-- 6개월 이상 오래된 감사 로그를 아카이브로 이동
+-- 스프링 배치에서 실행 (매월 1일 오전 3시)
+INSERT INTO audit_logs_archive (
+    audit_id, tenant_id, action, resource_type, resource_id,
+    operator_id, changes, timestamp, remarks, ip_address, archived_at
+)
+SELECT
+    audit_id, tenant_id, action, resource_type, resource_id,
+    operator_id, changes, timestamp, remarks, ip_address, CURRENT_TIMESTAMP
+FROM audit_logs
+WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '6 months';
+
+-- 이동 완료 후 삭제
+DELETE FROM audit_logs
+WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '6 months';
+```
+
+### 6.4 감사 로그 조회 예시
+
+```sql
+-- 특정 역할의 변경 이력 조회
+SELECT
+    audit_id,
+    action,
+    operator_id,
+    changes,
+    timestamp,
+    remarks
+FROM audit_logs
+WHERE tenant_id = 'tenant-001'
+  AND resource_type = 'ROLE'
+  AND resource_id = 'role-uuid-here'
+ORDER BY timestamp DESC;
+
+-- 특정 사용자의 모든 작업 이력
+SELECT
+    audit_id,
+    action,
+    resource_type,
+    resource_id,
+    timestamp
+FROM audit_logs
+WHERE tenant_id = 'tenant-001'
+  AND operator_id = 'operator-uuid'
+ORDER BY timestamp DESC
+LIMIT 100;
+
+-- 특정 기간 동안의 권한 변경 통계
+SELECT
+    action,
+    resource_type,
+    COUNT(*) as count
+FROM audit_logs
+WHERE tenant_id = 'tenant-001'
+  AND timestamp BETWEEN '2026-01-01' AND '2026-01-31'
+  AND resource_type IN ('ROLE', 'PERMISSION', 'AGENT_ROLE')
+GROUP BY action, resource_type
+ORDER BY count DESC;
+```
+
+---
+
+## 7. 초기 데이터 (Seed Data)
 
 ### 6.1 기본 역할
 
@@ -506,7 +650,7 @@ AND p.code IN ('callback:create', 'callback:manage');
 
 ---
 
-## 7. 테이블 요약
+## 8. 테이블 요약
 
 | 모듈 | 테이블명 | 설명 | 주요 관계 |
 |------|----------|------|----------|
@@ -516,10 +660,12 @@ AND p.code IN ('callback:create', 'callback:manage');
 | RBAC | rbac_roles | 역할 | - |
 | RBAC | rbac_permissions | 권한 | - |
 | RBAC | rbac_role_permissions | 역할-권한 매핑 | FK → rbac_roles, rbac_permissions |
+| Audit | audit_logs | 감사 로그 | 독립 (FK 없음) |
+| Audit | audit_logs_archive | 감사 로그 아카이브 | 독립 (FK 없음) |
 
 ---
 
-## 8. 마이그레이션 순서
+## 9. 마이그레이션 순서
 
 ```
 1. rbac_permissions     (기초 데이터)
@@ -528,13 +674,15 @@ AND p.code IN ('callback:create', 'callback:manage');
 4. org_departments      (조직 구조)
 5. user_agents          (상담사)
 6. user_agent_roles     (상담사-역할 매핑)
+7. audit_logs           (감사 로그 - FK 의존성 없음, 어느 시점에나 생성 가능)
+8. audit_logs_archive   (감사 로그 아카이브)
 ```
 
 ---
 
-## 9. 성능 고려사항
+## 10. 성능 고려사항
 
-### 9.1 인덱스 전략
+### 10.1 인덱스 전략
 
 | 테이블 | 인덱스 | 용도 |
 |--------|--------|------|
@@ -542,16 +690,19 @@ AND p.code IN ('callback:create', 'callback:manage');
 | user_agents | (tenant_id, department_id) | 부서별 상담사 조회 |
 | user_agents | (tenant_id, status) | 상태별 조회 |
 | org_departments | (tenant_id, parent_id) | 하위 부서 조회 |
+| audit_logs | (tenant_id) | 테넌트별 감사 로그 조회 |
+| audit_logs | (timestamp DESC) | 시간 역순 조회 (최신 이력 우선) |
+| audit_logs | (resource_type, resource_id) | 특정 리소스 이력 조회 |
 
-### 9.2 재귀 쿼리 최적화
+### 10.2 재귀 쿼리 최적화
 
 ```sql
 -- org_departments에 대한 재귀 쿼리용 인덱스
 CREATE INDEX idx_org_depts_tree ON org_departments (tenant_id, dept_id, parent_id);
 ```
 
-### 9.3 Soft Delete 조회
 
+### 10.3 Soft Delete 조회
 ```sql
 -- 퇴사자 제외 조회 (기본)
 SELECT * FROM user_agents
@@ -563,11 +714,25 @@ WHERE scheduled_delete_at <= CURRENT_TIMESTAMP
 AND scheduled_delete_at IS NOT NULL;
 ```
 
+### 10.4 감사 로그 파티셔닝 (선택)
+
+```sql
+-- 대용량 환경에서 월별 파티셔닝 고려
+-- PostgreSQL 선언적 파티셔닝 (11+)
+CREATE TABLE audit_logs_partitioned (
+    -- 컬럼 정의 동일
+) PARTITION BY RANGE (timestamp);
+
+-- 월별 파티션 생성 예시
+CREATE TABLE audit_logs_2026_01 PARTITION OF audit_logs_partitioned
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+```
+
 ---
 
-## 10. 제약조건 요약
+## 11. 제약조건 요약
 
-### 10.1 Unique 제약
+### 11.1 Unique 제약
 
 | 테이블 | 컬럼 | 설명 |
 |--------|------|------|
@@ -576,7 +741,7 @@ AND scheduled_delete_at IS NOT NULL;
 | rbac_roles | name | 역할명 유일 |
 | rbac_permissions | code | 권한코드 유일 |
 
-### 10.2 Check 제약
+### 11.2 Check 제약
 
 | 테이블 | 컬럼 | 유효값 |
 |--------|------|--------|
@@ -586,7 +751,7 @@ AND scheduled_delete_at IS NOT NULL;
 | rbac_roles | type | POSITION, CHANNEL |
 | rbac_roles | data_scope | ADMIN, TEAM_LEAD, MEMBER (NULL 가능) |
 
-### 10.3 Foreign Key 제약
+### 11.3 Foreign Key 제약
 
 | 테이블 | 컬럼 | 참조 | ON DELETE |
 |--------|------|------|-----------|
@@ -599,5 +764,6 @@ AND scheduled_delete_at IS NOT NULL;
 
 ---
 
-*문서 버전: 1.0*
-*최종 수정: 2026-01-14*
+*문서 버전: 2.0*  
+*최종 수정: 2026-01-22*  
+*변경 사항: 감사 로그(Audit) 섹션 추가 (audit_logs, audit_logs_archive)*
