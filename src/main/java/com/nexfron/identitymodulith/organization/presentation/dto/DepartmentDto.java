@@ -238,4 +238,76 @@ public class DepartmentDto {
         )
         private Long descendantDeptCount;
     }
+
+    /**
+     * 부서별 사용자 목록 DTO
+     */
+    @Getter
+    @Builder
+    @Schema(description = "부서별 사용자 목록")
+    public static class DepartmentMembers {
+
+        @Schema(
+                description = "부서 ID",
+                example = "550e8400-e29b-41d4-a716-446655440000"
+        )
+        private String deptId;
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
+        private String deptName;
+
+        @Schema(
+                description = "하위 부서 포함 여부",
+                example = "true"
+        )
+        private Boolean includeSubDepartments;
+
+        @Schema(
+                description = "전체 사용자 수",
+                example = "15"
+        )
+        private Integer totalCount;
+
+        @Schema(
+                description = "활성 사용자 수",
+                example = "12"
+        )
+        private Long activeCount;
+
+        @Schema(
+                description = "퇴직 사용자 수",
+                example = "3"
+        )
+        private Long retiredCount;
+
+        @Schema(description = "사용자 목록")
+        private List<MemberInfo> members;
+    }
+
+    /**
+     * 부서 소속 사용자 정보 DTO
+     */
+    @Schema(description = "부서 소속 사용자 정보")
+    public record MemberInfo(
+            @Schema(description = "사용자 ID", example = "user-001")
+            String userId,
+
+            @Schema(description = "로그인 ID", example = "john.doe")
+            String loginId,
+
+            @Schema(description = "사용자명", example = "홍길동")
+            String name,
+
+            @Schema(description = "소속 부서 ID", example = "dept-123")
+            String deptId,
+
+            @Schema(description = "직급/직책", example = "대리")
+            String jobTitle,
+
+            @Schema(description = "상태", example = "ACTIVE")
+            String status
+    ) {}
 }

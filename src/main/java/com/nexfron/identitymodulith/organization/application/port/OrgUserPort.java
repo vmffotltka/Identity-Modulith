@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.organization.application.port;
 
+import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import java.util.List;
 import java.util.UUID;
 
@@ -98,4 +99,16 @@ public interface OrgUserPort {
      * - 부서 통계 API
      */
     long countActiveEmployeesByDepartment(String tenantId, String deptId);
+
+    /**
+     * 특정 부서에 속한 사용자 목록 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 부서 소속 사용자 정보 목록
+     *
+     * 사용처:
+     * - 부서별 사용자 목록 조회 API
+     */
+    List<DepartmentDto.MemberInfo> getUsersByDepartment(String tenantId, String deptId);
 }

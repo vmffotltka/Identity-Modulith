@@ -145,6 +145,28 @@ public class AgentOrgUserAdapter implements OrgUserPort {
     }
 
     /**
+     * 특정 부서에 속한 사용자 목록 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID (UUID 문자열)
+     * @return 부서 소속 사용자 정보 목록
+     */
+    @Override
+    public List<com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto.MemberInfo> getUsersByDepartment(String tenantId, String deptId) {
+        // UserModuleApi를 통해 해당 부서의 모든 상담사 조회
+        return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).stream()
+                .map(agent -> new com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto.MemberInfo(
+                        agent.getId().toString(),
+                        "user_" + agent.getId().toString().substring(0, 8),  // loginId (임시)
+                        "User " + agent.getId().toString().substring(0, 8),  // name (임시)
+                        agent.getOrganizationId(),
+                        "",  // jobTitle (User 모듈에서 제공 필요)
+                        agent.isActive() ? "ACTIVE" : "RETIRED"
+                ))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
      * AgentExternalInfo → OrgUserView 변환
      *
      * Organization 모듈이 필요로 하는 정보만 추려서 전달

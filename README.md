@@ -34,13 +34,14 @@ http://localhost:8080/swagger-ui.html
 # - POST /api/rbac/roles/{roleId}/permissions/{permissionId} → 역할에 권한 할당
 ```
 
-## 📋 최신 업데이트 (v2.0.0 - 2026-01-21)
+## 📋 최신 업데이트 (v2.0.1 - 2026-01-22)
 
-- ✅ **PermissionGroup 기능 제거** - 프로젝트 간소화
+- ✅ **사용자-역할 할당 API 추가** - `POST/DELETE/GET /api/rbac/agents/{agentId}/roles/{roleName}`
 - ✅ **단일 마이그레이션 파일** - `V1_0_0__Complete_Init.sql` 하나로 통합
 - ✅ **표준 데이터 자동 삽입** - 35권한 + 8역할 + 16사용자
 - ✅ **깨끗한 테이블 구조** - 8개 핵심 테이블만 유지
-
+- ✅ **감사 로그 자동 기록** - 모든 RBAC 변경사항 추적
+- ✅ **캐싱 전략 구현** - 권한 조회 성능 최적화
 ## 기술 스택
 
 - Java 21
@@ -559,7 +560,7 @@ com.nexfron.identitymodulith.rbac/
 #### 사용자-역할 할당
 | Method | Endpoint | 설명 | 권한 |
 |--------|----------|------|------|
-| `POST` | `/api/rbac/agents/{agentId}/roles` | 사용자에게 역할 할당 | `rbac:manage` |
+| `POST` | `/api/rbac/agents/{agentId}/roles/{roleName}` | 사용자에게 역할 할당 | `rbac:manage` |
 | `DELETE` | `/api/rbac/agents/{agentId}/roles/{roleName}` | 사용자에게서 역할 회수 | `rbac:manage` |
 | `GET` | `/api/rbac/agents/{agentId}/roles` | 사용자의 역할 조회 | `rbac:view` |
 | `GET` | `/api/rbac/agents/{agentId}/permissions` | 사용자의 권한 조회 | `rbac:view` |

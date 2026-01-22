@@ -53,7 +53,20 @@ public interface RbacManagementService {
     void assignRoleToAgent(String agentId, String roleName);
     void revokeRoleFromAgent(String agentId, String roleName);
     Set<String> getRolesByAgent(String agentId);
+    Set<String> getEffectivePermissions(String agentId);  // 신규: 사용자의 실제 권한 조회
     int getAgentCountByRole(String roleName);
+
+    // ============================================================
+    // 권한-역할 역검색
+    // ============================================================
+
+    Set<String> getRolesWithPermission(String permissionCode);  // 신규: 권한을 가진 역할 조회
+
+    // ============================================================
+    // 역할 복사
+    // ============================================================
+
+    RoleDto cloneRole(String sourceRoleName, CloneRoleRequest request);  // 신규: 역할 복사
 
 
     // ============================================================
@@ -117,6 +130,20 @@ public interface RbacManagementService {
             String code,
 
             @Size(max = RbacConstants.PERMISSION_DESCRIPTION_MAX_LENGTH, message = "설명은 500자 이하여야 합니다")
+            String description
+    ) {}
+
+
+    record CloneRoleRequest(
+            @NotBlank(message = "새 역할명은 필수입니다")
+            @Size(
+                min = RbacConstants.ROLE_NAME_MIN_LENGTH,
+                max = RbacConstants.ROLE_NAME_MAX_LENGTH,
+                message = "역할명은 2-64자 사이여야 합니다"
+            )
+            String newRoleName,
+
+            @Size(max = RbacConstants.ROLE_DESCRIPTION_MAX_LENGTH, message = "설명은 255자 이하여야 합니다")
             String description
     ) {}
 

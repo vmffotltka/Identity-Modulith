@@ -10,7 +10,9 @@ Identity Modulith REST API 명세서
 
 | 항목 | 값 |
 |------|-----|
-| Base URL | `/api/v1` |
+| Base URL (User) | `/api/v1` |
+| Base URL (Organization) | `/api/org` |
+| Base URL (RBAC) | `/api/rbac` |
 | Content-Type | `application/json` |
 | 인증 | Bearer Token (JWT) |
 
@@ -1051,22 +1053,44 @@ GET /api/v1/permissions/{code}
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/api/v1/roles` | 역할 목록 조회 |
-| GET | `/api/v1/roles/{name}` | 역할 상세 조회 |
-| POST | `/api/v1/roles` | 역할 생성 |
-| PATCH | `/api/v1/roles/{name}` | 역할 수정 |
-| DELETE | `/api/v1/roles/{name}` | 역할 삭제 |
-| POST | `/api/v1/roles/{name}/permissions` | 권한 할당 |
-| DELETE | `/api/v1/roles/{name}/permissions/{code}` | 권한 제거 |
+| GET | `/api/rbac/roles` | 역할 목록 조회 |
+| GET | `/api/rbac/roles/{name}` | 역할 상세 조회 |
+| POST | `/api/rbac/roles` | 역할 생성 |
+| PATCH | `/api/rbac/roles/{name}` | 역할 수정 |
+| DELETE | `/api/rbac/roles/{name}` | 역할 삭제 |
+| POST | `/api/rbac/roles/{name}/permissions/{code}` | 역할에 권한 할당 |
+| DELETE | `/api/rbac/roles/{name}/permissions/{code}` | 역할에서 권한 제거 |
 
 ### 7.4 Permission API
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/api/v1/permissions` | 권한 목록 조회 |
-| GET | `/api/v1/permissions/{code}` | 권한 상세 조회 |
+| GET | `/api/rbac/permissions` | 권한 목록 조회 |
+| POST | `/api/rbac/permissions` | 권한 생성 |
+
+### 7.5 Agent-Role API
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/rbac/agents/{id}/roles` | 사용자 역할 목록 조회 |
+| GET | `/api/rbac/agents/{id}/permissions` | 사용자 실제 권한 조회 |
+| POST | `/api/rbac/agents/{id}/roles/{name}` | 사용자에게 역할 할당 |
+| DELETE | `/api/rbac/agents/{id}/roles/{name}` | 사용자에게서 역할 회수 |
+
+### 7.6 Organization API
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/org/departments` | 전체 조직도 조회 |
+| GET | `/api/org/departments/{id}/statistics` | 부서 통계 조회 |
+| POST | `/api/org/departments` | 부서 생성 |
+| PATCH | `/api/org/departments/{id}` | 부서 수정 |
+| DELETE | `/api/org/departments/{id}` | 부서 삭제 |
+| PUT | `/api/org/departments/{id}/move` | 부서 이동 |
 
 ---
 
-*문서 버전: 1.0*
-*최종 수정: 2026-01-14*
+*문서 버전: 2.0.1*  
+*최종 수정: 2026-01-22*  
+*실제 구현된 API 기준으로 업데이트*
+

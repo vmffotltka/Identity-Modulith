@@ -52,6 +52,14 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
     List<RolePermissionJpaEntity> findByRoleId(String roleId);
 
     /**
+     * 특정 권한을 가진 모든 역할-권한 매핑 엔티티 조회
+     *
+     * @param permissionId 권한 ID
+     * @return 역할-권한 매핑 엔티티 리스트
+     */
+    List<RolePermissionJpaEntity> findByPermissionId(String permissionId);
+
+    /**
      * 주어진 역할 ID들에 대한 모든 권한을 조회합니다.
      *
      * 사용 시나리오:

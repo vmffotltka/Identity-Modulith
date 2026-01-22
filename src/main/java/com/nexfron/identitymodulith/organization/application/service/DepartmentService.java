@@ -469,5 +469,71 @@ public class DepartmentService {
                 .descendantDeptCount(descendantDeptCount)
                 .build();
     }
+
+    /**
+     * 부서별 사용자 목록 조회
+     * - 하위 부서 포함 여부 선택 가능
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId 부서 ID
+     * @param includeSubDepartments 하위 부서 포함 여부
+     * @return 부서 소속 사용자 정보
+     */
+    @Transactional(readOnly = true)
+    public DepartmentDto.DepartmentMembers getDepartmentMembers(
+            String tenantId, 
+            String deptId, 
+            boolean includeSubDepartments) {
+        
+        // 부서 존재 확인
+        Department department = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
+                .orElseThrow(() -> new OrganizationException(
+                        OrganizationErrorCode.DEPARTMENT_NOT_FOUND
+                ));
+
+        // 대상 부서 ID 목록 결정
+        Set<String> targetDeptIds;
+        if (includeSubDepartments) {
+            // 현재 부서 + 모든 하위 부서
+            String pathPrefix = department.getOrgPath();
+            targetDeptIds = departmentRepository
+                    .findByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix).stream()
+                    .map(Department::getDeptId)
+                    .collect(Collectors.toSet());
+        } else {
+            // 현재 부서만
+            targetDeptIds = Set.of(deptId);
+        }
+
+        // 부서별 사용자 조회 (OrgUserPort 사용)
+        List<DepartmentDto.MemberInfo> members = new ArrayList<>();
+        long activeCount = 0;
+        long retiredCount = 0;
+
+        for (String targetDeptId : targetDeptIds) {
+            List<DepartmentDto.MemberInfo> deptMembers = 
+                orgUserPort.getUsersByDepartment(tenantId, targetDeptId);
+            
+            members.addAll(deptMembers);
+            
+            for (DepartmentDto.MemberInfo member : deptMembers) {
+                if ("ACTIVE".equals(member.status())) {
+                    activeCount++;
+                } else if ("RETIRED".equals(member.status())) {
+                    retiredCount++;
+                }
+            }
+        }
+
+        return DepartmentDto.DepartmentMembers.builder()
+                .deptId(deptId)
+                .deptName(department.getName())
+                .includeSubDepartments(includeSubDepartments)
+                .totalCount(members.size())
+                .activeCount(activeCount)
+                .retiredCount(retiredCount)
+                .members(members)
+                .build();
+    }
 }
 

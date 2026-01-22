@@ -92,12 +92,9 @@ public class DepartmentController {
     })
     @PostMapping
     public ResponseEntity<DepartmentDto.Response> createDepartment(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Valid @RequestBody DepartmentDto.CreateRequest request) {
-        // tenantId 없으면 SecurityContext에서 추출 (SecurityContext 통합 시)
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
+        // TenantContextHolder에서 자동 추출
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
 
         DepartmentDto.Response response = departmentService.createDepartment(
                 tenantId,
@@ -130,13 +127,10 @@ public class DepartmentController {
     })
     @PatchMapping("/{deptId}")
     public ResponseEntity<DepartmentDto.Response> updateDepartment(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId,
             @Valid @RequestBody DepartmentDto.UpdateRequest request) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
 
         DepartmentDto.Response response = departmentService.updateDepartment(
                 tenantId,
@@ -197,12 +191,8 @@ public class DepartmentController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (관리자만)")
     })
     @GetMapping
-    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTree(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTree() {
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         List<DepartmentDto.Response> tree = departmentService.getDepartmentTree(tenantId);
         return ResponseEntity.ok(tree);
     }
@@ -225,13 +215,9 @@ public class DepartmentController {
     })
     @GetMapping("/search")
     public ResponseEntity<List<DepartmentDto.Response>> searchDepartments(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "검색 키워드", example = "개발", required = true)
             @RequestParam String keyword) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         List<DepartmentDto.Response> result = departmentService.searchDepartments(tenantId, keyword);
         return ResponseEntity.ok(result);
     }
@@ -243,7 +229,6 @@ public class DepartmentController {
      * - depth=0: 최상위(루트) 부서만
      * - depth=1: 1단계 하위 부서만
      *
-     * @param tenantId 테넌트 ID (헤더)
      * @param depth    조회할 깊이 (쿼리 파라미터)
      * @return 해당 깊이의 부서 목록
      */
@@ -254,13 +239,9 @@ public class DepartmentController {
     })
     @GetMapping("/by-depth")
     public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByDepth(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "부서 깊이", example = "0", required = true)
             @RequestParam int depth) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         List<DepartmentDto.Response> result = departmentService.getDepartmentsByDepth(tenantId, depth);
         return ResponseEntity.ok(result);
     }
@@ -272,7 +253,6 @@ public class DepartmentController {
      * - type=TEAM: 팀 단위만
      * - type=DIVISION: 사업부만
      *
-     * @param tenantId 테넌트 ID (헤더)
      * @param type     부서 타입 (쿼리 파라미터)
      * @return 해당 타입의 부서 목록
      */
@@ -283,13 +263,9 @@ public class DepartmentController {
     })
     @GetMapping("/by-type")
     public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByType(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "부서 타입", example = "TEAM", required = true)
             @RequestParam String type) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         List<DepartmentDto.Response> result = departmentService.getDepartmentsByType(tenantId, type);
         return ResponseEntity.ok(result);
     }
@@ -307,22 +283,46 @@ public class DepartmentController {
      * @param deptId   조회할 부서 ID (UUID)
      * @return 부서 통계 정보
      */
-    @Operation(summary = "부서 통계 조회", description = "부서의 직원 수, 하위 부서 수 등 통계 정보를 조회합니다.")
+    @Operation(summary = "부서 통계 조회", description = "특정 부서의 직원 수 및 하위 부서 수 통계를 조회합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
     })
     @GetMapping("/{deptId}/statistics")
     public ResponseEntity<DepartmentDto.Statistics> getDepartmentStatistics(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         DepartmentDto.Statistics statistics = departmentService.getDepartmentStatistics(tenantId, deptId);
         return ResponseEntity.ok(statistics);
+    }
+
+    /**
+     * 부서별 사용자 목록 조회
+     *
+     * <h3>설명:</h3>
+     * 특정 부서에 소속된 사용자 목록을 조회합니다.
+     * 하위 부서 포함 여부를 선택할 수 있습니다.
+     *
+     * @param deptId   조회할 부서 ID (UUID)
+     * @param includeSubDepartments 하위 부서 포함 여부
+     * @return 부서별 사용자 목록
+     */
+    @Operation(summary = "부서별 사용자 목록 조회", description = "특정 부서에 소속된 사용자 목록을 조회합니다. 하위 부서 포함 여부를 선택할 수 있습니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
+    })
+    @GetMapping("/{deptId}/members")
+    public ResponseEntity<DepartmentDto.DepartmentMembers> getDepartmentMembers(
+            @Parameter(description = "부서 ID (UUID)", required = true)
+            @PathVariable String deptId,
+            @Parameter(description = "하위 부서 포함 여부", example = "true")
+            @RequestParam(defaultValue = "false") boolean includeSubDepartments) {
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        DepartmentDto.DepartmentMembers members =
+                departmentService.getDepartmentMembers(tenantId, deptId, includeSubDepartments);
+        return ResponseEntity.ok(members);
     }
 
     // ============================================================
@@ -343,7 +343,6 @@ public class DepartmentController {
      * - TEAM_LEAD: 자신 부서 + 하위 부서들
      * - MEMBER: 자신 부서만
      *
-     * @param tenantId 테넌트 ID
      * @return 접근 가능한 부서들의 조직도 (HTTP 200)
      *
      * @apiNote
@@ -365,13 +364,9 @@ public class DepartmentController {
     })
     @GetMapping("/scoped")
     public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTreeWithinScope(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "사용자 ID (UUID)", required = true)
             @RequestHeader(value = "X-User-Id") String userIdStr) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
         List<DepartmentDto.Response> tree = departmentService.getDepartmentTreeWithinScope(tenantId, userId);
         return ResponseEntity.ok(tree);
@@ -423,16 +418,12 @@ public class DepartmentController {
     })
     @PutMapping("/{deptId}/move")
     public ResponseEntity<Void> moveDepartment(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "사용자 ID (UUID)", required = true)
             @RequestHeader(value = "X-User-Id") String userIdStr,
             @Parameter(description = "이동할 부서 ID (UUID)", required = true)
             @PathVariable String deptId,
             @RequestBody DepartmentDto.MoveRequest request) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
         departmentService.moveDepartment(tenantId, userId, deptId, request.getNewParentId());
         return ResponseEntity.noContent().build();
@@ -454,7 +445,6 @@ public class DepartmentController {
      * - 하위 부서가 있으면 먼저 이동하거나 삭제해야 함
      * - 소속 직원이 있으면 먼저 다른 부서로 이동시켜야 함
      *
-     * @param tenantId 테넌트 ID
      * @param userIdStr 사용자 ID
      * @param deptId 삭제할 부서 ID
      * @return HTTP 204 No Content
@@ -475,15 +465,11 @@ public class DepartmentController {
     })
     @DeleteMapping("/{deptId}")
     public ResponseEntity<Void> deleteDepartment(
-            @Parameter(hidden = true) @RequestHeader(value = "X-Tenant-Id", required = false) String tenantId,
             @Parameter(description = "사용자 ID (UUID)", required = true)
             @RequestHeader(value = "X-User-Id") String userIdStr,
             @Parameter(description = "삭제할 부서 ID (UUID)", required = true)
             @PathVariable String deptId) {
-        if (tenantId == null || tenantId.isEmpty()) {
-            tenantId = "default-tenant";
-        }
-
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
         departmentService.deleteDepartment(tenantId, userId, deptId);
         return ResponseEntity.noContent().build();

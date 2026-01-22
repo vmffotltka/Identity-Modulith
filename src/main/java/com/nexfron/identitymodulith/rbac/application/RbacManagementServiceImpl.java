@@ -650,6 +650,145 @@ public class RbacManagementServiceImpl implements RbacManagementService {
     }
 
 
+    /**
+     * 사용자의 실제 권한 조회 (역할 → 권한 변환)
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Set<String> getEffectivePermissions(String agentId) {
+        String tenantId = getTenantId();
+        log.debug("[RBAC] 사용자 실제 권한 조회 - tenantId={}, agentId={}", tenantId, agentId);
+
+        // 1. 사용자의 모든 역할 조회
+        List<AgentRoleJpaEntity> agentRoles = agentRoleRepository.findByAgentId(agentId);
+
+        if (agentRoles.isEmpty()) {
+            log.debug("[RBAC] 사용자에게 할당된 역할 없음 - agentId={}", agentId);
+            return Collections.emptySet();
+        }
+
+        // 2. 각 역할의 권한 조회
+        Set<String> permissionCodes = new HashSet<>();
+        for (AgentRoleJpaEntity agentRole : agentRoles) {
+            List<RolePermissionJpaEntity> rolePermissions =
+                rolePermissionRepository.findByRoleId(agentRole.getRoleId());
+
+            for (RolePermissionJpaEntity rp : rolePermissions) {
+                PermissionJpaEntity permission = permissionRepository.findById(rp.getPermissionId())
+                        .orElse(null);
+                if (permission != null) {
+                    permissionCodes.add(permission.getCode());
+                }
+            }
+        }
+
+        log.debug("[RBAC] 사용자 실제 권한 조회 완료 - agentId={}, permissionCount={}",
+                  agentId, permissionCodes.size());
+        return permissionCodes;
+    }
+
+    /**
+     * 특정 권한을 가진 역할 조회 (역검색)
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Set<String> getRolesWithPermission(String permissionCode) {
+        String tenantId = getTenantId();
+        log.debug("[RBAC] 권한을 가진 역할 조회 - tenantId={}, permissionCode={}", tenantId, permissionCode);
+
+        // 1. 권한 존재 확인
+        PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, permissionCode)
+                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
+
+        // 2. 해당 권한을 가진 역할-권한 매핑 조회
+        List<RolePermissionJpaEntity> rolePermissions =
+            rolePermissionRepository.findByPermissionId(permission.getPermissionId());
+
+        // 3. 역할명 추출
+        Set<String> roleNames = new HashSet<>();
+        for (RolePermissionJpaEntity rp : rolePermissions) {
+            RoleJpaEntity role = roleRepository.findById(rp.getRoleId()).orElse(null);
+            if (role != null && role.getTenantId().equals(tenantId)) {
+                roleNames.add(role.getName());
+            }
+        }
+
+        log.debug("[RBAC] 권한을 가진 역할 조회 완료 - permissionCode={}, roleCount={}",
+                  permissionCode, roleNames.size());
+        return roleNames;
+    }
+
+    /**
+     * 역할 복사 (권한 포함)
+     */
+    @Override
+    @Transactional
+    @CacheEvict(value = {"rbacRoles", "rbacPermissions", "userPermissions"}, allEntries = true)
+    public RoleDto cloneRole(String sourceRoleName, CloneRoleRequest request) {
+        String tenantId = getTenantId();
+        log.info("[RBAC] 역할 복사 - tenantId={}, source={}, target={}",
+                 tenantId, sourceRoleName, request.newRoleName());
+
+        // 1. 원본 역할 존재 확인
+        RoleJpaEntity sourceRole = roleRepository.findByTenantIdAndName(tenantId, sourceRoleName)
+                .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
+
+        // 2. 새 역할명 중복 확인
+        if (roleRepository.existsByTenantIdAndName(tenantId, request.newRoleName())) {
+            throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
+        }
+
+        // 3. 새 역할 생성
+        RoleJpaEntity newRole = RoleJpaEntity.builder()
+                .roleId(UUID.randomUUID().toString())
+                .tenantId(tenantId)
+                .name(request.newRoleName())
+                .type(sourceRole.getType())
+                .description(request.description() != null ? request.description() :
+                            "Cloned from " + sourceRoleName)
+                .isActive(sourceRole.getIsActive())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        roleRepository.save(newRole);
+
+        // 4. 원본 역할의 권한 복사
+        List<RolePermissionJpaEntity> sourcePermissions =
+            rolePermissionRepository.findByRoleId(sourceRole.getRoleId());
+
+        int copiedPermissionCount = 0;
+        for (RolePermissionJpaEntity sourceRP : sourcePermissions) {
+            RolePermissionJpaEntity newRP = RolePermissionJpaEntity.builder()
+                    .roleId(newRole.getRoleId())
+                    .permissionId(sourceRP.getPermissionId())
+                    .assignedAt(LocalDateTime.now())
+                    .build();
+
+            rolePermissionRepository.save(newRP);
+            copiedPermissionCount++;
+        }
+
+        // 5. 감사 로그 기록
+        String operatorId = getCurrentUserId();
+        auditLogService.recordRoleCreation(
+            tenantId,
+            request.newRoleName(),
+            newRole.getType(), // type은 이미 String
+            operatorId
+        );
+
+        log.info("[RBAC] 역할 복사 완료 - newRole={}, copiedPermissions={}",
+                 request.newRoleName(), copiedPermissionCount);
+
+        return new RoleDto(
+                newRole.getName(),
+                newRole.getType(),
+                newRole.getDescription(),
+                newRole.getIsActive()
+        );
+    }
+
+
     // ============================================================
     // 권한 변경 이력 조회 (Audit Log) 구현
     // ============================================================
