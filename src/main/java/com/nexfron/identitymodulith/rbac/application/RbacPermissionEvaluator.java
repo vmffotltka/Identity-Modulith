@@ -1,5 +1,7 @@
 package com.nexfron.identitymodulith.rbac.application;
 
+import com.nexfron.identitymodulith.common.security.AuthPrincipal;
+import com.nexfron.identitymodulith.common.security.SimpleAuthPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -75,11 +77,11 @@ public class RbacPermissionEvaluator {
      *
      * @apiNote
      *  - 인증 필터(@Component 또는 SecurityConfig)에서 Authentication 객체의 Principal에
-     *    AuthPrincipal(tenantId, agentId)을 설정해야 합니다.
+     *    SimpleAuthPrincipal(tenantId, agentId)을 설정해야 합니다.
      *  - 예: JWT 토큰 파싱, Keycloak 헤더 필터 등에서 Principal 주입
      *
      * 예외 안내:
-     *  - ClassCastException: Principal이 AuthPrincipal이 아닐 경우 발생
+     *  - ClassCastException: Principal이 SimpleAuthPrincipal이 아닐 경우 발생
      *    (인증 필터 설정을 확인하세요)
      *  - NullPointerException: tenantId/agentId 중 하나가 null일 경우 발생
      *    (Principal 설정 검증 필요)
@@ -95,7 +97,7 @@ public class RbacPermissionEvaluator {
 
         try {
             // Principal에서 tenantId와 agentId 추출
-            var principal = (AuthPrincipal) authentication.getPrincipal();
+            var principal = (SimpleAuthPrincipal) authentication.getPrincipal();
             UUID agentId = principal.agentId();
             String tenantId = principal.tenantId();
 
@@ -128,8 +130,8 @@ public class RbacPermissionEvaluator {
 
             return hasPermission;
         } catch (ClassCastException e) {
-            // Principal이 AuthPrincipal이 아닌 경우
-            log.error("[RBAC 권한 검증] Principal 타입 오류: 예상=AuthPrincipal, 실제={}, 권한={}",
+            // Principal이 SimpleAuthPrincipal이 아닌 경우
+            log.error("[RBAC 권한 검증] Principal 타입 오류: 예상=SimpleAuthPrincipal, 실제={}, 권한={}",
                     authentication.getPrincipal().getClass().getSimpleName(), permissionCode, e);
             return false;
         } catch (NullPointerException e) {
@@ -142,36 +144,4 @@ public class RbacPermissionEvaluator {
             return false;
         }
     }
-
-    /**
-     * 인증 Principal 정보 (Record)
-     *
-     * Spring Security의 Authentication 객체에 포함되는 인가(Authorization) 정보입니다.
-     *
-     * 역할:
-     * - 현재 로그인한 사용자의 테넌트 ID와 에이전트 ID를 보유
-     * - 권한 검사(hasPermission) 시 사용자 식별 및 테넌트 필터링 용도
-     *
-     * 생성 방법:
-     * 인증 필터에서 JWT/OAuth 토큰을 파싱한 후 Principal 설정:
-     * {@code
-     * // 인증 필터 예시
-     * UsernamePasswordAuthenticationToken token =
-     *     new UsernamePasswordAuthenticationToken(
-     *         new AuthPrincipal(tenantId, UUID.fromString(agentId)),
-     *         null,
-     *         authorities  // GrantedAuthority 목록
-     *     );
-     * SecurityContextHolder.getContext().setAuthentication(token);
-     * }
-     *
-     * @param tenantId 테넌트 ID (조직/회사 식별, 멀티테넌시 필터 용도)
-     *                 예: "tenant-001", "acme-corp"
-     *                 길이: 1~50자, 영문자/숫자/하이픈 만 사용
-     *
-     * @param agentId 에이전트(사용자) ID (UUID 형식)
-     *                예: UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
-     *                또는 문자열로 변환 후 저장: "550e8400-e29b-41d4-a716-446655440000"
-     */
-    public record AuthPrincipal(String tenantId, UUID agentId) {}
 }

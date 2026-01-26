@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import com.nexfron.identitymodulith.organization.exception.InvalidDepartmentMoveException;
+import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
 import java.time.LocalDateTime;
 
 /**
@@ -277,6 +278,15 @@ public class Department {
 
         this.parent = newParent;
         this.depth = (newParent == null) ? 0 : newParent.getDepth() + 1;
+
+        // 조직 깊이 제한 검증
+        if (this.depth > OrganizationConstants.MAX_ORGANIZATION_DEPTH) {
+            throw new InvalidDepartmentMoveException(
+                    "조직 깊이가 최대 허용치(" + OrganizationConstants.MAX_ORGANIZATION_DEPTH +
+                    ")를 초과합니다. 현재 깊이: " + this.depth
+            );
+        }
+
         updatePath();
     }
 
@@ -348,6 +358,14 @@ public class Department {
             this.orgPath = (this.deptId == null)
                     ? parentPath + TEMP_PATH
                     : parentPath + "/" + this.deptId;
+        }
+
+        // 조직 경로 길이 검증
+        if (this.orgPath.length() > OrganizationConstants.MAX_ORG_PATH_LENGTH) {
+            throw new InvalidDepartmentMoveException(
+                    "조직 경로 길이가 최대 허용치(" + OrganizationConstants.MAX_ORG_PATH_LENGTH +
+                    "자)를 초과합니다. 현재 길이: " + this.orgPath.length()
+            );
         }
     }
 

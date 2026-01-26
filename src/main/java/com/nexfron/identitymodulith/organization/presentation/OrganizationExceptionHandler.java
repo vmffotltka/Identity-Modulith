@@ -3,6 +3,7 @@ package com.nexfron.identitymodulith.organization.presentation;
 import com.nexfron.identitymodulith.organization.exception.OrganizationException;
 import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.exception.BusinessException;
+import com.nexfron.identitymodulith.organization.exception.InvalidDepartmentMoveException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * <ul>
  *   <li>OrganizationException: 조직/부서 관련 비즈니스 로직 예외</li>
  *   <li>EntityNotFoundException: 엔티티(부서) 미존재 예외</li>
+ *   <li>InvalidDepartmentMoveException: 부서 이동 규칙 위반 예외</li>
  *   <li>BusinessException: 일반 비즈니스 로직 예외</li>
  *   <li>Exception: 예상치 못한 기타 예외</li>
  * </ul>
@@ -41,6 +43,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * @see OrganizationException
  * @see EntityNotFoundException
+ * @see InvalidDepartmentMoveException
  * @see BusinessException
  */
 @RestControllerAdvice
@@ -145,6 +148,45 @@ public class OrganizationExceptionHandler {
         // ...existing code...
         ErrorResponse response = ErrorResponse.builder()
                 .code("BUSINESS_ERROR")
+                .message(e.getMessage())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    /**
+     * InvalidDepartmentMoveException 처리 (부서 이동 규칙 위반)
+     *
+     * <h3>발생 시나리오:</h3>
+     * <ul>
+     *   <li>자신의 하위 부서로 이동 시도 (순환 참조)</li>
+     *   <li>조직 깊이 최대치 초과 (MAX_ORGANIZATION_DEPTH)</li>
+     *   <li>조직 경로 길이 초과 (MAX_ORG_PATH_LENGTH)</li>
+     * </ul>
+     *
+     * <h3>예시:</h3>
+     * <pre>
+     * // 순환 참조 시도
+     * 요청: PUT /api/org/departments/parent-dept-id/move
+     * 본문: { "newParentId": "child-dept-id" }
+     * 응답: 400 Bad Request
+     * {
+     *   "code": "INVALID_DEPARTMENT_MOVE",
+     *   "message": "자신의 하위 부서로 이동할 수 없습니다."
+     * }
+     * </pre>
+     *
+     * <h3>처리:</h3>
+     * - HTTP 400 Bad Request 응답
+     * - 도메인 규칙 위반 사유를 명확히 전달
+     *
+     * @param e InvalidDepartmentMoveException 객체
+     * @return HTTP 400 Bad Request + 에러 응답
+     */
+    @ExceptionHandler(InvalidDepartmentMoveException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidDepartmentMoveException(InvalidDepartmentMoveException e) {
+        ErrorResponse response = ErrorResponse.builder()
+                .code("INVALID_DEPARTMENT_MOVE")
                 .message(e.getMessage())
                 .build();
 

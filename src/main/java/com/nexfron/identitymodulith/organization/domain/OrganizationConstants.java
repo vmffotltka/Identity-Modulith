@@ -69,13 +69,6 @@ public final class OrganizationConstants {
      */
     public static final int MAX_ORG_PATH_LENGTH = 500;
 
-    /**
-     * 부서 ID (UUID) 길이
-     * <p>
-     * UUID v4 형식: "550e8400-e29b-41d4-a716-446655440000" (36자)
-     * </p>
-     */
-    public static final int DEPARTMENT_ID_LENGTH = 36;
 
     // ============================================================
     // Private Constructor (유틸리티 클래스 패턴)

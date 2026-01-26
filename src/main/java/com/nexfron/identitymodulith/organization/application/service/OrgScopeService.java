@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
+import com.nexfron.identitymodulith.common.cache.CacheKeyGenerator;
 import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
@@ -44,7 +45,7 @@ public class OrgScopeService {
      */
     @Cacheable(
         value = "accessibleDepts",
-        key = "#tenantId + ':' + #userId",
+        key = "T(com.nexfron.identitymodulith.common.cache.CacheKeyGenerator).accessibleDepartments(#tenantId, #userId.toString())",
         unless = "#result == null || #result.isEmpty()"
     )
     public Set<String> getAccessibleDepartmentIds(String tenantId, UUID userId) {

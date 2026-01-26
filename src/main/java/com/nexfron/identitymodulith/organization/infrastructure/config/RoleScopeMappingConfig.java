@@ -69,6 +69,15 @@ public class RoleScopeMappingConfig {
      *
      * <p>매핑 테이블에 없는 역할은 MEMBER(최소 권한)로 간주합니다.
      *
+     * <h3>사용 예시:</h3>
+     * <pre>
+     * DataScopeLevel level = RoleScopeMappingConfig.getDataScope("ADMIN");
+     * // 결과: DataScopeLevel.ADMIN
+     *
+     * DataScopeLevel level = RoleScopeMappingConfig.getDataScope("UNKNOWN_ROLE");
+     * // 결과: DataScopeLevel.MEMBER (기본값)
+     * </pre>
+     *
      * @param roleName 역할명 (예: "ADMIN", "PHONE_AGENT")
      * @return 데이터 스코프 레벨
      */
@@ -80,32 +89,6 @@ public class RoleScopeMappingConfig {
         // 대소문자 무시하고 매핑
         String normalizedRoleName = roleName.trim().toUpperCase();
         return ROLE_SCOPE_MAP.getOrDefault(normalizedRoleName, DataScopeLevel.MEMBER);
-    }
-
-    /**
-     * 역할명이 매핑 테이블에 등록되어 있는지 확인
-     *
-     * @param roleName 역할명
-     * @return 등록 여부
-     */
-    public static boolean isMappedRole(String roleName) {
-        if (roleName == null || roleName.isBlank()) {
-            return false;
-        }
-        return ROLE_SCOPE_MAP.containsKey(roleName.trim().toUpperCase());
-    }
-
-    /**
-     * 특정 스코프 레벨에 해당하는 모든 역할명 조회
-     *
-     * @param scopeLevel 스코프 레벨
-     * @return 역할명 목록
-     */
-    public static java.util.Set<String> getRolesByScope(DataScopeLevel scopeLevel) {
-        return ROLE_SCOPE_MAP.entrySet().stream()
-                .filter(entry -> entry.getValue() == scopeLevel)
-                .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toSet());
     }
 }
 

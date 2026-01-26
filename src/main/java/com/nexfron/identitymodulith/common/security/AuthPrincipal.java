@@ -9,11 +9,33 @@ package com.nexfron.identitymodulith.common.security;
  *
  * <h2>구현 클래스:</h2>
  * <ul>
- *   <li>JwtAuthenticationToken의 Principal</li>
- *   <li>CustomUserDetails</li>
- *   <li>기타 인증 메커니즘의 Principal</li>
+ *   <li>{@link SimpleAuthPrincipal} - 기본 구현체 (멀티테넌시 지원)</li>
+ *   <li>JwtAuthenticationToken의 Principal (Keycloak 연동 시)</li>
+ *   <li>CustomUserDetails (향후 확장 가능)</li>
  * </ul>
  *
+ * <h2>사용 예시:</h2>
+ * <pre>{@code
+ * // 1. 컨트롤러에서 사용
+ * @GetMapping("/me")
+ * public UserInfo getMyInfo(@AuthenticationPrincipal AuthPrincipal principal) {
+ *     String tenantId = principal.getTenantId();
+ *     String userId = principal.getUserId();
+ *     return userService.getUserInfo(tenantId, userId);
+ * }
+ *
+ * // 2. 인증 필터에서 설정
+ * SimpleAuthPrincipal principal = new SimpleAuthPrincipal(
+ *     "tenant-001",
+ *     UUID.fromString("550e8400-...")
+ * );
+ * UsernamePasswordAuthenticationToken auth =
+ *     new UsernamePasswordAuthenticationToken(principal, null, authorities);
+ * SecurityContextHolder.getContext().setAuthentication(auth);
+ * }</pre>
+ *
+ * @see SimpleAuthPrincipal
+ * @see org.springframework.security.core.Authentication
  * @author Identity System Team
  * @version 1.0
  */
