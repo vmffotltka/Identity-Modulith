@@ -133,6 +133,20 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
     """)
     List<String> findPermissionIdsByRoleIds(@Param("roleIds") Collection<String> roleIds);
 
+    /**
+     * 여러 역할의 권한 ID를 테넌트 격리하여 조회
+     *
+     * 사용 시나리오:
+     * - 멀티테넌시 환경에서 사용자가 가진 여러 역할의 권한을 조회
+     * - 다른 테넌트의 권한 접근 방지 (보안)
+     *
+     * ⚠️ 주의: RolePermissionJpaEntity에는 tenantId 필드가 없으므로,
+     * 실제 조회 시 roles 테이블과 JOIN하거나 별도 검증 필요
+     *
+     * @param roleIds 역할 ID 목록
+     * @param tenantId 테넌트 ID (현재 미사용 - 향후 개선 필요)
+     * @return 권한 ID 목록
+     */
     @Query("""
         SELECT rp.permissionId FROM RolePermissionJpaEntity rp
         WHERE rp.roleId IN :roleIds

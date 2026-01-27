@@ -8,24 +8,34 @@ import java.time.LocalDateTime;
  * 역할-권한 매핑 JPA 엔티티
  *
  * RBAC(Role-Based Access Control) 시스템에서 역할(Role)과 권한(Permission)의
- * 다대일(Many-to-One) 관계를 정의합니다.
- * 한 역할은 여러 권한을 가질 수 있으며, 역할에 권한을 할당/제거할 수 있습니다.
+ * 다대다(Many-to-Many) 관계를 정의합니다.
+ * 한 역할은 여러 권한을 가질 수 있으며,
+ * 한 권한도 여러 역할에 할당될 수 있습니다.
  *
  * 이 테이블은 순수 매핑 전용이므로 비즈니스 로직이 포함되지 않습니다.
  *
  * 데이터 흐름:
- * Permission (권한) → RolePermission (매핑) → Role (역할) → AgentRole (매핑) → Agent (사용자)
+ * Permission (권한) ←─N:M─→ RolePermission (매핑) ←─N:M─→ Role (역할)
+ *                                                              ↑
+ *                                                            N:M
+ *                                                              ↑
+ *                                                        AgentRole (매핑)
+ *                                                              ↑
+ *                                                              N
+ *                                                              ↑
+ *                                                          Agent (사용자)
  *
  * 예시:
  * - ADMIN 역할에 "user:manage", "org:view", "report:export" 권한 할당
  * - TEAM_LEADER 역할에 "team:manage", "report:view" 권한 할당
+ * - "report:view" 권한은 ADMIN, TEAM_LEADER 두 역할에 모두 할당됨 (다대다)
  * - 역할 변경 시 자동으로 해당 역할의 모든 사용자 권한이 반영됨
  *
  * 특징:
  * - (roleId, permissionId)의 조합으로 유니크 보장 (중복 할당 방지)
  * - 동일한 역할-권한 조합의 중복 제거됨 (UNIQUE 제약)
  * - Surrogate Key (id)로 데이터베이스 성능 최적화
- * - 카스케이드 삭제: 역할 삭제 시 매핑도 자동 삭제 (FK 설정에 따름)
+ * - 카스케이드 삭제: 역할 또는 권한 삭제 시 매핑도 자동 삭제 (FK ON DELETE CASCADE)
  */
 @Entity
 @Table(

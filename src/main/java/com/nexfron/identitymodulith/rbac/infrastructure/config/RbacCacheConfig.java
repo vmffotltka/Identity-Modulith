@@ -96,51 +96,5 @@ public class RbacCacheConfig {
         log.info("[RBAC 캐시] 캐시 설정 완료: {} 개 캐시 활성화", 3);
         return cacheManager;
     }
-
-    /**
-     * 캐시 사용 모범 사례 (Comment)
-     *
-     * 1. RbacQueryServiceImpl.permissionsOf()
-     * {@code
-     * @Override
-     * @Cacheable(
-     *     value = "userPermissions",
-     *     key = "#tenantId + ':' + #agentId",
-     *     unless = "#result.isEmpty()"
-     * )
-     * public Set<String> permissionsOf(String tenantId, UUID agentId) {
-     *     // ... 권한 조회 로직 ...
-     * }
-     * }
-     *
-     * 2. RbacManagementServiceImpl.assignRoleToAgent()
-     * {@code
-     * @Override
-     * @Transactional
-     * @CacheEvict(
-     *     value = "userPermissions",
-     *     key = "#tenantId + ':' + #agentId",
-     *     beforeInvocation = false
-     * )
-     * public void assignRoleToAgent(String tenantId, String agentId, String roleName) {
-     *     // ... 역할 할당 로직 ...
-     *     // 메서드 완료 후 캐시 무효화
-     * }
-     * }
-     *
-     * 3. RbacManagementServiceImpl.revokeRoleFromAgent()
-     * {@code
-     * @Override
-     * @Transactional
-     * @CacheEvict(
-     *     value = "userPermissions",
-     *     key = "#tenantId + ':' + #agentId"
-     * )
-     * public void revokeRoleFromAgent(String tenantId, String agentId, String roleName) {
-     *     // ... 역할 회수 로직 ...
-     *     // 메서드 완료 후 캐시 무효화
-     * }
-     * }
-     */
 }
 

@@ -52,13 +52,13 @@ public class DepartmentController {
      * 새로운 부서 생성
      *
      * <h3>동작:</h3>
-     * 1. 부서명 및 타입 검증
-     * 2. 상위 부서 존재 여부 확인 (있는 경우)
-     * 3. 새로운 부서 엔티티 생성
-     * 4. orgPath 및 depth 자동 계산
-     * 5. DB 저장
+     * 1. TenantContextHolder에서 테넌트 ID 자동 추출
+     * 2. 부서명 및 타입 검증
+     * 3. 상위 부서 존재 여부 확인 (있는 경우)
+     * 4. 새로운 부서 엔티티 생성
+     * 5. orgPath 및 depth 자동 계산
+     * 6. DB 저장
      *
-     * @param tenantId 테넌트 ID (Request Header 또는 SecurityContext에서 추출)
      * @param request 부서 생성 요청
      *        - name: 부서명 (필수)
      *        - type: 부서 타입 (필수, 예: "본부", "팀", "센터")
@@ -110,11 +110,11 @@ public class DepartmentController {
      * 부서 정보 수정
      *
      * <h3>동작:</h3>
-     * 1. 부서 존재 여부 확인
-     * 2. 변경할 필드만 업데이트 (name, type)
-     * 3. 업데이트된 부서 정보 반환
+     * 1. TenantContextHolder에서 테넌트 ID 자동 추출
+     * 2. 부서 존재 여부 확인
+     * 3. 변경할 필드만 업데이트 (name, type)
+     * 4. 업데이트된 부서 정보 반환
      *
-     * @param tenantId 테넌트 ID (헤더)
      * @param deptId   업데이트할 부서 ID (UUID)
      * @param request  업데이트 요청 바디 (name, type 중 변경할 항목만 포함)
      * @return 200 OK - 업데이트된 부서 정보
@@ -154,11 +154,11 @@ public class DepartmentController {
      * 반드시 Spring Security @PreAuthorize로 보호되어야 합니다.
      *
      * <h3>반환 구조:</h3>
+     * - TenantContextHolder에서 테넌트 ID 자동 추출
      * - 루트 부서들을 최상위로 반환
      * - 각 부서는 하위 부서들을 children 속성으로 포함
      * - orgPath 순서로 정렬됨
      *
-     * @param tenantId 테넌트 ID
      * @return 조직도 트리 구조 (HTTP 200)
      *
      * @apiNote
@@ -201,10 +201,10 @@ public class DepartmentController {
      * 부서 검색 (키워드)
      *
      * <h3>검색 방식:</h3>
+     * - TenantContextHolder에서 테넌트 ID 자동 추출
      * - 부서명에 키워드가 포함된 모든 부서 조회
      * - 대소문자 구분 없음
      *
-     * @param tenantId 테넌트 ID (헤더)
      * @param keyword  검색 키워드 (쿼리 파라미터)
      * @return 검색된 부서 목록
      */
@@ -274,12 +274,12 @@ public class DepartmentController {
      * 부서 통계 조회
      *
      * <h3>제공 통계:</h3>
+     * - TenantContextHolder에서 테넌트 ID 자동 추출
      * - 전체 직원 수 (활성 + 비활성)
      * - 활성 직원 수 (ACTIVE 상태만)
      * - 직속 하위 부서 수
      * - 전체 하위 부서 수 (재귀적으로 모든 하위 포함)
      *
-     * @param tenantId 테넌트 ID (헤더)
      * @param deptId   조회할 부서 ID (UUID)
      * @return 부서 통계 정보
      */
@@ -380,19 +380,19 @@ public class DepartmentController {
      * 부서를 다른 부서 하위로 이동
      *
      * <h3>동작:</h3>
-     * 1. 이동 대상 부서 조회
-     * 2. 새 상위 부서 조회 및 검증
-     * 3. 순환 참조 방지 검사 (자신의 하위로 이동 불가)
-     * 4. 부모 변경
-     * 5. 하위 부서들의 orgPath 일괄 재계산
-     * 6. Level 1 RBAC 권한 검증
+     * 1. TenantContextHolder에서 테넌트 ID 자동 추출
+     * 2. 이동 대상 부서 조회
+     * 3. 새 상위 부서 조회 및 검증
+     * 4. 순환 참조 방지 검사 (자신의 하위로 이동 불가)
+     * 5. 부모 변경
+     * 6. 하위 부서들의 orgPath 일괄 재계산
+     * 7. Level 1 RBAC 권한 검증
      *
      * <h3>주의:</h3>
      * - 자신의 하위 부서로 이동할 수 없음 (순환 참조 방지)
      * - 하위 부서들의 경로가 자동으로 재계산됨
      * - 권한: 이동 대상 부서에 대한 접근 권한 필요
      *
-     * @param tenantId 테넌트 ID
      * @param userIdStr 사용자 ID
      * @param deptId 이동할 부서 ID
      * @param request 이동 요청

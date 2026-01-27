@@ -1,9 +1,9 @@
 package com.nexfron.identitymodulith.organization.presentation;
 
-import com.nexfron.identitymodulith.organization.exception.OrganizationException;
-import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
-import com.nexfron.identitymodulith.organization.exception.BusinessException;
-import com.nexfron.identitymodulith.organization.exception.InvalidDepartmentMoveException;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
+import com.nexfron.identitymodulith.organization.application.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.application.exception.BusinessException;
+import com.nexfron.identitymodulith.organization.application.exception.InvalidDepartmentMoveException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -87,7 +87,6 @@ public class OrganizationExceptionHandler {
      */
     @ExceptionHandler(OrganizationException.class)
     public ResponseEntity<ErrorResponse> handleOrganizationException(OrganizationException e) {
-        // ...existing code...
         OrganizationException.OrganizationErrorCode errorCode = e.getErrorCode();
 
         ErrorResponse response = ErrorResponse.builder()
@@ -117,7 +116,6 @@ public class OrganizationExceptionHandler {
      */
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException e) {
-        // ...existing code...
         ErrorResponse response = ErrorResponse.builder()
                 .code("ENTITY_NOT_FOUND")
                 .message(e.getMessage())
@@ -145,7 +143,6 @@ public class OrganizationExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
-        // ...existing code...
         ErrorResponse response = ErrorResponse.builder()
                 .code("BUSINESS_ERROR")
                 .message(e.getMessage())

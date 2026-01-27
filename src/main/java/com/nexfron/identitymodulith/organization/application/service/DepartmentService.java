@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.exception.OrganizationException;
-import com.nexfron.identitymodulith.organization.exception.OrganizationException.OrganizationErrorCode;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
 import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;

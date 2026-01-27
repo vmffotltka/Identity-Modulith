@@ -341,36 +341,6 @@ public class AuditLogService {
         return auditLogRepository.findByTenantIdAndTimestampBetween(tenantId, startTime, endTime);
     }
 
-    /**
-     * 권한 검증 실패를 기록합니다.
-     *
-     * 보안 감시:
-     * - 사용자가 요청한 권한에 대한 접근 거부 이벤트 기록
-     * - 악의적인 접근 패턴 탐지에 활용
-     * - 규정 준수(Compliance) 감사 증거
-     *
-     * 기록 내용:
-     * - 거부된 권한 코드
-     * - 사용자가 실제로 보유한 권한 목록
-     * - 요청 시간, 사용자 ID 등
-     *
-     * @param tenantId 테넌트 ID
-     * @param agentId 권한 요청을 시도한 사용자 ID
-     * @param requestedPermission 요청한 권한 코드
-     * @param userPermissions 사용자가 실제로 보유한 권한 집합
-     */
-    @Transactional
-    public void recordAccessDenied(String tenantId, String agentId, String requestedPermission, Set<String> userPermissions) {
-        Map<String, String> changes = Map.of(
-                "agent_id", agentId,
-                "requested_permission", requestedPermission,
-                "user_permissions", String.join(",", userPermissions != null ? userPermissions : Set.of()),
-                "result", "DENIED"
-        );
-        recordAuditLog(tenantId, "ACCESS_DENIED", "PERMISSION", requestedPermission, agentId, changes);
-        log.warn("[RBAC 감사] 권한 거부: tenantId={}, agentId={}, requestedPermission={}, userPermissions={}",
-                tenantId, agentId, requestedPermission, userPermissions);
-    }
 
     /**
      * 내부 헬퍼: 감사 로그 기록

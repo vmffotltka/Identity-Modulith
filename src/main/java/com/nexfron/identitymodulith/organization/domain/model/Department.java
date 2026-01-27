@@ -3,7 +3,7 @@ package com.nexfron.identitymodulith.organization.domain.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import com.nexfron.identitymodulith.organization.exception.InvalidDepartmentMoveException;
+import com.nexfron.identitymodulith.organization.application.exception.InvalidDepartmentMoveException;
 import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
 import java.time.LocalDateTime;
 

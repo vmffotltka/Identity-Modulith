@@ -395,6 +395,34 @@ public class RbacController {
     }
 
     // ============================================================
-    // 감사 로그 엔드포인트
+    // 권한-역할 역검색 엔드포인트
     // ============================================================
+
+    @Operation(summary = "특정 권한을 가진 역할 조회", description = "특정 권한을 가진 모든 역할을 조회합니다 (역검색).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "권한을 찾을 수 없음")
+    })
+    @GetMapping("/permissions/{permissionCode}/roles")
+    public ResponseEntity<Set<String>> getRolesWithPermission(
+            @Parameter(description = "권한 코드", example = "user:manage", required = true)
+            @PathVariable String permissionCode) {
+        return ResponseEntity.ok(rbacManagementService.getRolesWithPermission(permissionCode));
+    }
+
+    // ============================================================
+    // 역할 사용 통계 엔드포인트
+    // ============================================================
+
+    @Operation(summary = "역할을 사용하는 사용자 수 조회", description = "특정 역할이 할당된 사용자 수를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
+    })
+    @GetMapping("/roles/{roleName}/agent-count")
+    public ResponseEntity<Integer> getAgentCountByRole(
+            @Parameter(description = "역할명", example = "TEAM_LEAD", required = true)
+            @PathVariable String roleName) {
+        return ResponseEntity.ok(rbacManagementService.getAgentCountByRole(roleName));
+    }
 }

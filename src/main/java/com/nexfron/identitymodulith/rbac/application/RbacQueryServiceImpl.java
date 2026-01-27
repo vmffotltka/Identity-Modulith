@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 
 /**
  * RBAC 쿼리 서비스 구현체
- * 역할: 사용자(Agent)의 권한 조회, 역할별 권한 조회, RbacPermissionEvaluator에서 사용
+ * 역할: 사용자(Agent)의 권한 조회, 역할별 권한 조회
  * 설계: agent_roles + role_permissions 조인하여 권한 조회, 성능 최적화를 위해 캐시 적용
  *
  * <h3>주요 기능:</h3>
@@ -32,7 +32,6 @@ import java.util.stream.Collectors;
  * - 권한 변경 시 캐시 무효화 필요
  *
  * @see RbacQueryService
- * @see RbacPermissionEvaluator
  */
 @Service
 @RequiredArgsConstructor
@@ -42,7 +41,6 @@ public class RbacQueryServiceImpl implements RbacQueryService {
     private final AgentRoleJpaRepository agentRoleRepository;
     private final RolePermissionJpaRepository rolePermissionRepository;
     private final RoleJpaRepository roleRepository;
-    private final PermissionJpaRepository permissionRepository;
 
     /**
      * 주어진 역할명들에 대한 모든 권한 코드 조회

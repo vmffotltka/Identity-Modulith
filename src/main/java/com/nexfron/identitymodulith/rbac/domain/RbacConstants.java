@@ -16,10 +16,6 @@ public final class RbacConstants {
     public static final int PERMISSION_CODE_MAX_LENGTH = 128;
     public static final int PERMISSION_DESCRIPTION_MAX_LENGTH = 500;
 
-    // 공통
-    public static final int TENANT_ID_MAX_LENGTH = 50;
-    public static final String PERMISSION_CODE_DELIMITER = ":";
-
     private RbacConstants() {
         throw new AssertionError("상수 클래스는 인스턴스화할 수 없습니다");
     }

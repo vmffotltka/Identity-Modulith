@@ -1,7 +1,6 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.common.cache.CacheKeyGenerator;
-import com.nexfron.identitymodulith.organization.exception.EntityNotFoundException;
+import com.nexfron.identitymodulith.organization.application.exception.EntityNotFoundException;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.Department;
@@ -9,7 +8,6 @@ import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
 import com.nexfron.identitymodulith.organization.domain.repository.JpaDepartmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
