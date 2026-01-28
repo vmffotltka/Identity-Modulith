@@ -1,6 +1,6 @@
-package com.nexfron.identitymodulith.rbac.application;
+package com.nexfron.identitymodulith.rbac.application.service;
 
-import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
+import com.nexfron.identitymodulith.rbac.presentation.dto.AuditLogDto;
 import com.nexfron.identitymodulith.rbac.domain.RbacConstants;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;

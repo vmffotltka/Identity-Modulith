@@ -91,7 +91,7 @@ psql -U nexfron -d nexfron -f reset_database_clean.sql
 ```sql
 -- 테이블 건수 확인
 SELECT 
-    'departments' as table_name, COUNT(*) as count FROM departments
+    'departmentEntities' as table_name, COUNT(*) as count FROM departmentEntities
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
 UNION ALL SELECT 'roles', COUNT(*) FROM roles
 UNION ALL SELECT 'permissions', COUNT(*) FROM permissions
@@ -100,7 +100,7 @@ UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 ```
 
 **예상 결과**:
-- departments: 16개
+- departmentEntities: 16개
 - agents: 16개
 - roles: 8개
 - permissions: 35개
@@ -300,10 +300,8 @@ com.nexfron.identitymodulith.organization/
 │       │   ├── getFullOrganizationTree()          # 전체 조직도 조회
 │       │   ├── getAccessibleOrganizationTree()    # 권한 범위 내 조직도 조회
 │       │   ├── getDepartmentStatistics()          # 부서 통계 조회
-│       │   └── getFlatDepartmentList()            # 부서 평면 목록 조회
-│       └── OrgScopeService.java                  # 데이터 스코프 계산 서비스
-│           ├── getAccessibleDepartmentIds()       # 접근 가능 부서 ID 목록 반환
-│           └── evictAllCaches()                   # 캐시 무효화
+│       │   ├── getFlatDepartmentList()            # 부서 평면 목록 조회
+│       │   └── getAccessibleDepartmentIds()       # 데이터 스코프: 접근 가능 부서 계산 (통합됨)
 │
 ├── domain/                                       # 도메인 계층
 │   ├── model/
@@ -361,14 +359,14 @@ com.nexfron.identitymodulith.organization/
 
 | Method | Endpoint | 설명 | 권한 |
 |--------|----------|------|------|
-| `POST` | `/api/org/departments` | 부서 생성 | ADMIN |
-| `PUT` | `/api/org/departments/{deptId}` | 부서 정보 수정 | ADMIN |
-| `PATCH` | `/api/org/departments/{deptId}/move` | 부서 이동 | ADMIN |
-| `DELETE` | `/api/org/departments/{deptId}` | 부서 삭제 | ADMIN |
-| `GET` | `/api/org/departments` | 전체 조직도 트리 조회 | ALL |
-| `GET` | `/api/org/departments/accessible` | 권한 범위 내 조직도 조회 | ALL |
-| `GET` | `/api/org/departments/{deptId}/statistics` | 부서 통계 조회 | ALL |
-| `GET` | `/api/org/departments/flat` | 부서 평면 목록 조회 | ALL |
+| `POST` | `/api/org/departmentEntities` | 부서 생성 | ADMIN |
+| `PUT` | `/api/org/departmentEntities/{deptId}` | 부서 정보 수정 | ADMIN |
+| `PATCH` | `/api/org/departmentEntities/{deptId}/move` | 부서 이동 | ADMIN |
+| `DELETE` | `/api/org/departmentEntities/{deptId}` | 부서 삭제 | ADMIN |
+| `GET` | `/api/org/departmentEntities` | 전체 조직도 트리 조회 | ALL |
+| `GET` | `/api/org/departmentEntities/accessible` | 권한 범위 내 조직도 조회 | ALL |
+| `GET` | `/api/org/departmentEntities/{deptId}/statistics` | 부서 통계 조회 | ALL |
+| `GET` | `/api/org/departmentEntities/flat` | 부서 평면 목록 조회 | ALL |
 
 ### 🔐 데이터 스코프 레벨
 

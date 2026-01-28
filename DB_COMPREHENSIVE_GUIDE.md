@@ -10,7 +10,7 @@
 
 | 테이블명 | 모듈 | PK 타입 | 설명 |
 |---------|------|---------|------|
-| **departments** | Organization | UUID | 조직(부서) 계층 구조 |
+| **departmentEntities** | Organization | UUID | 조직(부서) 계층 구조 |
 | **agents** | User | UUID | 사용자(상담사) 정보 |
 | **roles** | RBAC | UUID | 역할 정의 |
 | **permissions** | RBAC | UUID | 권한 정의 |
@@ -21,7 +21,7 @@
 
 ---
 
-## 🏢 1. departments (조직/부서)
+## 🏢 1. departmentEntities (조직/부서)
 
 **목적**: 조직 계층 구조 관리 (트리)
 
@@ -37,7 +37,7 @@
 | created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
 
 **인덱스**: `(tenant_id, org_path)` UK, `tenant_id`, `parent_id`, `org_path`  
-**FK**: `parent_id` → `departments(dept_id)` ON DELETE RESTRICT
+**FK**: `parent_id` → `departmentEntities(dept_id)` ON DELETE RESTRICT
 
 **데이터 예시**:
 ```sql
@@ -76,7 +76,7 @@
 | role_id | VARCHAR(36) | ✓ | ⚠️ 사용 안 함 | NULL (agent_roles 테이블 사용) |
 
 **인덱스**: `login_id` UK, `tenant_id`, `dept_id`, `status`  
-**FK**: `dept_id` → `departments(dept_id)` ON DELETE SET NULL
+**FK**: `dept_id` → `departmentEntities(dept_id)` ON DELETE SET NULL
 
 **데이터 예시**:
 ```sql
@@ -306,9 +306,9 @@
 ## 🔄 테이블 간 관계도
 
 ```
-departments (부서)
+departmentEntities (부서)
     ↓ 1:N (parent_id)
-departments (하위 부서)
+departmentEntities (하위 부서)
     ↓ 1:N (dept_id)
 agents (사용자)
     ↓ M:N (agent_roles)
@@ -336,7 +336,7 @@ Flyway가 자동으로 `V1_0_0__Complete_Init.sql` 실행 → 8개 테이블 + �
 
 ### 3. 확인
 ```sql
-SELECT 'departments' as table_name, COUNT(*) FROM departments
+SELECT 'departmentEntities' as table_name, COUNT(*) FROM departmentEntities
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
 UNION ALL SELECT 'roles', COUNT(*) FROM roles
 UNION ALL SELECT 'permissions', COUNT(*) FROM permissions
@@ -364,7 +364,7 @@ UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 
 ## 2. 테이블 상세 명세
 
-### 🏢 2.1 departments (조직/부서)
+### 🏢 2.1 departmentEntities (조직/부서)
 
 **목적**: 조직 계층 구조 관리 (트리 구조)
 
@@ -384,7 +384,7 @@ UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 - IDX: `tenant_id`, `parent_id`, `org_path`
 
 **FK**:
-- `parent_id` → `departments(dept_id)` ON DELETE RESTRICT
+- `parent_id` → `departmentEntities(dept_id)` ON DELETE RESTRICT
 
 **데이터 예시**:
 ```sql
@@ -427,7 +427,7 @@ UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 - IDX: `tenant_id`, `dept_id`, `status`, `login_id`
 
 **FK**:
-- `dept_id` → `departments(dept_id)` ON DELETE SET NULL
+- `dept_id` → `departmentEntities(dept_id)` ON DELETE SET NULL
 
 **데이터 표준**:
 - **login_id**: 소문자 + 숫자 조합 (`admin`, `hong123`, `kim_gd`)
@@ -712,7 +712,7 @@ String hashed = encoder.encode("원본비밀번호");
 
 ```
 ┌─────────────────┐
-│  departments    │ ◄─────┐
+│  departmentEntities    │ ◄─────┐
 │  (조직 계층)     │       │ 자기참조 (parent_id)
 └────────┬────────┘       │
          │                │
@@ -759,10 +759,10 @@ String hashed = encoder.encode("원본비밀번호");
 - `agent_roles`: agent 또는 role 삭제 시 매핑도 삭제
 
 **SET NULL 규칙**:
-- `agents.dept_id`: department 삭제 시 NULL로 변경
+- `agents.dept_id`: departmentEntity 삭제 시 NULL로 변경
 
 **RESTRICT 규칙**:
-- `departments.parent_id`: 하위 부서 존재 시 삭제 불가
+- `departmentEntities.parent_id`: 하위 부서 존재 시 삭제 불가
 
 ---
 
@@ -886,14 +886,14 @@ INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
 ```sql
 WITH RECURSIVE org_tree AS (
   SELECT dept_id, name, parent_id, 0 AS level, name AS path
-  FROM departments
+  FROM departmentEntities
   WHERE tenant_id = 'tenant-001' AND parent_id IS NULL
   
   UNION ALL
   
   SELECT d.dept_id, d.name, d.parent_id, o.level + 1,
          o.path || ' > ' || d.name
-  FROM departments d
+  FROM departmentEntities d
   INNER JOIN org_tree o ON d.parent_id = o.dept_id
 )
 SELECT * FROM org_tree ORDER BY path;
@@ -925,7 +925,7 @@ LIMIT 100;
 ### D. 부서별 인원 집계
 ```sql
 SELECT d.name AS dept_name, COUNT(a.agent_id) AS agent_count
-FROM departments d
+FROM departmentEntities d
 LEFT JOIN agents a ON d.dept_id = a.dept_id AND a.status = 'ACTIVE'
 WHERE d.tenant_id = 'tenant-001'
 GROUP BY d.dept_id, d.name
@@ -1011,7 +1011,7 @@ ORDER BY d.org_path;
 
 | 테이블 | 모듈 | 용도 | PK 타입 | 참고 |
 |--------|------|------|---------|------|
-| **departments** | Organization | 조직/부서 계층 | VARCHAR(36) | 자기참조 트리 |
+| **departmentEntities** | Organization | 조직/부서 계층 | VARCHAR(36) | 자기참조 트리 |
 | **agents** | User | 사용자/직원 | VARCHAR(36) | Soft Delete |
 | **roles** | RBAC | 역할 정의 | VARCHAR(36) | 권한 묶음 |
 | **permissions** | RBAC | 권한 정의 | VARCHAR(36) | 최소 단위 권한 |
@@ -1028,7 +1028,7 @@ ORDER BY d.org_path;
 └─────────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐
-│   departments    │ (자기참조)
+│   departmentEntities    │ (자기참조)
 ├──────────────────┤
 │ PK: dept_id (U)  │
 │     tenant_id    │
@@ -1098,7 +1098,7 @@ ORDER BY d.org_path;
 
 ## 테이블 상세 명세
 
-### 1. departments (조직/부서 테이블)
+### 1. departmentEntities (조직/부서 테이블)
 
 **목적**: 회사 조직 계층 구조 관리 (트리 구조)
 
@@ -1158,7 +1158,7 @@ d50e8400-e29b-...005 | 전화상담팀  | ...002    | /d50e...001/002/005 | 2   
 **인덱스**:
 - PK: agent_id
 - UK: login_id
-- FK: dept_id → departments.dept_id (ON DELETE SET NULL)
+- FK: dept_id → departmentEntities.dept_id (ON DELETE SET NULL)
 - IDX: (tenant_id), (dept_id), (status), (login_id)
 
 **특징**:
@@ -1382,7 +1382,7 @@ agent_id (박상담)    | role_id (역할)
 
 ### 1. 일대다 (One-to-Many) 관계
 
-#### departments (1) → departments (N) - 자기참조
+#### departmentEntities (1) → departmentEntities (N) - 자기참조
 ```
 상위 부서 (parent) → 하위 부서들 (자식)
 
@@ -1400,12 +1400,12 @@ FK: parent_id → dept_id
    └─ Backend개발팀
 ```
 
-#### departments (1) → agents (N)
+#### departmentEntities (1) → agents (N)
 ```
-부서 (department) → 소속 직원들 (employees)
+부서 (departmentEntity) → 소속 직원들 (employees)
 
 관계: 조직 포함 관계
-FK: agents.dept_id → departments.dept_id
+FK: agents.dept_id → departmentEntities.dept_id
 특징: 하나의 부서에 여러 직원
 삭제 정책: ON DELETE SET NULL (부서 삭제 시 직원의 dept_id = NULL)
 
@@ -1552,7 +1552,7 @@ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 | name | 100 | 사용자/부서명 | 박상담, 전화상담팀 |
 | org_path | 500 | 조직 경로 (UUID 기반) | /d50e8400.../d50e8400.../... |
 | job_title | 100 | 직책 | 팀장, 과장 |
-| type (departments) | 50 | 부서 타입 | HEADQUARTERS, DIVISION, TEAM |
+| type (departmentEntities) | 50 | 부서 타입 | HEADQUARTERS, DIVISION, TEAM |
 | type (roles) | 32 | 역할 타입 | POSITION, CHANNEL, SKILL |
 | status (agents) | 20 | 상태 | ACTIVE, RETIRED |
 | name (roles) | 64 | 역할명 (대문자, _) | ADMIN, TEAM_LEAD, PHONE_AGENT |
@@ -1576,7 +1576,7 @@ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 | 컬럼명 | 테이블 | NULL 허용 | 이유 | 비고 |
 |--------|--------|----------|------|------|
-| parent_id | departments | YES | 최상위 부서일 수 있음 | 루트는 NULL |
+| parent_id | departmentEntities | YES | 최상위 부서일 수 있음 | 루트는 NULL |
 | dept_id | agents | YES | 부서 미정 직원 가능 | ON DELETE SET NULL |
 | updated_at | agents | YES | 생성 후 수정 없을 수 있음 | 선택사항 |
 | retired_at | agents | YES | 활성 직원은 NULL | Soft Delete |
@@ -1640,7 +1640,7 @@ xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 - agent:manage         에이전트 전체 관리
 ```
 
-#### 2. 조직 관리 (org, department) - 6개
+#### 2. 조직 관리 (org, departmentEntity) - 6개
 ```
 - org:view             조직 조회
 - org:create           조직 생성
@@ -1798,7 +1798,7 @@ WHERE a.agent_id = :agentId
 #### 2. 부서의 전체 하위 부서 조회 (트리)
 ```sql
 SELECT *
-FROM departments
+FROM departmentEntities
 WHERE org_path LIKE CONCAT(:targetOrgPath, '%')
   AND tenant_id = :tenantId
 ORDER BY depth, name;
@@ -1867,7 +1867,7 @@ WHERE table_schema = 'public'
 ORDER BY table_name;
 
 -- 데이터 건수 확인
-SELECT 'departments' as table_name, COUNT(*) as count FROM departments
+SELECT 'departmentEntities' as table_name, COUNT(*) as count FROM departmentEntities
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
 UNION ALL SELECT 'roles', COUNT(*) FROM roles
 UNION ALL SELECT 'permissions', COUNT(*) FROM permissions
@@ -1876,7 +1876,7 @@ UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 ```
 
 **예상 결과**:
-- departments: 16개
+- departmentEntities: 16개
 - agents: 16개 (admin 포함)
 - roles: 8개
 - permissions: 35개

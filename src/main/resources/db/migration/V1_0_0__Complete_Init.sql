@@ -23,14 +23,14 @@ DROP TABLE IF EXISTS role_permissions CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS permissions CASCADE;
 DROP TABLE IF EXISTS agents CASCADE;
-DROP TABLE IF EXISTS departments CASCADE;
+DROP TABLE IF EXISTS departmentEntities CASCADE;
 
 -- ============================================================
 -- Phase 2: 모든 테이블 생성 (UUID 기반)
 -- ============================================================
 
 -- Departments 테이블 (조직 구조)
-CREATE TABLE departments (
+CREATE TABLE departmentEntities (
     dept_id VARCHAR(36) NOT NULL PRIMARY KEY,
     tenant_id VARCHAR(50) NOT NULL,
     parent_id VARCHAR(36),
@@ -41,24 +41,24 @@ CREATE TABLE departments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-COMMENT ON TABLE departments IS '조직 (부서) 관리 테이블';
-COMMENT ON COLUMN departments.dept_id IS '부서 ID (UUID)';
-COMMENT ON COLUMN departments.tenant_id IS '테넌트 ID (멀티테넌시)';
-COMMENT ON COLUMN departments.parent_id IS '상위 부서 ID (자기참조)';
-COMMENT ON COLUMN departments.name IS '부서명';
-COMMENT ON COLUMN departments.org_path IS '조직 경로 (트리 탐색용)';
-COMMENT ON COLUMN departments.depth IS '트리 깊이';
-COMMENT ON COLUMN departments.type IS '부서 타입';
-COMMENT ON COLUMN departments.created_at IS '생성 일시';
+COMMENT ON TABLE departmentEntities IS '조직 (부서) 관리 테이블';
+COMMENT ON COLUMN departmentEntities.dept_id IS '부서 ID (UUID)';
+COMMENT ON COLUMN departmentEntities.tenant_id IS '테넌트 ID (멀티테넌시)';
+COMMENT ON COLUMN departmentEntities.parent_id IS '상위 부서 ID (자기참조)';
+COMMENT ON COLUMN departmentEntities.name IS '부서명';
+COMMENT ON COLUMN departmentEntities.org_path IS '조직 경로 (트리 탐색용)';
+COMMENT ON COLUMN departmentEntities.depth IS '트리 깊이';
+COMMENT ON COLUMN departmentEntities.type IS '부서 타입';
+COMMENT ON COLUMN departmentEntities.created_at IS '생성 일시';
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_departments_tenant_path ON departments(tenant_id, org_path);
-CREATE INDEX IF NOT EXISTS idx_departments_tenant_id ON departments(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON departments(parent_id);
-CREATE INDEX IF NOT EXISTS idx_departments_org_path ON departments(org_path);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_departments_tenant_path ON departmentEntities(tenant_id, org_path);
+CREATE INDEX IF NOT EXISTS idx_departments_tenant_id ON departmentEntities(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON departmentEntities(parent_id);
+CREATE INDEX IF NOT EXISTS idx_departments_org_path ON departmentEntities(org_path);
 
 -- 자기참조 FK (부모-자식)
-ALTER TABLE departments ADD CONSTRAINT fk_departments_parent
-    FOREIGN KEY (parent_id) REFERENCES departments(dept_id) ON DELETE RESTRICT;
+ALTER TABLE departmentEntities ADD CONSTRAINT fk_departments_parent
+    FOREIGN KEY (parent_id) REFERENCES departmentEntities(dept_id) ON DELETE RESTRICT;
 
 -- Agents 테이블 (사용자)
 CREATE TABLE agents (
@@ -95,9 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_agents_dept_id ON agents(dept_id);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 CREATE INDEX IF NOT EXISTS idx_agents_login_id ON agents(login_id);
 
--- FK: agents.dept_id → departments.dept_id
+-- FK: agents.dept_id → departmentEntities.dept_id
 ALTER TABLE agents ADD CONSTRAINT fk_agents_dept
-    FOREIGN KEY (dept_id) REFERENCES departments(dept_id) ON DELETE SET NULL;
+    FOREIGN KEY (dept_id) REFERENCES departmentEntities(dept_id) ON DELETE SET NULL;
 
 -- Permissions 테이블 (권한)
 CREATE TABLE permissions (
@@ -370,19 +370,19 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 -- 최상위 조직
-INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
+INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
 ('d50e8400-e29b-41d4-a716-446655440001', 'tenant-001', NULL, '넥스프론 본부', '/d50e8400-e29b-41d4-a716-446655440001', 0, 'HEADQUARTERS', NOW())
 ON CONFLICT DO NOTHING;
 
 -- 1차 사업부
-INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
+INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
 ('d50e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '고객지원사업부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002', 1, 'DIVISION', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '영업사업부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003', 1, 'DIVISION', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '기술개발본부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004', 1, 'DIVISION', NOW())
 ON CONFLICT DO NOTHING;
 
 -- 2차 팀 - 고객지원사업부
-INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
+INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
 ('d50e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '전화상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440005', 2, 'TEAM', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '채팅상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440006', 2, 'TEAM', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '이메일상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440007', 2, 'TEAM', NOW()),
@@ -390,13 +390,13 @@ INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, t
 ON CONFLICT DO NOTHING;
 
 -- 2차 팀 - 영업사업부
-INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
+INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
 ('d50e8400-e29b-41d4-a716-446655440009', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440003', '기업영업팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003/d50e8400-e29b-41d4-a716-446655440009', 2, 'TEAM', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440010', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440003', '소비자영업팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003/d50e8400-e29b-41d4-a716-446655440010', 2, 'TEAM', NOW())
 ON CONFLICT DO NOTHING;
 
 -- 2차 팀 - 기술개발본부
-INSERT INTO departments (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
+INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
 ('d50e8400-e29b-41d4-a716-446655440011', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'Backend개발팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440011', 2, 'TEAM', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440012', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'Frontend개발팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440012', 2, 'TEAM', NOW()),
 ('d50e8400-e29b-41d4-a716-446655440013', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'DevOps팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440013', 2, 'TEAM', NOW())
@@ -522,9 +522,9 @@ ON CONFLICT DO NOTHING;
 SELECT '✅ 데이터베이스 초기화 완료!' as result;
 
 SELECT
-    'departments' as table_name,
+    'departmentEntities' as table_name,
     COUNT(*) as row_count
-FROM departments
+FROM departmentEntities
 UNION ALL
 SELECT 'agents', COUNT(*) FROM agents
 UNION ALL

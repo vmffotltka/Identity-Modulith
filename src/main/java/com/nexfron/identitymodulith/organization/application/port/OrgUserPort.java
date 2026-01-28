@@ -54,7 +54,7 @@ public interface OrgUserPort {
      *
      * 사용처:
      * - Level 1 RBAC 스코프 계산
-     * - OrgScopeService에서 사용
+     * - DepartmentServiceImpl.getAccessibleDepartmentIds()
      *
      * 사용 예시:
      * <pre>

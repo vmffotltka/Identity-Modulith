@@ -1,5 +1,7 @@
 package com.nexfron.identitymodulith.organization.domain;
 
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
+
 /**
  * 조직 모듈 관련 상수 정의
  * <p>
@@ -15,7 +17,7 @@ package com.nexfron.identitymodulith.organization.domain;
  * </ul>
  *
  * @since 2026-01-19 (P2 개선)
- * @see com.nexfron.identitymodulith.organization.domain.model.Department
+ * @see DepartmentEntity
  */
 public final class OrganizationConstants {
 

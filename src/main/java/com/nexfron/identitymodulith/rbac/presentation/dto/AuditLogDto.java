@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.rbac.application.dto;
+package com.nexfron.identitymodulith.rbac.presentation.dto;
 
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;

@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.rbac.application;
 
+import com.nexfron.identitymodulith.rbac.application.service.AuditLogService;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AuditLogJpaRepository;
 import org.junit.jupiter.api.BeforeEach;

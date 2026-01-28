@@ -454,7 +454,7 @@ PUT /api/v1/agents/{agentId}/roles
 ### 3.1 부서 생성
 
 ```http
-POST /api/v1/departments
+POST /api/v1/departmentEntities
 ```
 
 **Request Body**
@@ -498,7 +498,7 @@ POST /api/v1/departments
 ### 3.2 조직도 트리 조회
 
 ```http
-GET /api/v1/departments/tree
+GET /api/v1/departmentEntities/tree
 ```
 
 **Query Parameters**
@@ -553,7 +553,7 @@ GET /api/v1/departments/tree
 ### 3.3 부서 상세 조회
 
 ```http
-GET /api/v1/departments/{deptId}
+GET /api/v1/departmentEntities/{deptId}
 ```
 
 **Response (200 OK)**
@@ -581,7 +581,7 @@ GET /api/v1/departments/{deptId}
 ### 3.4 하위 부서 조회
 
 ```http
-GET /api/v1/departments/{deptId}/subtree
+GET /api/v1/departmentEntities/{deptId}/subtree
 ```
 
 **Response (200 OK)**
@@ -612,7 +612,7 @@ GET /api/v1/departments/{deptId}/subtree
 ### 3.5 부서 정보 수정
 
 ```http
-PATCH /api/v1/departments/{deptId}
+PATCH /api/v1/departmentEntities/{deptId}
 ```
 
 **Request Body**
@@ -640,7 +640,7 @@ PATCH /api/v1/departments/{deptId}
 ### 3.6 부서 이동
 
 ```http
-POST /api/v1/departments/{deptId}/move
+POST /api/v1/departmentEntities/{deptId}/move
 ```
 
 **Request Body**
@@ -674,7 +674,7 @@ POST /api/v1/departments/{deptId}/move
 ### 3.7 부서 비활성화
 
 ```http
-POST /api/v1/departments/{deptId}/deactivate
+POST /api/v1/departmentEntities/{deptId}/deactivate
 ```
 
 **Response (200 OK)**
@@ -699,7 +699,7 @@ POST /api/v1/departments/{deptId}/deactivate
 ### 3.8 부서 활성화
 
 ```http
-POST /api/v1/departments/{deptId}/activate
+POST /api/v1/departmentEntities/{deptId}/activate
 ```
 
 **Response (200 OK)**
@@ -718,7 +718,7 @@ POST /api/v1/departments/{deptId}/activate
 ### 3.9 부서 삭제
 
 ```http
-DELETE /api/v1/departments/{deptId}
+DELETE /api/v1/departmentEntities/{deptId}
 ```
 
 **Response (204 No Content)**
@@ -1039,15 +1039,15 @@ GET /api/v1/permissions/{code}
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| POST | `/api/v1/departments` | 부서 생성 |
-| GET | `/api/v1/departments/tree` | 조직도 트리 조회 |
-| GET | `/api/v1/departments/{id}` | 부서 상세 조회 |
-| GET | `/api/v1/departments/{id}/subtree` | 하위 부서 조회 |
-| PATCH | `/api/v1/departments/{id}` | 부서 정보 수정 |
-| POST | `/api/v1/departments/{id}/move` | 부서 이동 |
-| POST | `/api/v1/departments/{id}/deactivate` | 부서 비활성화 |
-| POST | `/api/v1/departments/{id}/activate` | 부서 활성화 |
-| DELETE | `/api/v1/departments/{id}` | 부서 삭제 |
+| POST | `/api/v1/departmentEntities` | 부서 생성 |
+| GET | `/api/v1/departmentEntities/tree` | 조직도 트리 조회 |
+| GET | `/api/v1/departmentEntities/{id}` | 부서 상세 조회 |
+| GET | `/api/v1/departmentEntities/{id}/subtree` | 하위 부서 조회 |
+| PATCH | `/api/v1/departmentEntities/{id}` | 부서 정보 수정 |
+| POST | `/api/v1/departmentEntities/{id}/move` | 부서 이동 |
+| POST | `/api/v1/departmentEntities/{id}/deactivate` | 부서 비활성화 |
+| POST | `/api/v1/departmentEntities/{id}/activate` | 부서 활성화 |
+| DELETE | `/api/v1/departmentEntities/{id}` | 부서 삭제 |
 
 ### 7.3 Role API
 
@@ -1081,12 +1081,12 @@ GET /api/v1/permissions/{code}
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/api/org/departments` | 전체 조직도 조회 |
-| GET | `/api/org/departments/{id}/statistics` | 부서 통계 조회 |
-| POST | `/api/org/departments` | 부서 생성 |
-| PATCH | `/api/org/departments/{id}` | 부서 수정 |
-| DELETE | `/api/org/departments/{id}` | 부서 삭제 |
-| PUT | `/api/org/departments/{id}/move` | 부서 이동 |
+| GET | `/api/org/departmentEntities` | 전체 조직도 조회 |
+| GET | `/api/org/departmentEntities/{id}/statistics` | 부서 통계 조회 |
+| POST | `/api/org/departmentEntities` | 부서 생성 |
+| PATCH | `/api/org/departmentEntities/{id}` | 부서 수정 |
+| DELETE | `/api/org/departmentEntities/{id}` | 부서 삭제 |
+| PUT | `/api/org/departmentEntities/{id}/move` | 부서 이동 |
 
 ---
 

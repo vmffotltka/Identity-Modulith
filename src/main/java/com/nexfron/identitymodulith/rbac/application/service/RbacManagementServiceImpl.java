@@ -1,7 +1,7 @@
-package com.nexfron.identitymodulith.rbac.application;
+package com.nexfron.identitymodulith.rbac.application.service;
 
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
-import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
+import com.nexfron.identitymodulith.rbac.presentation.dto.AuditLogDto;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;

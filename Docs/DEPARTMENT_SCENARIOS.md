@@ -155,7 +155,7 @@ public enum DepartmentStatus {
 ### 3.4 API 요청/응답
 
 ```json
-// POST /api/departments
+// POST /api/departmentEntities
 
 // Request - 일반 부서
 {
@@ -239,7 +239,7 @@ public enum DepartmentStatus {
 │     - 행위자가 새 부모 부서에 접근 권한 있는지         │
 ├────────────────────────────────────────────────────────┤
 │  5. 이동 실행                                          │
-│     - department.parentId = newParentId                │
+│     - departmentEntity.parentId = newParentId                │
 │     - updatedAt = now()                                │
 ├────────────────────────────────────────────────────────┤
 │  6. 소속 상담사 처리 (includeMembers=true)             │
@@ -268,10 +268,10 @@ public enum DepartmentStatus {
 
 SQL (PostgreSQL CTE):
 WITH RECURSIVE ancestors AS (
-    SELECT parent_id FROM departments
+    SELECT parent_id FROM departmentEntities
     WHERE dept_id = :newParentId AND tenant_id = :tenantId
     UNION ALL
-    SELECT d.parent_id FROM departments d
+    SELECT d.parent_id FROM departmentEntities d
     JOIN ancestors a ON d.dept_id = a.parent_id
     WHERE d.parent_id IS NOT NULL
 )
@@ -293,7 +293,7 @@ SELECT parent_id FROM ancestors;
 ### 4.5 API 요청/응답
 
 ```json
-// POST /api/departments/{deptId}/move
+// POST /api/departmentEntities/{deptId}/move
 
 // Request
 {
@@ -506,7 +506,7 @@ SELECT parent_id FROM ancestors;
 ### 9.1 조직도 전체 조회
 
 ```
-GET /api/departments/tree
+GET /api/departmentEntities/tree
 
 응답: 전체 트리 구조 (권한 필터링 적용)
 ```
@@ -537,10 +537,10 @@ GET /api/departments/tree
 ```sql
 -- PostgreSQL CTE로 하위 부서 조회
 WITH RECURSIVE subtree AS (
-    SELECT * FROM departments
+    SELECT * FROM departmentEntities
     WHERE dept_id = :deptId AND tenant_id = :tenantId
     UNION ALL
-    SELECT d.* FROM departments d
+    SELECT d.* FROM departmentEntities d
     JOIN subtree s ON d.parent_id = s.dept_id
 )
 SELECT * FROM subtree;
@@ -611,15 +611,15 @@ SELECT * FROM subtree;
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| POST | `/api/departments` | 부서 생성 |
-| GET | `/api/departments/{id}` | 부서 상세 조회 |
-| GET | `/api/departments/tree` | 조직도 트리 조회 |
-| GET | `/api/departments/{id}/subtree` | 하위 부서 트리 조회 |
-| PATCH | `/api/departments/{id}` | 부서 정보 수정 |
-| POST | `/api/departments/{id}/move` | 부서 이동 |
-| POST | `/api/departments/{id}/deactivate` | 부서 비활성화 |
-| POST | `/api/departments/{id}/activate` | 부서 활성화 |
-| DELETE | `/api/departments/{id}` | 부서 삭제 |
+| POST | `/api/departmentEntities` | 부서 생성 |
+| GET | `/api/departmentEntities/{id}` | 부서 상세 조회 |
+| GET | `/api/departmentEntities/tree` | 조직도 트리 조회 |
+| GET | `/api/departmentEntities/{id}/subtree` | 하위 부서 트리 조회 |
+| PATCH | `/api/departmentEntities/{id}` | 부서 정보 수정 |
+| POST | `/api/departmentEntities/{id}/move` | 부서 이동 |
+| POST | `/api/departmentEntities/{id}/deactivate` | 부서 비활성화 |
+| POST | `/api/departmentEntities/{id}/activate` | 부서 활성화 |
+| DELETE | `/api/departmentEntities/{id}` | 부서 삭제 |
 
 ---
 

@@ -1,6 +1,8 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
-import com.nexfron.identitymodulith.organization.domain.model.Department;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,16 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - DTO 변환
  */
 @DisplayName("부서 관리 서비스 단위 테스트")
-class DepartmentServiceTest {
+class DepartmentEntityServiceTest {
 
     private final String tenantId = "test-tenant";
-    private Department rootDept;
-    private Department childDept;
+    private DepartmentEntity rootDept;
+    private DepartmentEntity childDept;
 
     @BeforeEach
     void setup() {
-        rootDept = Department.create(tenantId, "총무부", "본부", null);
-        childDept = Department.create(tenantId, "HR팀", "팀", rootDept);
+        rootDept = DepartmentEntity.create(tenantId, "총무부", "본부", null);
+        childDept = DepartmentEntity.create(tenantId, "HR팀", "팀", rootDept);
     }
 
     @Test
@@ -67,14 +69,14 @@ class DepartmentServiceTest {
         assertEquals(0, rootDept.getDepth());
         assertEquals(1, childDept.getDepth());
 
-        Department grandchild = Department.create(tenantId, "채용팀", "센터", childDept);
+        DepartmentEntity grandchild = DepartmentEntity.create(tenantId, "채용팀", "센터", childDept);
         assertEquals(2, grandchild.getDepth());
     }
 
     @Test
     @DisplayName("부서 부모 변경")
     void testChangeParentDepartment() {
-        Department newParent = Department.create(tenantId, "개발본부", "본부", null);
+        DepartmentEntity newParent = DepartmentEntity.create(tenantId, "개발본부", "본부", null);
         childDept.changeParent(newParent);
 
         assertEquals(1, childDept.getDepth());
@@ -82,18 +84,28 @@ class DepartmentServiceTest {
     }
 
     @Test
-    @DisplayName("순환 참조 방지")
+    @DisplayName("순환 참조 방지 - CIRCULAR_REFERENCE 예외 발생")
     void testCircularReferencePreventionInChangeParent() {
+        // given: 부모-자식 관계 설정
         childDept.changeParent(rootDept);
-        assertThrows(Exception.class, () -> rootDept.changeParent(childDept));
+
+        // when & then: 부모가 자식의 하위로 이동하려 할 때 예외 발생
+        OrganizationException exception = assertThrows(
+            OrganizationException.class,
+            () -> rootDept.changeParent(childDept),
+            "자신의 하위 부서로 이동할 수 없어야 합니다"
+        );
+
+        // 에러 코드 검증
+        assertEquals(OrganizationErrorCode.CIRCULAR_REFERENCE, exception.getErrorCode());
     }
 
     @Test
     @DisplayName("3단계 계층 구조")
     void testThreeLayerDepartmentHierarchy() {
-        Department level1 = Department.create(tenantId, "총무부", "본부", null);
-        Department level2 = Department.create(tenantId, "HR팀", "팀", level1);
-        Department level3 = Department.create(tenantId, "채용팀", "센터", level2);
+        DepartmentEntity level1 = DepartmentEntity.create(tenantId, "총무부", "본부", null);
+        DepartmentEntity level2 = DepartmentEntity.create(tenantId, "HR팀", "팀", level1);
+        DepartmentEntity level3 = DepartmentEntity.create(tenantId, "채용팀", "센터", level2);
 
         assertEquals(0, level1.getDepth());
         assertEquals(1, level2.getDepth());

@@ -190,8 +190,7 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * Agent 역할 정보를 Organization 권한 레벨로 매핑
      *
      * <p><b>개선된 매핑 방식:</b>
-     * 문자열 포함 여부 대신 {@link com.nexfron.identitymodulith.organization.infrastructure.config.RoleScopeMappingConfig}의
-     * 명시적 매핑 테이블을 사용합니다.
+     * {@link DataScopeLevel#fromRoleName(String)} 메서드를 통해 명시적 매핑합니다.
      *
      * <p><b>매핑 규칙:</b>
      * <ul>
@@ -212,7 +211,7 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      */
     private DataScopeLevel mapRoleLevelFromExternal(AgentExternalInfo info) {
         return info.getRoles().stream()
-                .map(role -> com.nexfron.identitymodulith.organization.infrastructure.config.RoleScopeMappingConfig.getDataScope(role.getName()))
+                .map(role -> DataScopeLevel.fromRoleName(role.getName()))
                 .max(java.util.Comparator.naturalOrder())  // ADMIN > TEAM_LEAD > MEMBER
                 .orElse(DataScopeLevel.MEMBER);  // 역할이 없으면 MEMBER (최소 권한)
     }

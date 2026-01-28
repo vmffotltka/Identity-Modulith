@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.rbac.application;
+package com.nexfron.identitymodulith.rbac.application.service;
 
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AuditLogJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AuditLogJpaRepository;

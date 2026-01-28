@@ -1,9 +1,10 @@
-package com.nexfron.identitymodulith.organization.domain.model;
+package com.nexfron.identitymodulith.organization.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import com.nexfron.identitymodulith.organization.application.exception.InvalidDepartmentMoveException;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
+import com.nexfron.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
 import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
 import java.time.LocalDateTime;
 
@@ -56,7 +57,7 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor
 @Table(name = "departments")
-public class Department {
+public class DepartmentEntity {
 
     private static final String TEMP_PATH = "/temp";
 
@@ -96,7 +97,7 @@ public class Department {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
-    private Department parent;
+    private DepartmentEntity parent;
 
     /**
      * 부서명
@@ -186,7 +187,7 @@ public class Department {
     @Column(name = "version")
     private Long version;
 
-    public static Department create(String tenantId, String name, String type, Department parent) {
+    public static DepartmentEntity create(String tenantId, String name, String type, DepartmentEntity parent) {
         /**
          * 새로운 부서 엔티티 생성 (Factory Method)
          *
@@ -227,7 +228,7 @@ public class Department {
          *
          * @throws InvalidDepartmentMoveException 부모로 설정할 부서가 자신의 하위 부서인 경우
          */
-        Department dept = new Department();
+        DepartmentEntity dept = new DepartmentEntity();
         dept.deptId = java.util.UUID.randomUUID().toString();  // UUID 생성
         dept.tenantId = tenantId;
         dept.name = name;
@@ -264,14 +265,15 @@ public class Department {
      * - 하위 부서들의 depth/orgPath도 업데이트 필요 (별도 처리)
      *
      * @param newParent 새로운 부모 부서 (NULL 가능 - 루트로 설정)
-     * @throws InvalidDepartmentMoveException 자신의 하위 부서로 이동하려 할 때
+     * @throws OrganizationException 자신의 하위 부서로 이동하려 할 때
      */
-    public void changeParent(Department newParent) {
+    public void changeParent(DepartmentEntity newParent) {
         if (this.orgPath != null
                 && newParent != null
                 && newParent.getOrgPath() != null
                 && newParent.getOrgPath().startsWith(this.orgPath)) {
-            throw new InvalidDepartmentMoveException(
+            throw new OrganizationException(
+                    OrganizationErrorCode.CIRCULAR_REFERENCE,
                     "자신의 하위 부서로 이동할 수 없습니다."
             );
         }
@@ -281,7 +283,8 @@ public class Department {
 
         // 조직 깊이 제한 검증
         if (this.depth > OrganizationConstants.MAX_ORGANIZATION_DEPTH) {
-            throw new InvalidDepartmentMoveException(
+            throw new OrganizationException(
+                    OrganizationErrorCode.INVALID_REQUEST,
                     "조직 깊이가 최대 허용치(" + OrganizationConstants.MAX_ORGANIZATION_DEPTH +
                     ")를 초과합니다. 현재 깊이: " + this.depth
             );
@@ -362,7 +365,8 @@ public class Department {
 
         // 조직 경로 길이 검증
         if (this.orgPath.length() > OrganizationConstants.MAX_ORG_PATH_LENGTH) {
-            throw new InvalidDepartmentMoveException(
+            throw new OrganizationException(
+                    OrganizationErrorCode.INVALID_REQUEST,
                     "조직 경로 길이가 최대 허용치(" + OrganizationConstants.MAX_ORG_PATH_LENGTH +
                     "자)를 초과합니다. 현재 길이: " + this.orgPath.length()
             );

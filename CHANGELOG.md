@@ -9,7 +9,7 @@
 - ✅ **명명 규칙 통일** (snake_case, 소문자)
 - ✅ **핵심 테이블 8개 유지**
   ```
-  1. departments         (조직 관리)
+  1. departmentEntities         (조직 관리)
   2. agents             (사용자 관리)
   3. roles              (역할 관리)
   4. permissions        (권한 관리)

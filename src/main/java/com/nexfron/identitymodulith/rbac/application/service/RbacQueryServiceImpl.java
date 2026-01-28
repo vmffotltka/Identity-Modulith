@@ -1,11 +1,8 @@
-package com.nexfron.identitymodulith.rbac.application;
+package com.nexfron.identitymodulith.rbac.application.service;
 
-import com.nexfron.identitymodulith.common.cache.CacheKeyGenerator;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
-import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
 import lombok.RequiredArgsConstructor;

@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.organization.presentation.dto;
 
 import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
-import com.nexfron.identitymodulith.organization.domain.model.Department;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -166,7 +166,7 @@ public class DepartmentDto {
         /**
          * Entity -> DTO 변환 메서드
          */
-        public static Response from(Department dept) {
+        public static Response from(DepartmentEntity dept) {
             return Response.builder()
                     .deptId(dept.getDeptId())
                     .name(dept.getName())

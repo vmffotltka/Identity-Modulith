@@ -1,8 +1,8 @@
 package com.nexfron.identitymodulith.rbac.presentation;
 
-import com.nexfron.identitymodulith.rbac.application.RbacManagementService;
-import com.nexfron.identitymodulith.rbac.application.RbacManagementService.*;
-import com.nexfron.identitymodulith.rbac.application.dto.AuditLogDto;
+import com.nexfron.identitymodulith.rbac.application.service.RbacManagementService;
+import com.nexfron.identitymodulith.rbac.application.service.RbacManagementService.*;
+import com.nexfron.identitymodulith.rbac.presentation.dto.AuditLogDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;

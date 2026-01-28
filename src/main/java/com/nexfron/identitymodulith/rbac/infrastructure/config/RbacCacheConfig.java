@@ -78,7 +78,7 @@ public class RbacCacheConfig {
      * 3. "accessibleDepts" - 접근 가능 부서 캐시
      *    - Key: "tenantId:userId:dataScope"
      *    - Value: Set<String> (부서 ID 집합)
-     *    - 사용처: OrgScopeService.getAccessibleDepartmentIds()
+     *    - 사용처: DepartmentServiceImpl.getAccessibleDepartmentIds() (통합됨)
      *
      * @return CacheManager 빈
      */

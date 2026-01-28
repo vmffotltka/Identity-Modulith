@@ -1,6 +1,6 @@
-package com.nexfron.identitymodulith.organization.domain.repository;
+package com.nexfron.identitymodulith.organization.infrastructure.persistence.repository;
 
-import com.nexfron.identitymodulith.organization.domain.model.Department;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -27,7 +27,7 @@ import java.util.Optional;
  * - deptId는 UUID 문자열 (String, VARCHAR(36))
  * - 모든 메서드의 deptId 파라미터는 String 타입
  */
-public interface JpaDepartmentRepository extends JpaRepository<Department, String> {
+public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity, String> {
 
     /**
      * [트리 탐색]
@@ -45,7 +45,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param orgPathPrefix orgPath 접두사 (예: "/550e8400-...")
      * @return 조건에 맞는 부서 리스트
      */
-    List<Department> findByTenantIdAndOrgPathStartsWith(String tenantId, String orgPathPrefix);
+    List<DepartmentEntity> findByTenantIdAndOrgPathStartsWith(String tenantId, String orgPathPrefix);
 
     /**
      * 특정 테넌트의 전체 부서 목록 조회
@@ -60,7 +60,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * 주의:
      * - 데이터 규모가 커지면 IN 조회로 대체 고려
      */
-    List<Department> findAllByTenantId(String tenantId);
+    List<DepartmentEntity> findAllByTenantId(String tenantId);
 
     /**
      * 특정 부서를 parent로 가지는 하위 부서 존재 여부
@@ -71,19 +71,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param parent 대상 부서
      * @return true: 하위 부서 존재, false: 없음
      */
-    boolean existsByParent(Department parent);
-
-    /**
-     * 특정 테넌트의 최상위(root) 부서 조회
-     *
-     * 구현 방식:
-     * - depth = 0 대신 parent IS NULL 조건 사용
-     * - 모든 최상위 부서 반환
-     *
-     * @param tenantId 테넌트 ID
-     * @return 최상위 부서(parent가 null) 리스트
-     */
-    List<Department> findByTenantIdAndParentIsNull(String tenantId);
+    boolean existsByParent(DepartmentEntity parent);
 
     /**
      * [권장]
@@ -97,21 +85,8 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param tenantId 테넌트 ID
      * @return 해당 부서 (없으면 Empty)
      */
-    Optional<Department> findByDeptIdAndTenantId(String deptId, String tenantId);
+    Optional<DepartmentEntity> findByDeptIdAndTenantId(String deptId, String tenantId);
 
-    /**
-     * [성능 최적화]
-     * tenant + 부서 ID 집합 기준 조회
-     *
-     * 사용처:
-     * - RBAC 스코프 기반 조직도 트리 조회
-     * - 여러 부서를 한 번에 조회 (N+1 쿼리 방지)
-     *
-     * @param tenantId 테넌트 ID
-     * @param deptIds 부서 ID 리스트 (UUID 문자열들)
-     * @return 조건에 맞는 부서 리스트
-     */
-    List<Department> findAllByTenantIdAndDeptIdIn(String tenantId, List<String> deptIds);
 
     /**
      * [부서 검색]
@@ -125,7 +100,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param keyword 검색 키워드 (부서명에 포함되어야 함)
      * @return 키워드가 포함된 부서 리스트
      */
-    List<Department> findByTenantIdAndNameContainingIgnoreCase(String tenantId, String keyword);
+    List<DepartmentEntity> findByTenantIdAndNameContainingIgnoreCase(String tenantId, String keyword);
 
     /**
      * [부서 검색]
@@ -139,7 +114,7 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param depth 깊이 (0: 루트, 1: 1단계, 2: 2단계...)
      * @return 해당 깊이의 부서 리스트
      */
-    List<Department> findByTenantIdAndDepth(String tenantId, Integer depth);
+    List<DepartmentEntity> findByTenantIdAndDepth(String tenantId, Integer depth);
 
     /**
      * [부서 검색]
@@ -153,5 +128,5 @@ public interface JpaDepartmentRepository extends JpaRepository<Department, Strin
      * @param type 부서 타입 (예: "TEAM", "DIVISION", "DEPARTMENT")
      * @return 해당 타입의 부서 리스트
      */
-    List<Department> findByTenantIdAndType(String tenantId, String type);
+    List<DepartmentEntity> findByTenantIdAndType(String tenantId, String type);
 }

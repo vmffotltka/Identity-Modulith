@@ -112,4 +112,68 @@ public enum DataScopeLevel {
     public boolean canSeeSubTree() {
         return this == TEAM_LEAD || this == ADMIN;
     }
+
+    // ========================================================================
+    // 역할명 → DataScopeLevel 매핑 (통합됨)
+    // ========================================================================
+
+    /**
+     * 역할명 → 데이터 스코프 레벨 매핑 테이블
+     *
+     * <h3>POSITION 타입 역할:</h3>
+     * <ul>
+     *   <li>ADMIN: 시스템 관리자 → ADMIN</li>
+     *   <li>MANAGER: 매니저 → ADMIN</li>
+     *   <li>TEAM_LEAD: 팀장 → TEAM_LEAD</li>
+     *   <li>MEMBER: 일반 직원 → MEMBER</li>
+     * </ul>
+     *
+     * <h3>CHANNEL 타입 역할:</h3>
+     * <ul>
+     *   <li>SUPERVISOR: 수퍼바이저 → TEAM_LEAD</li>
+     *   <li>PHONE_AGENT: 전화 상담사 → MEMBER</li>
+     *   <li>CHAT_AGENT: 채팅 상담사 → MEMBER</li>
+     *   <li>EMAIL_AGENT: 이메일 상담사 → MEMBER</li>
+     * </ul>
+     */
+    private static final java.util.Map<String, DataScopeLevel> ROLE_SCOPE_MAP = java.util.Map.ofEntries(
+            // POSITION 타입 역할
+            java.util.Map.entry("ADMIN", ADMIN),
+            java.util.Map.entry("MANAGER", ADMIN),
+            java.util.Map.entry("TEAM_LEAD", TEAM_LEAD),
+            java.util.Map.entry("MEMBER", MEMBER),
+
+            // CHANNEL 타입 역할
+            java.util.Map.entry("SUPERVISOR", TEAM_LEAD),
+            java.util.Map.entry("PHONE_AGENT", MEMBER),
+            java.util.Map.entry("CHAT_AGENT", MEMBER),
+            java.util.Map.entry("EMAIL_AGENT", MEMBER)
+    );
+
+    /**
+     * 역할명으로 데이터 스코프 레벨 조회
+     *
+     * <p>매핑 테이블에 없는 역할은 MEMBER(최소 권한)로 간주합니다.
+     *
+     * <h3>사용 예시:</h3>
+     * <pre>
+     * DataScopeLevel level = DataScopeLevel.fromRoleName("ADMIN");
+     * // 결과: DataScopeLevel.ADMIN
+     *
+     * DataScopeLevel level = DataScopeLevel.fromRoleName("UNKNOWN_ROLE");
+     * // 결과: DataScopeLevel.MEMBER (기본값)
+     * </pre>
+     *
+     * @param roleName 역할명 (예: "ADMIN", "PHONE_AGENT")
+     * @return 데이터 스코프 레벨
+     */
+    public static DataScopeLevel fromRoleName(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            return MEMBER;
+        }
+
+        // 대소문자 무시하고 매핑
+        String normalizedRoleName = roleName.trim().toUpperCase();
+        return ROLE_SCOPE_MAP.getOrDefault(normalizedRoleName, MEMBER);
+    }
 }

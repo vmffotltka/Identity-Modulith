@@ -1,6 +1,6 @@
 package com.nexfron.identitymodulith.organization.presentation;
 
-import com.nexfron.identitymodulith.organization.application.service.DepartmentService;
+import com.nexfron.identitymodulith.organization.application.service.DepartmentServiceImpl;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,7 +42,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DepartmentController {
 
-    private final DepartmentService departmentService;
+    private final DepartmentServiceImpl departmentServiceImpl;
 
     // ============================================================
     // 부서 생성
@@ -96,7 +96,7 @@ public class DepartmentController {
         // TenantContextHolder에서 자동 추출
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
 
-        DepartmentDto.Response response = departmentService.createDepartment(
+        DepartmentDto.Response response = departmentServiceImpl.createDepartment(
                 tenantId,
                 request.getName(),
                 request.getType(),
@@ -132,7 +132,7 @@ public class DepartmentController {
             @Valid @RequestBody DepartmentDto.UpdateRequest request) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
 
-        DepartmentDto.Response response = departmentService.updateDepartment(
+        DepartmentDto.Response response = departmentServiceImpl.updateDepartment(
                 tenantId,
                 deptId,
                 request.getName(),
@@ -193,7 +193,7 @@ public class DepartmentController {
     @GetMapping
     public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTree() {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        List<DepartmentDto.Response> tree = departmentService.getDepartmentTree(tenantId);
+        List<DepartmentDto.Response> tree = departmentServiceImpl.getDepartmentTree(tenantId);
         return ResponseEntity.ok(tree);
     }
 
@@ -218,7 +218,7 @@ public class DepartmentController {
             @Parameter(description = "검색 키워드", example = "개발", required = true)
             @RequestParam String keyword) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        List<DepartmentDto.Response> result = departmentService.searchDepartments(tenantId, keyword);
+        List<DepartmentDto.Response> result = departmentServiceImpl.searchDepartments(tenantId, keyword);
         return ResponseEntity.ok(result);
     }
 
@@ -242,7 +242,7 @@ public class DepartmentController {
             @Parameter(description = "부서 깊이", example = "0", required = true)
             @RequestParam int depth) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        List<DepartmentDto.Response> result = departmentService.getDepartmentsByDepth(tenantId, depth);
+        List<DepartmentDto.Response> result = departmentServiceImpl.getDepartmentsByDepth(tenantId, depth);
         return ResponseEntity.ok(result);
     }
 
@@ -266,7 +266,7 @@ public class DepartmentController {
             @Parameter(description = "부서 타입", example = "TEAM", required = true)
             @RequestParam String type) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        List<DepartmentDto.Response> result = departmentService.getDepartmentsByType(tenantId, type);
+        List<DepartmentDto.Response> result = departmentServiceImpl.getDepartmentsByType(tenantId, type);
         return ResponseEntity.ok(result);
     }
 
@@ -293,7 +293,7 @@ public class DepartmentController {
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        DepartmentDto.Statistics statistics = departmentService.getDepartmentStatistics(tenantId, deptId);
+        DepartmentDto.Statistics statistics = departmentServiceImpl.getDepartmentStatistics(tenantId, deptId);
         return ResponseEntity.ok(statistics);
     }
 
@@ -321,7 +321,7 @@ public class DepartmentController {
             @RequestParam(defaultValue = "false") boolean includeSubDepartments) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         DepartmentDto.DepartmentMembers members =
-                departmentService.getDepartmentMembers(tenantId, deptId, includeSubDepartments);
+                departmentServiceImpl.getDepartmentMembers(tenantId, deptId, includeSubDepartments);
         return ResponseEntity.ok(members);
     }
 
@@ -334,7 +334,7 @@ public class DepartmentController {
      *
      * <h3>동작:</h3>
      * 1. X-User-Id 헤더에서 사용자 ID 추출
-     * 2. OrgScopeService로 접근 가능 부서 범위 계산
+     * 2. DepartmentService 내부에서 접근 가능 부서 범위 계산
      * 3. 접근 가능한 부서들만 필터링
      * 4. 트리 구조로 변환 및 반환
      *
@@ -368,7 +368,7 @@ public class DepartmentController {
             @RequestHeader(value = "X-User-Id") String userIdStr) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
-        List<DepartmentDto.Response> tree = departmentService.getDepartmentTreeWithinScope(tenantId, userId);
+        List<DepartmentDto.Response> tree = departmentServiceImpl.getDepartmentTreeWithinScope(tenantId, userId);
         return ResponseEntity.ok(tree);
     }
 
@@ -425,7 +425,7 @@ public class DepartmentController {
             @RequestBody DepartmentDto.MoveRequest request) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
-        departmentService.moveDepartment(tenantId, userId, deptId, request.getNewParentId());
+        departmentServiceImpl.moveDepartment(tenantId, userId, deptId, request.getNewParentId());
         return ResponseEntity.noContent().build();
     }
 
@@ -471,7 +471,7 @@ public class DepartmentController {
             @PathVariable String deptId) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
-        departmentService.deleteDepartment(tenantId, userId, deptId);
+        departmentServiceImpl.deleteDepartment(tenantId, userId, deptId);
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.rbac.application;
 
+import com.nexfron.identitymodulith.rbac.application.service.RbacQueryServiceImpl;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;

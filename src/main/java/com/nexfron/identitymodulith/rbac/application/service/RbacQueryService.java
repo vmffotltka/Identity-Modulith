@@ -1,4 +1,4 @@
-package com.nexfron.identitymodulith.rbac.application;
+package com.nexfron.identitymodulith.rbac.application.service;
 
 import java.util.Set;
 import java.util.UUID;

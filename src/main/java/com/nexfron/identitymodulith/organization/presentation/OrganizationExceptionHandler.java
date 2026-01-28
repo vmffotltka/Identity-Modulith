@@ -1,9 +1,6 @@
 package com.nexfron.identitymodulith.organization.presentation;
 
 import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
-import com.nexfron.identitymodulith.organization.application.exception.EntityNotFoundException;
-import com.nexfron.identitymodulith.organization.application.exception.BusinessException;
-import com.nexfron.identitymodulith.organization.application.exception.InvalidDepartmentMoveException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,10 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * <h3>처리 대상:</h3>
  * <ul>
- *   <li>OrganizationException: 조직/부서 관련 비즈니스 로직 예외</li>
- *   <li>EntityNotFoundException: 엔티티(부서) 미존재 예외</li>
- *   <li>InvalidDepartmentMoveException: 부서 이동 규칙 위반 예외</li>
- *   <li>BusinessException: 일반 비즈니스 로직 예외</li>
+ *   <li>OrganizationException: 조직/부서 관련 모든 예외 통합 처리</li>
  *   <li>Exception: 예상치 못한 기타 예외</li>
  * </ul>
  *
@@ -42,16 +36,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * </ul>
  *
  * @see OrganizationException
- * @see EntityNotFoundException
- * @see InvalidDepartmentMoveException
- * @see BusinessException
  */
 @RestControllerAdvice
 @RequiredArgsConstructor
 public class OrganizationExceptionHandler {
 
     /**
-     * OrganizationException 처리
+     * OrganizationException 처리 (통합 예외 처리)
      *
      * <h3>발생 시나리오:</h3>
      * <ul>
@@ -61,6 +52,8 @@ public class OrganizationExceptionHandler {
      *   <li>하위 부서 존재 (CHILD_DEPARTMENT_EXISTS)</li>
      *   <li>활성 사용자 존재 (ACTIVE_USERS_EXIST)</li>
      *   <li>권한 부족 (INSUFFICIENT_PERMISSION)</li>
+     *   <li>사용자 정보 미존재 (USER_NOT_FOUND)</li>
+     *   <li>비활성 사용자 (USER_INACTIVE)</li>
      * </ul>
      *
      * <h3>처리 흐름:</h3>
@@ -97,98 +90,6 @@ public class OrganizationExceptionHandler {
         return ResponseEntity.status(errorCode.getHttpStatus()).body(response);
     }
 
-    /**
-     * EntityNotFoundException 처리
-     *
-     * <h3>발생 시나리오:</h3>
-     * <ul>
-     *   <li>부서 정보 조회 실패</li>
-     *   <li>부서의 상위 부서 미존재</li>
-     *   <li>사용자 정보 미존재</li>
-     * </ul>
-     *
-     * <h3>처리:</h3>
-     * - HTTP 404 Not Found 응답
-     * - 일반적인 "엔티티를 찾을 수 없습니다" 메시지
-     *
-     * @param e EntityNotFoundException 객체
-     * @return HTTP 404 Not Found + 에러 응답
-     */
-    @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException e) {
-        ErrorResponse response = ErrorResponse.builder()
-                .code("ENTITY_NOT_FOUND")
-                .message(e.getMessage())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-    }
-
-    /**
-     * BusinessException 처리 (일반 비즈니스 예외)
-     *
-     * <h3>발생 시나리오:</h3>
-     * <ul>
-     *   <li>비즈니스 규칙 위반</li>
-     *   <li>유효성 검증 실패</li>
-     *   <li>데이터 무결성 문제</li>
-     * </ul>
-     *
-     * <h3>처리:</h3>
-     * - HTTP 400 Bad Request 응답
-     * - 예외의 메시지 그대로 클라이언트에 전달
-     *
-     * @param e BusinessException 객체
-     * @return HTTP 400 Bad Request + 에러 응답
-     */
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
-        ErrorResponse response = ErrorResponse.builder()
-                .code("BUSINESS_ERROR")
-                .message(e.getMessage())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-    }
-
-    /**
-     * InvalidDepartmentMoveException 처리 (부서 이동 규칙 위반)
-     *
-     * <h3>발생 시나리오:</h3>
-     * <ul>
-     *   <li>자신의 하위 부서로 이동 시도 (순환 참조)</li>
-     *   <li>조직 깊이 최대치 초과 (MAX_ORGANIZATION_DEPTH)</li>
-     *   <li>조직 경로 길이 초과 (MAX_ORG_PATH_LENGTH)</li>
-     * </ul>
-     *
-     * <h3>예시:</h3>
-     * <pre>
-     * // 순환 참조 시도
-     * 요청: PUT /api/org/departments/parent-dept-id/move
-     * 본문: { "newParentId": "child-dept-id" }
-     * 응답: 400 Bad Request
-     * {
-     *   "code": "INVALID_DEPARTMENT_MOVE",
-     *   "message": "자신의 하위 부서로 이동할 수 없습니다."
-     * }
-     * </pre>
-     *
-     * <h3>처리:</h3>
-     * - HTTP 400 Bad Request 응답
-     * - 도메인 규칙 위반 사유를 명확히 전달
-     *
-     * @param e InvalidDepartmentMoveException 객체
-     * @return HTTP 400 Bad Request + 에러 응답
-     */
-    @ExceptionHandler(InvalidDepartmentMoveException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidDepartmentMoveException(InvalidDepartmentMoveException e) {
-        ErrorResponse response = ErrorResponse.builder()
-                .code("INVALID_DEPARTMENT_MOVE")
-                .message(e.getMessage())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-    }
 
     /**
      * 예기치 않은 일반 예외 처리

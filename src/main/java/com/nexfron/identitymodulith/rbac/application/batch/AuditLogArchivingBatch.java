@@ -37,7 +37,7 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AuditLogArchivingBatchService {
+public class AuditLogArchivingBatch {
 
     private final AuditLogJpaRepository auditLogRepository;
 
