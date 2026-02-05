@@ -1,7 +1,13 @@
 package com.nexfron.identitymodulith.organization.presentation.dto;
 
-import com.nexfron.identitymodulith.organization.domain.model.Department;
+import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentStatus;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,24 +28,61 @@ public class DepartmentDto {
     @Schema(description = "부서 생성 요청")
     public static class CreateRequest {
 
+        @NotBlank(message = "부서명은 필수입니다")
+        @Size(
+                min = OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH,
+                max = OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH,
+                message = "부서명은 " + OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH +
+                        "-" + OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH + "자 사이여야 합니다"
+        )
         @Schema(
                 description = "부서명",
                 example = "플랫폼개발팀"
         )
         private String name;
 
+        @NotNull(message = "부서 타입은 필수입니다")
         @Schema(
-                description = "부서 타입 (TEAM, DIVISION 등)",
-                example = "TEAM"
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
+                example = "TEAM",
+                allowableValues = {"COMPANY", "DIVISION", "TEAM", "GROUP", "CUSTOM"}
         )
-        private String type;
+        private DepartmentType type;
 
         @Schema(
-                description = "상위 부서 ID (최상위 부서인 경우 null)",
-                example = "1",
+                description = "상위 부서 ID (최상위 부서인 경우 null, UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000",
                 nullable = true
         )
-        private Long parentId;
+        private String parentId;
+    }
+
+    /**
+     * 부서 업데이트 요청 바디
+     */
+    @Getter
+    @NoArgsConstructor
+    @Schema(description = "부서 업데이트 요청")
+    public static class UpdateRequest {
+
+        @Size(
+                min = OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH,
+                max = OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH,
+                message = "부서명은 " + OrganizationConstants.DEPARTMENT_NAME_MIN_LENGTH +
+                        "-" + OrganizationConstants.DEPARTMENT_NAME_MAX_LENGTH + "자 사이여야 합니다"
+        )
+        @Schema(
+                description = "변경할 부서명 (선택)",
+                example = "AI개발팀"
+        )
+        private String name;
+
+        @Schema(
+                description = "변경할 부서 타입 (선택, COMPANY/DIVISION/TEAM/GROUP/CUSTOM)",
+                example = "TEAM",
+                allowableValues = {"COMPANY", "DIVISION", "TEAM", "GROUP", "CUSTOM"}
+        )
+        private DepartmentType type;
     }
 
     /**
@@ -51,10 +94,10 @@ public class DepartmentDto {
     public static class MoveRequest {
 
         @Schema(
-                description = "새 상위 부서 ID",
-                example = "2"
+                description = "새 상위 부서 ID (UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440001"
         )
-        private Long newParentId;
+        private String newParentId;
     }
 
     /**
@@ -67,10 +110,10 @@ public class DepartmentDto {
     public static class Response {
 
         @Schema(
-                description = "부서 ID",
-                example = "10"
+                description = "부서 ID (UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000"
         )
-        private Long deptId;
+        private String deptId;
 
         @Schema(
                 description = "부서명",
@@ -79,29 +122,35 @@ public class DepartmentDto {
         private String name;
 
         @Schema(
-                description = "부서 타입",
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
                 example = "TEAM"
         )
-        private String type;
+        private DepartmentType type;
 
         @Schema(
                 description = "조직 경로 (Materialized Path)",
-                example = "/1/3/10"
+                example = "/550e8400-e29b-41d4-a716-446655440000/550e8400-e29b-41d4-a716-446655440001"
         )
         private String orgPath;
 
         @Schema(
                 description = "조직 트리 깊이 (Root = 0)",
-                example = "2"
+                example = "1"
         )
         private Integer depth;
 
         @Schema(
-                description = "상위 부서 ID (Root 부서는 null)",
-                example = "3",
+                description = "상위 부서 ID (Root 부서는 null, UUID 문자열)",
+                example = "550e8400-e29b-41d4-a716-446655440000",
                 nullable = true
         )
-        private Long parentId;
+        private String parentId;
+
+        @Schema(
+                description = "부서 상태 (ACTIVE: 활성, INACTIVE: 비활성)",
+                example = "ACTIVE"
+        )
+        private DepartmentStatus status;
 
         /**
          * 트리 구조 표현용 자식 노드 리스트
@@ -120,13 +169,14 @@ public class DepartmentDto {
         /**
          * Entity -> DTO 변환 메서드
          */
-        public static Response from(Department dept) {
+        public static Response from(DepartmentEntity dept) {
             return Response.builder()
                     .deptId(dept.getDeptId())
                     .name(dept.getName())
                     .type(dept.getType())
                     .orgPath(dept.getOrgPath())
                     .depth(dept.getDepth())
+                    .status(dept.getStatus())
                     .parentId(
                             dept.getParent() != null
                                     ? dept.getParent().getDeptId()
@@ -135,4 +185,133 @@ public class DepartmentDto {
                     .build();
         }
     }
+
+    /**
+     * 부서 통계 정보 DTO
+     */
+    @Getter
+    @Builder
+    @Schema(description = "부서 통계 정보")
+    public static class Statistics {
+
+        @Schema(
+                description = "부서 ID",
+                example = "550e8400-e29b-41d4-a716-446655440000"
+        )
+        private String deptId;
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
+        private String name;
+
+        @Schema(
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
+                example = "TEAM"
+        )
+        private DepartmentType type;
+
+        @Schema(
+                description = "부서 깊이 (0부터 시작)",
+                example = "2"
+        )
+        private Integer depth;
+
+        @Schema(
+                description = "전체 직원 수 (활성 + 비활성)",
+                example = "15"
+        )
+        private Long totalEmployees;
+
+        @Schema(
+                description = "활성 직원 수 (ACTIVE 상태)",
+                example = "12"
+        )
+        private Long activeEmployees;
+
+        @Schema(
+                description = "직속 하위 부서 수",
+                example = "3"
+        )
+        private Long childDeptCount;
+
+        @Schema(
+                description = "전체 하위 부서 수 (재귀적으로 모든 하위 포함)",
+                example = "8"
+        )
+        private Long descendantDeptCount;
+    }
+
+    /**
+     * 부서별 사용자 목록 DTO
+     */
+    @Getter
+    @Builder
+    @Schema(description = "부서별 사용자 목록")
+    public static class DepartmentMembers {
+
+        @Schema(
+                description = "부서 ID",
+                example = "550e8400-e29b-41d4-a716-446655440000"
+        )
+        private String deptId;
+
+        @Schema(
+                description = "부서명",
+                example = "플랫폼개발팀"
+        )
+        private String deptName;
+
+        @Schema(
+                description = "하위 부서 포함 여부",
+                example = "true"
+        )
+        private Boolean includeSubDepartments;
+
+        @Schema(
+                description = "전체 사용자 수",
+                example = "15"
+        )
+        private Integer totalCount;
+
+        @Schema(
+                description = "활성 사용자 수",
+                example = "12"
+        )
+        private Long activeCount;
+
+        @Schema(
+                description = "퇴직 사용자 수",
+                example = "3"
+        )
+        private Long retiredCount;
+
+        @Schema(description = "사용자 목록")
+        private List<MemberInfo> members;
+    }
+
+    /**
+     * 부서 소속 사용자 정보 DTO
+     */
+    @Schema(description = "부서 소속 사용자 정보")
+    public record MemberInfo(
+            @Schema(description = "사용자 ID", example = "user-001")
+            String userId,
+
+            @Schema(description = "로그인 ID", example = "john.doe")
+            String loginId,
+
+            @Schema(description = "사용자명", example = "홍길동")
+            String name,
+
+            @Schema(description = "소속 부서 ID", example = "dept-123")
+            String deptId,
+
+            @Schema(description = "직급/직책", example = "대리")
+            String jobTitle,
+
+            @Schema(description = "상태", example = "ACTIVE")
+            String status
+    ) {}
 }

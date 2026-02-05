@@ -109,8 +109,14 @@ public class RbacExceptionHandler {
             // 409 Conflict: 리소스 충돌 (중복 생성, 이미 할당됨 등)
             case ROLE_ALREADY_EXISTS, PERMISSION_ALREADY_EXISTS, PERMISSION_ALREADY_ASSIGNED -> HttpStatus.CONFLICT;
 
+            // 403 Forbidden: 권한 부족
+            case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
+
             // 400 Bad Request: 잘못된 요청 (비즈니스 규칙 위반)
-            case ROLE_HAS_USERS -> HttpStatus.BAD_REQUEST;
+            case ROLE_HAS_USERS, ROLE_NOT_ACTIVE -> HttpStatus.BAD_REQUEST;
+
+            // 500 Internal Server Error: 내부 서버 오류
+            case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }
 

@@ -26,12 +26,18 @@ dependencies {
     // Spring Boot Starters
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14"
     implementation "org.apache.commons:commons-lang3:3.18.0"
     implementation 'org.springframework.boot:spring-boot-starter-security'
 
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
+
+    // Flyway (DB 마이그레이션)
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
 
     // Spring Modulith
     implementation 'org.springframework.modulith:spring-modulith-starter-core'
@@ -43,6 +49,7 @@ dependencies {
 
     // Test Dependencies
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
     runtimeOnly 'org.postgresql:postgresql'
     testCompileOnly 'org.projectlombok:lombok'

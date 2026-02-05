@@ -2,12 +2,13 @@ package com.nexfron.identitymodulith.user.infrastructure.persistence;
 
 import com.nexfron.identitymodulith.user.domain.model.Agent;
 import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
-import com.nexfron.identitymodulith.user.domain.repository.AgentRepository;
+import com.nexfron.identitymodulith.user.infrastructure.persistence.repository.AgentRepository;
 import com.nexfron.identitymodulith.user.infrastructure.persistence.entity.AgentJpaEntity;
 import com.nexfron.identitymodulith.user.infrastructure.persistence.repository.AgentJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -81,5 +82,67 @@ public class AgentRepositoryImpl implements AgentRepository {
     public Optional<Agent> findByTenantIdAndAgentId(String tenantId, UUID agentId) {
         return jpaRepository.findByTenantIdAndAgentId(tenantId, agentId.toString())
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<Agent> findByIdAndTenantId(UUID agentId, String tenantId) {
+        return jpaRepository.findByTenantIdAndAgentId(tenantId, agentId.toString())
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Agent> findByTenantId(String tenantId) {
+        return jpaRepository.findByTenantId(tenantId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Agent> findRetiredWithScheduledDelete(LocalDateTime beforeDateTime) {
+        // 퇴직 상태(RETIRED)이고 퇴직일시가 주어진 시간 이전인 상담사 조회
+        return jpaRepository.findByStatus(AgentStatus.RETIRED.name()).stream()
+                .filter(entity -> entity.getRetiredAt() != null && entity.getRetiredAt().isBefore(beforeDateTime))
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Agent> findAgentsForScheduledDelete(AgentStatus status, LocalDateTime now) {
+        return jpaRepository.findByStatusAndScheduledDeleteAtBefore(status.name(), now).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public long countByStatus(AgentStatus status) {
+        return jpaRepository.countByStatus(status.name());
+    }
+
+    @Override
+    public List<Agent> findByNameContaining(String nameKeyword) {
+        return jpaRepository.findByNameContaining(nameKeyword).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Agent> findByLoginIdContaining(String loginIdKeyword) {
+        return jpaRepository.findByLoginIdContaining(loginIdKeyword).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Agent> findByTenantIdAndStatus(String tenantId, AgentStatus status) {
+        return jpaRepository.findByTenantIdAndStatus(tenantId, status.name()).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Agent> findByTenantIdAndOrganizationId(String tenantId, String organizationId) {
+        return jpaRepository.findByTenantIdAndDeptId(tenantId, organizationId).stream()
+                .map(mapper::toDomain)
+                .toList();
     }
 }

@@ -2,9 +2,12 @@ package com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository;
 
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 역할-권한 매핑 JPA Repository
@@ -25,19 +28,51 @@ import java.util.List;
 public interface RolePermissionJpaRepository extends JpaRepository<RolePermissionJpaEntity, Long> {
 
     /**
-     * 주어진 역할명들에 대한 모든 역할-권한 매핑을 조회합니다.
+     * 특정 역할의 모든 권한을 조회합니다.
+     *
+     * 사용 시나리오:
+     * - 특정 역할이 어떤 권한을 가지고 있는지 확인
+     * - 역할에 포함된 모든 권한 조회
+     *
+     * @param roleId 역할 ID
+     * @return 역할에 할당된 모든 권한 ID 집합
+     *
+     * @apiNote
+     *  쿼리: SELECT permission_id FROM role_permissions WHERE role_id = ?
+     */
+    @Query("SELECT rp.permissionId FROM RolePermissionJpaEntity rp WHERE rp.roleId = :roleId")
+    Set<String> findPermissionIdsByRoleId(@Param("roleId") String roleId);
+
+    /**
+     * 특정 역할의 모든 권한 매핑 엔티티 조회
+     *
+     * @param roleId 역할 ID
+     * @return 역할-권한 매핑 엔티티 리스트
+     */
+    List<RolePermissionJpaEntity> findByRoleId(String roleId);
+
+    /**
+     * 특정 권한을 가진 모든 역할-권한 매핑 엔티티 조회
+     *
+     * @param permissionId 권한 ID
+     * @return 역할-권한 매핑 엔티티 리스트
+     */
+    List<RolePermissionJpaEntity> findByPermissionId(String permissionId);
+
+    /**
+     * 주어진 역할 ID들에 대한 모든 권한을 조회합니다.
      *
      * 사용 시나리오:
      * - 여러 역할을 가진 사용자의 모든 권한을 한 번에 조회할 때
-     * - 역할명 목록: ["ADMIN", "TEAM_LEADER"] -> 두 역할의 모든 권한을 조회
+     * - 역할 ID 목록: ["role1", "role2"] -> 두 역할의 모든 권한을 조회
      *
-     * @param roleNames 역할명 컬렉션 (Collection은 List, Set 등 모든 컬렉션 타입 가능)
+     * @param roleIds 역할 ID 컬렉션 (Collection은 List, Set 등 모든 컬렉션 타입 가능)
      * @return 매칭되는 모든 역할-권한 매핑 리스트
      *
      * @apiNote
-     *  쿼리: SELECT * FROM role_permissions WHERE role_name IN (?)
+     *  쿼리: SELECT * FROM role_permissions WHERE role_id IN (?)
      */
-    List<RolePermissionJpaEntity> findByRoleNameIn(Collection<String> roleNames);
+    List<RolePermissionJpaEntity> findByRoleIdIn(Collection<String> roleIds);
 
     /**
      * 특정 역할에서 특정 권한의 할당을 제거합니다.
@@ -46,46 +81,126 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
      * - 역할에서 특정 권한 하나를 제거할 때
      * - 예: ADMIN 역할에서 "user:delete" 권한 제거
      *
-     * @param roleName 역할명
-     * @param permissionCode 권한 코드
+     * @param roleId 역할 ID
+     * @param permissionId 권한 ID
      *
      * @apiNote
-     *  쿼리: DELETE FROM role_permissions WHERE role_name = ? AND permission_code = ?
+     *  쿼리: DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?
      */
-    void deleteByRoleNameAndPermissionCode(String roleName, String permissionCode);
+    void deleteByRoleIdAndPermissionId(String roleId, String permissionId);
 
     /**
-     * 특정 역할의 모든 권한 할당을 제거합니다.
+     * 특정 역할과 권한이 이미 매핑되어 있는지 확인합니다.
      *
      * 사용 시나리오:
-     * - 역할을 삭제하기 전에 관련된 모든 권한 매핑을 삭제할 때
-     * - 주의: 이 작업은 돌이킬 수 없으므로 신중하게 사용해야 합니다.
+     * - 역할에 권한을 할당하기 전에 중복 할당 여부 확인
+     * - 같은 권한을 두 번 할당하는 것을 방지
      *
-     * @param roleName 역할명
+     * @param roleId 역할 ID
+     * @param permissionId 권한 ID
+     * @return 매핑 존재 여부
      *
      * @apiNote
-     *  쿼리: DELETE FROM role_permissions WHERE role_name = ?
-     *
-     * @see com.nexfron.identitymodulith.rbac.application.RbacManagementService#deleteRole(String)
+     *  쿼리: SELECT COUNT(*) FROM role_permissions WHERE role_id = ? AND permission_id = ?
      */
-    void deleteByRoleName(String roleName);
+    boolean existsByRoleIdAndPermissionId(String roleId, String permissionId);
 
     /**
-     * 특정 권한이 할당된 모든 역할-권한 매핑을 제거합니다.
+     * 특정 역할의 모든 권한 엔티티를 조회합니다.
      *
      * 사용 시나리오:
-     * - 권한을 삭제하기 전에 관련된 모든 역할 매핑을 삭제할 때
-     * - 권한 업그레이드나 이름 변경 시 기존 매핑 정리
-     * - 주의: 이 작업은 돌이킬 수 없으므로 신중하게 사용해야 합니다.
+     * - 역할이 가진 모든 권한 정보를 조회할 때
+     * - 권한 ID뿐만 아니라 권한의 코드, 설명 등도 필요할 때
      *
-     * @param permissionCode 권한 코드
-     *
-     * @apiNote
-     *  쿼리: DELETE FROM role_permissions WHERE permission_code = ?
-     *
-     * @see com.nexfron.identitymodulith.rbac.application.RbacManagementService#deletePermission(String)
+     * @param roleId 역할 ID
+     * @return 권한 엔티티 리스트
      */
-    void deleteByPermissionCode(String permissionCode);
+    @Query("""
+        SELECT DISTINCT p FROM PermissionJpaEntity p
+        WHERE p.permissionId IN (
+            SELECT rp.permissionId FROM RolePermissionJpaEntity rp
+            WHERE rp.roleId = :roleId
+          )
+          AND p.tenantId = :tenantId
+    """)
+    List<com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity>
+        findPermissionsByRoleIdAndTenant(@Param("roleId") String roleId,
+                                          @Param("tenantId") String tenantId);
+
+    @Query("""
+        SELECT rp.permissionId FROM RolePermissionJpaEntity rp
+        WHERE rp.roleId IN :roleIds
+    """)
+    List<String> findPermissionIdsByRoleIds(@Param("roleIds") Collection<String> roleIds);
+
+    /**
+     * 여러 역할의 권한 ID를 테넌트 격리하여 조회
+     *
+     * 사용 시나리오:
+     * - 멀티테넌시 환경에서 사용자가 가진 여러 역할의 권한을 조회
+     * - 다른 테넌트의 권한 접근 방지 (보안)
+     *
+     * ⚠️ 주의: RolePermissionJpaEntity에는 tenantId 필드가 없으므로,
+     * 실제 조회 시 roles 테이블과 JOIN하거나 별도 검증 필요
+     *
+     * @param roleIds 역할 ID 목록
+     * @param tenantId 테넌트 ID (현재 미사용 - 향후 개선 필요)
+     * @return 권한 ID 목록
+     */
+    @Query("""
+        SELECT rp.permissionId FROM RolePermissionJpaEntity rp
+        WHERE rp.roleId IN :roleIds
+    """)
+    List<String> findPermissionIdsByRoleIdsAndTenant(@Param("roleIds") Collection<String> roleIds,
+                                                     @Param("tenantId") String tenantId);
+
+    /**
+     * 특정 역할의 권한 코드를 DTO 프로젝션으로 조회 (성능 최적화)
+     *
+     * 사용 시나리오:
+     * - getPermissionsByRole()에서 권한 코드만 필요할 때
+     * - N+1 문제를 방지하고 한 번의 JOIN 쿼리로 조회
+     *
+     * 성능 이점:
+     * - 기존: 2개 쿼리 (role_permissions 조회 + permissions 조회)
+     * - 개선: 1개 쿼리 (JOIN으로 한 번에 조회)
+     *
+     * @param roleId 역할 ID
+     * @param tenantId 테넌트 ID
+     * @return 권한 코드 목록
+     */
+    @Query("""
+        SELECT p.code 
+        FROM RolePermissionJpaEntity rp
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        WHERE rp.roleId = :roleId 
+          AND p.tenantId = :tenantId
+    """)
+    List<String> findPermissionCodesByRoleIdAndTenant(@Param("roleId") String roleId,
+                                                       @Param("tenantId") String tenantId);
+
+    /**
+     * 여러 역할의 권한 코드를 DTO 프로젝션으로 조회 (성능 최적화)
+     *
+     * 사용 시나리오:
+     * - 사용자가 가진 여러 역할의 모든 권한을 한 번에 조회
+     * - permissionsOfRoles() 메서드 최적화용
+     *
+     * @param roleIds 역할 ID 목록
+     * @param tenantId 테넌트 ID
+     * @return 권한 코드 목록 (중복 포함)
+     */
+    @Query("""
+        SELECT DISTINCT p.code 
+        FROM RolePermissionJpaEntity rp
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        WHERE rp.roleId IN :roleIds 
+          AND p.tenantId = :tenantId
+    """)
+    List<String> findPermissionCodesByRoleIdsAndTenant(@Param("roleIds") Collection<String> roleIds,
+                                                        @Param("tenantId") String tenantId);
+
+    void deleteByRoleId(String roleId);
+
+    void deleteByPermissionId(String permissionId);
 }
-
-

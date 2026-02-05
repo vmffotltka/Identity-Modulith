@@ -3,6 +3,10 @@ package com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
 /**
  * 권한(Permission) JPA Repository
  *
@@ -25,5 +29,38 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * @see RolePermissionJpaRepository
  */
 public interface PermissionJpaRepository extends JpaRepository<PermissionJpaEntity, String> {
-}
 
+    /**
+     * 특정 테넌트의 모든 권한 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @return 권한 리스트 (빈 리스트 가능)
+     */
+    List<PermissionJpaEntity> findByTenantId(String tenantId);
+
+    /**
+     * 테넌트와 권한 코드로 특정 권한 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param code 권한 코드 (예: "user:create", "org:view")
+     * @return Optional 권한
+     */
+    Optional<PermissionJpaEntity> findByTenantIdAndCode(String tenantId, String code);
+
+    /**
+     * 테넌트와 권한 코드 중복 확인
+     *
+     * @param tenantId 테넌트 ID
+     * @param code 권한 코드
+     * @return 존재 여부
+     */
+    boolean existsByTenantIdAndCode(String tenantId, String code);
+
+    /**
+     * [추가] 테넌트와 권한 ID 목록으로 권한 엔티티를 배치 조회합니다.
+     * @param tenantId 테넌트 ID
+     * @param permissionIds 권한 ID 목록
+     * @return 권한 엔티티 리스트(코드 포함)
+     */
+    List<PermissionJpaEntity> findByTenantIdAndPermissionIdIn(String tenantId, Collection<String> permissionIds);
+}
