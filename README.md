@@ -1,18 +1,15 @@
 # Identity Modulith
 
-Spring Boot와 Spring Modulith 기반의 모듈식 모놀리스 아키텍처를 적용한 인증/ID 관리 애플리케이션입니다.
+Spring Boot와 Spring Modulith 기반의 모듈식 모놀리스 아키텍처를 적용한 멀티테넌트 ID 관리 시스템입니다.
 
 ## ⚡ Quick Start
 
 ```bash
-# 1. 데이터베이스 완전 초기화 (PostgreSQL 클라이언트에서)
-psql -U nexfron -d nexfron -f reset_database_clean.sql
-
-# 2. 애플리케이션 실행 (Flyway 자동 마이그레이션)
+# 1. 애플리케이션 실행 (Flyway 자동 마이그레이션)
 ./gradlew bootRun
 
-# 3. Swagger UI 접속
-http://localhost:8080/swagger-ui.html
+# 2. Swagger UI 접속
+http://localhost:8080/swagger-ui/index.html
 
 # 🔐 Swagger 인증 정보 (Spring Security Basic Auth)
 # 1. 애플리케이션 시작 후 콘솔에서 비밀번호 확인
@@ -28,30 +25,34 @@ http://localhost:8080/swagger-ui.html
 #
 # 5. 이제 모든 API를 테스트할 수 있습니다!
 
-# 4. API 테스트 예시 (RBAC 모듈)
-# - POST /api/rbac/roles → 역할 생성
-# - POST /api/rbac/permissions → 권한 생성
-# - POST /api/rbac/roles/{roleId}/permissions/{permissionId} → 역할에 권한 할당
+# 3. 초기 데이터 확인
+# - 관리자 계정: admin / password123
+# - 팀장 계정: teamlead01 / password123
+# - 상담사 계정: agent01 / password123
 ```
 
-## 📋 최신 업데이트 (v2.0.1 - 2026-01-22)
+## 📋 최신 업데이트 (v3.0.0 - 2026-02-05)
 
-- ✅ **사용자-역할 할당 API 추가** - `POST/DELETE/GET /api/rbac/agents/{agentId}/roles/{roleName}`
-- ✅ **단일 마이그레이션 파일** - `V1_0_0__Complete_Init.sql` 하나로 통합
-- ✅ **표준 데이터 자동 삽입** - 35권한 + 8역할 + 16사용자
-- ✅ **깨끗한 테이블 구조** - 8개 핵심 테이블만 유지
-- ✅ **감사 로그 자동 기록** - 모든 RBAC 변경사항 추적
-- ✅ **캐싱 전략 구현** - 권한 조회 성능 최적화
-## 기술 스택
+### 🎯 주요 개선 사항
+- ✅ **Port/Adapter 패턴 완전 적용** - 모듈 간 직접 의존성 제거
+- ✅ **DDD + Modular Monolith 아키텍처** - 레이어별 명확한 역할 분리
+- ✅ **Department Type Enum 추가** - COMPANY, DIVISION, TEAM, GROUP, CUSTOM
+- ✅ **부서 상태 관리 구현** - 활성화/비활성화 API 추가
+- ✅ **비즈니스 규칙 강화** - 순환 참조 방지, 삭제 제약 조건
+- ✅ **Swagger 문서 완벽 적용** - 모든 API에 상세 설명 추가
+- ✅ **통합 테스트 가이드** - Organization, Agent, RBAC 시나리오별 테스트 문서
+## 🛠 기술 스택
 
-- Java 21
-- Spring Boot 3.5.8
-- Spring Modulith 1.4.2
-- Spring Data JPA
-- PostgreSQL 18+
-- Flyway 11.7.2
-- Lombok
-- Gradle 9.2.1
+- **Java 21** - LTS 버전, 최신 언어 기능 활용
+- **Spring Boot 3.5.8** - 최신 스프링 부트 프레임워크
+- **Spring Modulith 1.4.2** - 모듈형 모놀리스 아키텍처 지원
+- **Spring Data JPA** - 데이터 영속성 계층
+- **Spring Security** - 인증/인가 처리
+- **PostgreSQL 18+** - 고성능 RDBMS
+- **Flyway 11.7.2** - 데이터베이스 마이그레이션 자동화
+- **Swagger/OpenAPI 3.0** - API 문서 자동 생성
+- **Lombok** - 보일러플레이트 코드 제거
+- **Gradle 9.2.1** - 빌드 도구
 
 ## 빌드 및 실행
 
@@ -66,46 +67,67 @@ http://localhost:8080/swagger-ui.html
 ./gradlew bootRun
 ```
 
-## 🗄️ 데이터베이스 초기화
+## 🗄️ 데이터베이스 구조
 
-### 방법 1: 완전 초기화 (권장)
+### 핵심 테이블 (5개)
 
-**⚠️ 모든 데이터가 삭제됩니다!**
+| 테이블명 | 모듈 | 설명 |
+|---------|------|------|
+| **org_departments** | Organization | 조직 계층 구조 (트리) |
+| **agents** | User | 사용자(상담사) 정보 |
+| **rbac_roles** | RBAC | 역할 정의 (POSITION, CHANNEL) |
+| **rbac_permissions** | RBAC | 권한 정의 |
+| **rbac_role_permissions** | RBAC | 역할-권한 매핑 (M:N) |
+| **rbac_agent_roles** | RBAC | 사용자-역할 매핑 (M:N) |
+
+### 초기 데이터 (자동 생성)
+
+**역할 (8개)**:
+- POSITION: `ADMIN`, `TEAM_LEAD`, `AGENT` (직급 기반)
+- CHANNEL: `INBOUND_AGENT`, `OUTBOUND_AGENT`, `CHAT_AGENT`, `EMAIL_AGENT`, `MULTI_CHANNEL_AGENT` (채널 기반)
+
+**권한 (35개)**:
+- AGENT: 상담사 생성, 조회, 수정, 삭제, 정지, 활성화, 이동, 역할할당, 비밀번호초기화 (9개)
+- DEPARTMENT: 부서 생성, 조회, 수정, 삭제, 이동, 비활성화 (6개)
+- RBAC: 역할 생성, 조회, 수정, 삭제, 권한 조회, 권한 할당 (6개)
+- CHANNEL: 인바운드, 아웃바운드, 채팅, 이메일 채널별 권한 (14개)
+
+**샘플 데이터**:
+- 부서 4개: 넥스프론(본사) → 고객서비스본부 → 인바운드팀, 아웃바운드팀
+- 사용자 3개: admin(관리자), teamlead01(팀장), agent01(상담사)
+
+### 데이터베이스 초기화 (선택사항)
 
 ```bash
-# PostgreSQL 클라이언트에서 실행
-psql -U nexfron -d nexfron -f reset_database_clean.sql
-
-# 애플리케이션 재시작
+# 방법 1: Flyway 자동 마이그레이션 (권장)
+# - 애플리케이션 실행 시 자동으로 V1_0_0__Complete_Init.sql 실행
 ./gradlew bootRun
+
+# 방법 2: 수동 초기화 (완전 재설정 필요 시)
+# - PostgreSQL 클라이언트에서 직접 실행
+psql -U your_user -d your_database -f src/main/resources/db/migration/V1_0_0__Complete_Init.sql
 ```
 
-### 방법 2: GUI 도구 사용 (DBeaver/DataGrip)
-
-1. `reset_database_clean.sql` 파일 열기
-2. 전체 실행 (Ctrl+Enter)
-3. 애플리케이션 재시작
-
-### 초기화 후 확인
+### 데이터 확인 쿼리
 
 ```sql
 -- 테이블 건수 확인
 SELECT 
-    'departmentEntities' as table_name, COUNT(*) as count FROM departmentEntities
+    'org_departments' as table_name, COUNT(*) as count FROM org_departments
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
-UNION ALL SELECT 'roles', COUNT(*) FROM roles
-UNION ALL SELECT 'permissions', COUNT(*) FROM permissions
-UNION ALL SELECT 'role_permissions', COUNT(*) FROM role_permissions
-UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
-```
+UNION ALL SELECT 'rbac_roles', COUNT(*) FROM rbac_roles
+UNION ALL SELECT 'rbac_permissions', COUNT(*) FROM rbac_permissions
+UNION ALL SELECT 'rbac_role_permissions', COUNT(*) FROM rbac_role_permissions
+UNION ALL SELECT 'rbac_agent_roles', COUNT(*) FROM rbac_agent_roles;
 
-**예상 결과**:
-- departmentEntities: 16개
-- agents: 16개
-- roles: 8개
-- permissions: 35개
-- role_permissions: 77개
-- agent_roles: 22개
+-- 예상 결과:
+-- org_departments: 4개
+-- agents: 3개
+-- rbac_roles: 8개
+-- rbac_permissions: 35개
+-- rbac_role_permissions: 77개 (ADMIN 35개 + TEAM_LEAD 6개 + AGENT 3개 + 채널별 권한)
+-- rbac_agent_roles: 6개
+```
 
 ## 아키텍처
 
@@ -285,96 +307,142 @@ com.nexfron.identitymodulith.organization/
 │           ├── UpdateRequest                     # 부서 수정 요청
 │           ├── MoveRequest                       # 부서 이동 요청
 │           ├── Response                          # 부서 정보 응답
-│           └── Statistics                        # 부서 통계 응답
+│           ├── Statistics                        # 부서 통계 응답
+│           └── DepartmentMembers                 # 부서별 사용자 목록
 │
 ├── application/                                  # 응용 계층
 │   ├── port/                                     # 포트 (다른 모듈과의 인터페이스)
 │   │   ├── OrgUserPort.java                      # User 모듈 연동 인터페이스
 │   │   └── OrgUserView.java                      # 사용자 조직 정보 DTO
 │   └── service/
-│       ├── DepartmentService.java                # 부서 관리 핵심 서비스
+│       ├── DepartmentServiceImpl.java            # 부서 관리 핵심 서비스
 │       │   ├── createDepartment()                 # 부서 생성
 │       │   ├── updateDepartment()                 # 부서 정보 수정
 │       │   ├── moveDepartment()                   # 부서 이동 (하위 부서 경로 자동 재계산)
 │       │   ├── deleteDepartment()                 # 부서 삭제 (검증 포함)
-│       │   ├── getFullOrganizationTree()          # 전체 조직도 조회
-│       │   ├── getAccessibleOrganizationTree()    # 권한 범위 내 조직도 조회
+│       │   ├── getDepartmentTree()                # 전체 조직도 조회
+│       │   ├── getDepartmentTreeWithinScope()     # 권한 범위 내 조직도 조회
+│       │   ├── searchDepartments()                # 부서 검색
+│       │   ├── getSubtree()                       # 하위 부서 트리 조회
+│       │   ├── getDepartmentsByDepth()            # 깊이별 부서 조회
+│       │   ├── getDepartmentsByType()             # 타입별 부서 조회
 │       │   ├── getDepartmentStatistics()          # 부서 통계 조회
-│       │   ├── getFlatDepartmentList()            # 부서 평면 목록 조회
-│       │   └── getAccessibleDepartmentIds()       # 데이터 스코프: 접근 가능 부서 계산 (통합됨)
+│       │   ├── getDepartmentMembers()             # 부서별 사용자 목록
+│       │   ├── activateDepartment()               # 부서 활성화
+│       │   └── deactivateDepartment()             # 부서 비활성화
+│       └── DepartmentEntityService.java          # 부서 엔티티 서비스
 │
 ├── domain/                                       # 도메인 계층
 │   ├── model/
-│   │   ├── Department.java                       # 부서 엔티티 (트리 구조)
+│   │   ├── DepartmentEntity.java                 # 부서 엔티티 (Aggregate Root)
 │   │   │   ├── create()                          # 부서 생성 팩토리 메서드
 │   │   │   ├── update()                          # 부서 정보 수정
 │   │   │   ├── moveTo()                          # 부서 이동
+│   │   │   ├── activate()                        # 부서 활성화
+│   │   │   ├── deactivate()                      # 부서 비활성화
 │   │   │   ├── canBeDeleted()                    # 삭제 가능 여부 검증
-│   │   │   └── recalculateOrgPath()              # 조직 경로 재계산
+│   │   │   └── updatePathForSubtree()            # 하위 부서 경로 재계산
+│   │   ├── DepartmentType.java                   # 부서 타입 enum
+│   │   │   ├── COMPANY                            # 회사/최상위 조직
+│   │   │   ├── DIVISION                           # 본부급 조직
+│   │   │   ├── TEAM                               # 팀급 조직
+│   │   │   ├── GROUP                              # 그룹
+│   │   │   └── CUSTOM                             # 사용자 정의
 │   │   └── DataScopeLevel.java                   # 데이터 스코프 레벨 enum
-│   │       ├── ALL_DATA                           # 전체 데이터 접근
-│   │       ├── DEPARTMENT_AND_BELOW               # 본인 부서 + 하위 부서
-│   │       └── ONLY_MINE                          # 본인 부서만
-│   ├── repository/
-│   │   └── JpaDepartmentRepository.java          # Spring Data JPA Repository
-│   └── OrganizationConstants.java                # 조직 모듈 상수
+│   │       ├── ADMIN                              # 전체 데이터 접근
+│   │       ├── TEAM_LEAD                          # 본인 부서 + 하위 부서
+│   │       └── MEMBER                             # 본인 부서만
+│   └── repository/
+│       └── DepartmentRepository.java             # Spring Data JPA Repository
 │
 ├── infrastructure/                               # 인프라스트럭처 계층
 │   ├── adapter/
-│   │   └── AgentOrgUserAdapter.java              # OrgUserPort 구현체 (User 모듈 연동)
+│   │   ├── AgentOrgUserAdapter.java              # OrgUserPort 구현체 (User 모듈 연동)
+│   │   └── DepartmentInfoAdapter.java            # Department 정보 조회 Adapter
 │   └── config/
-│       └── RoleScopeMappingConfig.java           # 역할-스코프 레벨 매핑 설정
+│       └── OrganizationConfig.java               # 조직 모듈 설정
 │
 └── exception/                                    # 예외 처리
-    ├── BusinessException.java                     # 비즈니스 예외 기본 클래스
-    ├── EntityNotFoundException.java               # 엔티티 미발견 예외
-    ├── OrganizationException.java                 # 조직 모듈 예외
-    └── InvalidDepartmentMoveException.java        # 부서 이동 불가 예외
+    ├── DepartmentException.java                   # 부서 예외
+    └── DepartmentErrorCode.java                   # 부서 에러 코드 enum
+        ├── DEPARTMENT_NOT_FOUND                   # 부서를 찾을 수 없음
+        ├── INVALID_PARENT_DEPARTMENT              # 잘못된 상위 부서
+        ├── CIRCULAR_REFERENCE                     # 순환 참조
+        ├── HAS_CHILD_DEPARTMENTS                  # 하위 부서 존재
+        ├── HAS_ACTIVE_MEMBERS                     # 소속 직원 존재
+        ├── DEPARTMENT_ALREADY_ACTIVE              # 이미 활성 상태
+        └── PARENT_DEPARTMENT_INACTIVE             # 상위 부서 비활성 상태
 ```
 
 ### 🎯 핵심 기능
 
-#### 1. **부서 트리 구조 관리**
-- **자기참조 트리**: `parent_id`로 부서 계층 구성
-- **조직 경로 (org_path)**: `/dept1/dept2/dept3` 형식으로 경로 저장
-- **깊이 (depth)**: 트리 깊이 자동 계산
+#### 1. **부서 트리 구조 관리 (Materialized Path)**
+- **자기참조 트리**: `parent_dept_id`로 부서 계층 구성
+- **조직 경로 (org_path)**: `/dept1/dept2/dept3/` 형식으로 경로 저장
+- **깊이 (depth)**: 트리 깊이 자동 계산 (0부터 시작)
 - **하위 부서 조회**: `org_path` LIKE 쿼리로 빠른 조회
 
-#### 2. **부서 이동 (Move)**
-- **순환 참조 방지**: 자기 하위로 이동 불가 검증
+#### 2. **부서 타입 (DepartmentType)**
+- **COMPANY**: 최상위 조직 (회사, 계열사)
+- **DIVISION**: 본부급 조직
+- **TEAM**: 팀급 조직
+- **GROUP**: 그룹/파트
+- **CUSTOM**: 사용자 정의 타입 (`custom_type_name`으로 이름 지정)
+
+#### 3. **부서 이동 (Move)**
+- **순환 참조 방지**: 자기 자신이나 하위 부서로 이동 불가 검증
 - **자동 경로 재계산**: 이동 시 하위 부서들의 `org_path`, `depth` 일괄 업데이트
 - **트랜잭션 보장**: 이동 실패 시 전체 롤백
+- **권한 검증**: Level 1 RBAC 적용
 
-#### 3. **데이터 스코프 (RBAC Level 1)**
+#### 4. **부서 상태 관리**
+- **활성화 (activate)**: 
+  - 상위 부서가 활성 상태여야 함
+  - 활성화 후 신규 직원 배치 가능
+- **비활성화 (deactivate)**:
+  - 활성 하위 부서가 없어야 함
+  - 소속 직원이 있어도 비활성화 가능 (경고 로그)
+  - 비활성화 후 신규 직원 배치 불가
+
+#### 5. **데이터 스코프 (Level 1 RBAC)**
 - **역할 기반 접근 제어**: 사용자 역할에 따라 조회 가능한 부서 범위 제한
-- **캐싱 전략**: `@Cacheable`로 스코프 계산 결과 캐시
-- **캐시 무효화**: 조직 변경 시 자동 캐시 무효화
+- **스코프 레벨**:
+  - `ADMIN`: 전체 조직 접근
+  - `TEAM_LEAD`: 본인 부서 + 하위 부서
+  - `MEMBER`: 본인 부서만
+- **통합 구현**: `getAccessibleDepartmentIds()` 메서드로 통합
 
-#### 4. **삭제 검증**
-- 하위 부서 존재 시 삭제 불가
-- 소속 활성 사용자 존재 시 삭제 불가
-- 권한 검증 (본인 스코프 내 부서만 삭제 가능)
+#### 6. **삭제 검증**
+- ❌ 하위 부서 존재 시 삭제 불가
+- ❌ 소속 활성 사용자 존재 시 삭제 불가
+- ✅ 권한 검증 (본인 스코프 내 부서만 삭제 가능)
 
 ### 📊 주요 API 엔드포인트
 
 | Method | Endpoint | 설명 | 권한 |
 |--------|----------|------|------|
-| `POST` | `/api/org/departmentEntities` | 부서 생성 | ADMIN |
-| `PUT` | `/api/org/departmentEntities/{deptId}` | 부서 정보 수정 | ADMIN |
-| `PATCH` | `/api/org/departmentEntities/{deptId}/move` | 부서 이동 | ADMIN |
-| `DELETE` | `/api/org/departmentEntities/{deptId}` | 부서 삭제 | ADMIN |
-| `GET` | `/api/org/departmentEntities` | 전체 조직도 트리 조회 | ALL |
-| `GET` | `/api/org/departmentEntities/accessible` | 권한 범위 내 조직도 조회 | ALL |
-| `GET` | `/api/org/departmentEntities/{deptId}/statistics` | 부서 통계 조회 | ALL |
-| `GET` | `/api/org/departmentEntities/flat` | 부서 평면 목록 조회 | ALL |
+| `POST` | `/api/org/departments` | 부서 생성 | ADMIN |
+| `PATCH` | `/api/org/departments/{deptId}` | 부서 정보 수정 | ADMIN |
+| `PUT` | `/api/org/departments/{deptId}/move` | 부서 이동 | ADMIN |
+| `DELETE` | `/api/org/departments/{deptId}` | 부서 삭제 | ADMIN |
+| `GET` | `/api/org/departments` | 전체 조직도 트리 조회 | ALL |
+| `GET` | `/api/org/departments/scoped` | 권한 범위 내 조직도 조회 | ALL |
+| `GET` | `/api/org/departments/search?keyword=` | 부서 검색 | ALL |
+| `GET` | `/api/org/departments/{deptId}/subtree` | 하위 부서 트리 조회 | ALL |
+| `GET` | `/api/org/departments/by-depth?depth=` | 깊이별 부서 조회 | ALL |
+| `GET` | `/api/org/departments/by-type?type=` | 타입별 부서 조회 | ALL |
+| `GET` | `/api/org/departments/{deptId}/statistics` | 부서 통계 조회 | ALL |
+| `GET` | `/api/org/departments/{deptId}/members` | 부서별 사용자 목록 조회 | ALL |
+| `POST` | `/api/org/departments/{deptId}/activate` | 부서 활성화 | ADMIN |
+| `POST` | `/api/org/departments/{deptId}/deactivate` | 부서 비활성화 | ADMIN |
 
 ### 🔐 데이터 스코프 레벨
 
 | 스코프 레벨 | 설명 | 조회 범위 | 적용 역할 예시 |
 |------------|------|----------|---------------|
-| `ALL_DATA` | 전체 데이터 접근 | 테넌트 내 모든 부서 | ADMIN, MANAGER |
-| `DEPARTMENT_AND_BELOW` | 본인 부서 + 하위 | 본인 부서와 하위 부서 전체 | TEAM_LEADER |
-| `ONLY_MINE` | 본인 부서만 | 본인이 소속된 부서만 | MEMBER, AGENT |
+| `ADMIN` | 전체 데이터 접근 | 테넌트 내 모든 부서 | ADMIN |
+| `TEAM_LEAD` | 본인 부서 + 하위 | 본인 부서와 하위 부서 전체 | TEAM_LEAD |
+| `MEMBER` | 본인 부서만 | 본인이 소속된 부서만 | AGENT, MEMBER |
 
 ### 🗄️ Department 테이블 구조
 
@@ -444,22 +512,10 @@ com.nexfron.identitymodulith.rbac/
 │   │   └── revokeRoleFromAgent()                  # 사용자에게서 역할 회수
 │   ├── RbacQueryService.java                      # RBAC 조회 서비스 인터페이스
 │   ├── RbacQueryServiceImpl.java                  # RBAC 조회 서비스 구현체
-│   │   ├── permissionsOfRoles()                   # 역할 → 권한 조회 (캐싱)
-│   │   └── rolesOfAgent()                         # 사용자 → 역할 조회 (캐싱)
+│   │   ├── permissionsOfRoles()                   # 역할 → 권한 조회
+│   │   └── rolesOfAgent()                         # 사용자 → 역할 조회
 │   ├── RbacPermissionEvaluator.java               # Spring Security 권한 평가자
-│   │   └── hasPermission()                        # 권한 검증 (캐시 활용)
-│   ├── AuditLogService.java                       # 감사 로그 서비스
-│   │   ├── logRoleCreated()                       # 역할 생성 로그
-│   │   ├── logRoleDeleted()                       # 역할 삭제 로그
-│   │   ├── logPermissionCreated()                 # 권한 생성 로그
-│   │   ├── logPermissionAssignedToRole()          # 역할-권한 할당 로그
-│   │   ├── logPermissionRevokedFromRole()         # 역할-권한 회수 로그
-│   │   ├── logAgentRoleAssigned()                 # 사용자-역할 할당 로그
-│   │   └── logAgentRoleRevoked()                  # 사용자-역할 회수 로그
-│   ├── dto/
-│   │   └── AuditLogDto.java                       # 감사 로그 DTO
-│   ├── batch/
-│   │   └── AuditLogArchivingBatchService.java     # 감사 로그 아카이빙 배치 (6개월 경과)
+│   │   └── hasPermission()                        # 권한 검증
 │   └── exception/
 │       └── RbacException.java                      # RBAC 모듈 예외
 │           └── RbacErrorCode                       # 에러 코드 enum
@@ -468,25 +524,22 @@ com.nexfron.identitymodulith.rbac/
 │   └── RbacConstants.java                         # RBAC 상수 정의
 │       ├── ROLE_NAME_MAX_LENGTH                   # 역할명 최대 길이
 │       ├── ROLE_TYPE_MAX_LENGTH                   # 역할 타입 최대 길이
-│       ├── PERMISSION_CODE_MAX_LENGTH             # 권한 코드 최대 길이
-│       └── DEFAULT_CACHE_TTL_MINUTES              # 기본 캐시 TTL
+│       └── PERMISSION_CODE_MAX_LENGTH             # 권한 코드 최대 길이
 │
 ├── infrastructure/                                # 인프라스트럭처 계층
 │   ├── persistence/
 │   │   ├── entity/                                # JPA 엔티티
-│   │   │   ├── RoleJpaEntity.java                 # 역할 엔티티 (낙관적 잠금)
+│   │   │   ├── RoleJpaEntity.java                 # 역할 엔티티
 │   │   │   ├── PermissionJpaEntity.java           # 권한 엔티티
 │   │   │   ├── RolePermissionJpaEntity.java       # 역할-권한 매핑 엔티티
-│   │   │   ├── AgentRoleJpaEntity.java            # 사용자-역할 매핑 엔티티
-│   │   │   └── AuditLogJpaEntity.java             # 감사 로그 엔티티
+│   │   │   └── AgentRoleJpaEntity.java            # 사용자-역할 매핑 엔티티
 │   │   └── repository/                            # Spring Data JPA Repository
 │   │       ├── RoleJpaRepository.java             # 역할 저장소
 │   │       ├── PermissionJpaRepository.java       # 권한 저장소
 │   │       ├── RolePermissionJpaRepository.java   # 역할-권한 매핑 저장소
-│   │       ├── AgentRoleJpaRepository.java        # 사용자-역할 매핑 저장소
-│   │       └── AuditLogJpaRepository.java         # 감사 로그 저장소
-│   └── config/
-│       └── RbacCacheConfig.java                   # RBAC 캐시 설정
+│   │       └── AgentRoleJpaRepository.java        # 사용자-역할 매핑 저장소
+│   └── adapter/
+│       └── AgentPermissionAdapter.java            # PermissionPort 구현체
 │
 └── (테스트 파일 생략)
 ```
@@ -512,23 +565,10 @@ com.nexfron.identitymodulith.rbac/
 #### 4. **사용자-역할 할당**
 - **다대다 관계**: 한 사용자에게 여러 역할 할당 가능
 - **동적 권한 계산**: 사용자의 모든 역할 → 권한 집합 자동 계산
-- **캐시 무효화**: 역할 할당/회수 시 해당 사용자 캐시 즉시 무효화
 
 #### 5. **권한 평가 (Permission Evaluation)**
 - **RbacPermissionEvaluator**: Spring Security와 통합
 - **`@PreAuthorize("hasPermission('user:delete')")`**: 메서드 레벨 권한 검증
-- **캐싱**: 권한 조회 결과를 캐시하여 성능 최적화
-
-#### 6. **감사 로그 (Audit Log)**
-- **모든 RBAC 변경사항 기록**: 역할/권한 생성, 수정, 삭제, 할당, 회수
-- **추적 정보**: 작업자 ID, 작업 일시, 변경 내용 (JSON), IP 주소
-- **아카이빙**: 6개월 경과한 로그는 `audit_logs_archive` 테이블로 이동
-
-#### 7. **캐싱 전략**
-- **3단계 캐시**: `userPermissions`, `rolePermissions`, `userRoles`
-- **캐시 키**: 테넌트별 격리 (`tenantId:userId` 형식)
-- **무효화**: 역할/권한 변경 시 관련 캐시 자동 무효화 (`@CacheEvict`)
-- **TTL**: 기본 30분 (설정 가능)
 
 ### 📊 주요 API 엔드포인트
 
@@ -630,7 +670,7 @@ com.nexfron.identitymodulith.rbac/
 
 1. **역할 생성**
    - 역할명은 테넌트 내에서 유일해야 함
-   - 역할 타입은 POSITION, CHANNEL, SKILL 중 하나
+   - 역할 타입은 POSITION, CHANNEL 중 하나
    - 기본 상태는 `is_active = true`
 
 2. **역할 삭제**
@@ -647,37 +687,12 @@ com.nexfron.identitymodulith.rbac/
 
 5. **사용자-역할 할당**
    - 이미 할당된 역할을 재할당 시도 시 예외 발생
-   - 할당/회수 시 해당 사용자의 권한 캐시 즉시 무효화
    - 사용자나 역할 삭제 시 매핑도 자동 삭제 (CASCADE)
 
 6. **권한 평가**
    - 사용자의 모든 역할 → 모든 권한 합집합 계산
    - 하나라도 권한이 있으면 접근 허용
    - 비활성화된 역할은 권한 계산에서 제외
-
-7. **감사 로그**
-   - 모든 RBAC 변경사항은 감사 로그에 기록
-   - 6개월 경과한 로그는 아카이브 테이블로 이동 (배치)
-   - 아카이브된 로그는 조회만 가능, 수정/삭제 불가
-
-### 🚀 캐싱 최적화
-
-#### 캐시 구조
-```
-userPermissions:{tenantId}:{userId} 
-→ Set<String> (사용자의 모든 권한 코드)
-
-rolePermissions:{tenantId}:{roleNames}
-→ Set<String> (역할들의 모든 권한 코드)
-
-userRoles:{tenantId}:{userId}
-→ Set<String> (사용자의 모든 역할명)
-```
-
-#### 캐시 무효화 타이밍
-- **역할에 권한 할당/회수**: 해당 역할을 가진 모든 사용자의 `userPermissions` 캐시 무효화
-- **사용자에게 역할 할당/회수**: 해당 사용자의 `userPermissions`, `userRoles` 캐시 무효화
-- **역할 삭제**: 전체 RBAC 캐시 무효화
 - **권한 삭제**: 전체 RBAC 캐시 무효화
 
 ---
@@ -702,8 +717,6 @@ com.nexfron.identitymodulith.common/
 │   └── UnauthorizedException.java                  # 인증/인가 예외
 │
 └── cache/                                         # 캐시 관련 공통 컴포넌트
-    └── CacheKeyGenerator.java                      # 캐시 키 생성기
-        └── generate()                              # 테넌트 기반 캐시 키 생성
 ```
 
 ### 🎯 핵심 컴포넌트
@@ -774,26 +787,6 @@ if (!hasPermission(userId, "user:delete")) {
 }
 ```
 
-#### 4. **CacheKeyGenerator** (캐시 키 생성기)
-
-**역할**:
-- **테넌트 격리 캐시**: 테넌트별로 캐시를 분리하여 데이터 격리 보장
-- **일관된 키 형식**: `tenantId:userId:cacheName` 형식으로 키 생성
-- **Spring Cache 통합**: `@Cacheable`의 `keyGenerator` 속성으로 사용
-
-**사용 예시**:
-```java
-@Cacheable(
-    value = "userPermissions",
-    keyGenerator = "cacheKeyGenerator"
-)
-public Set<String> getUserPermissions(String tenantId, String userId) {
-    // ...
-}
-
-// 생성되는 캐시 키: "userPermissions::tenant-001:user-123"
-```
-
 ### 📝 멀티테넌시 아키텍처
 
 #### 테넌트 격리 전략
@@ -808,9 +801,6 @@ public Set<String> getUserPermissions(String tenantId, String userId) {
    - Repository 메서드에 테넌트 ID 파라미터 필수
    - 테넌트 불일치 시 예외 발생
 
-3. **캐시 레벨**
-   - `CacheKeyGenerator`로 테넌트별 캐시 키 생성
-   - 테넌트 간 캐시 격리 보장
 
 #### 테넌트 추출 우선순위
 
@@ -833,17 +823,121 @@ public Set<String> getUserPermissions(String tenantId, String userId) {
    - `@PreAuthorize`로 메서드 레벨 권한 검증
    - `RbacPermissionEvaluator`로 세밀한 권한 제어
 
-4. **감사 로그**
-   - 모든 중요 작업은 감사 로그에 기록
-   - 작업자 ID, IP 주소, 변경 내용 저장
-
 ---
 
 ## 📚 참고 문서
 
-- **[DB 스키마 표준 가이드](./DB_COMPREHENSIVE_GUIDE.md)**: 테이블 구조, 컬럼 설명, 표준 데이터 형식
-- **테스트 가이드**: 8개 테스트 파일로 핵심 기능 검증
-- **Swagger UI**: `http://localhost:8080/swagger-ui.html` (API 문서 자동 생성)
+### 핵심 문서
+- **[CHANGELOG.md](./CHANGELOG.md)**: 버전별 변경 이력 및 주요 개선 사항
+- **[DB_COMPREHENSIVE_GUIDE.md](./DB_COMPREHENSIVE_GUIDE.md)**: 데이터베이스 스키마, 테이블 구조, 컬럼 설명, 표준 데이터 형식
+
+### API 문서
+- **[API_SPECIFICATION_V2.md](./Docs/API_SPECIFICATION_V2.md)**: 전체 API 명세서 (User, Organization, RBAC)
+- **[ORGANIZATION_API_TEST_GUIDE.md](./Docs/ORGANIZATION_API_TEST_GUIDE.md)**: Organization API 단계별 테스트 가이드 (Swagger UI 활용)
+- **Swagger UI**: `http://localhost:8080/swagger-ui/index.html` (실시간 API 문서 및 테스트)
+
+### 시나리오 문서
+- **[AGENT_SCENARIOS.md](./Docs/AGENT_SCENARIOS.md)**: 상담사 관리 시나리오 (채용, 역할 변경, 퇴사 등)
+- **[DEPARTMENT_SCENARIOS.md](./Docs/DEPARTMENT_SCENARIOS.md)**: 조직 관리 시나리오 (조직 구조 변경, 권한 관리 등)
+- **[RBAC_SCENARIOS.md](./Docs/RBAC_SCENARIOS.md)**: RBAC 관리 시나리오 (역할/권한 관리 등)
+- **[EVENT_STORMING.md](./Docs/EVENT_STORMING.md)**: 이벤트 스토밍 결과 (도메인 이벤트, 커맨드, 애그리게잇)
+
+### 아키텍처 문서
+- **[PROJECT_COMPLETION_REPORT.md](./PROJECT_COMPLETION_REPORT.md)**: 프로젝트 완료 보고서 (구현 내용 총정리)
+
+---
+
+## 🎯 테스트 실행
+
+```bash
+# 전체 테스트 실행
+./gradlew test
+
+# 테스트 커버리지 리포트 생성
+./gradlew jacocoTestReport
+
+# 특정 모듈 테스트만 실행
+./gradlew test --tests "com.nexfron.identitymodulith.user.*"
+./gradlew test --tests "com.nexfron.identitymodulith.organization.*"
+./gradlew test --tests "com.nexfron.identitymodulith.rbac.*"
+```
+
+### 테스트 구조
+- **User 모듈**: 18개 테스트 (상담사 생성, 수정, 삭제, 역할 관리 등)
+- **Organization 모듈**: 15개 테스트 (부서 생성, 이동, 삭제, 조직도 조회 등)
+- **RBAC 모듈**: 20개 테스트 (역할/권한 관리, 할당/회수 등)
+
+---
+
+## 🚀 배포
+
+### 프로덕션 빌드
+
+```bash
+# JAR 파일 생성
+./gradlew bootJar
+
+# 생성된 파일 위치
+./build/libs/identity-modulith-0.0.1-SNAPSHOT.jar
+```
+
+### 환경 변수 설정
+
+```bash
+# 데이터베이스
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/your_database
+export SPRING_DATASOURCE_USERNAME=your_username
+export SPRING_DATASOURCE_PASSWORD=your_password
+
+# 애플리케이션
+export SERVER_PORT=8080
+export SPRING_PROFILES_ACTIVE=prod
+```
+
+### Docker 실행 (선택사항)
+
+```bash
+# Dockerfile 생성 후
+docker build -t identity-modulith .
+docker run -p 8080:8080 \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5432/nexfron \
+  -e SPRING_DATASOURCE_USERNAME=nexfron \
+  -e SPRING_DATASOURCE_PASSWORD=your_password \
+  identity-modulith
+```
+
+---
+
+## 📞 문의 및 지원
+
+- **프로젝트**: Identity Modulith v3.0.0
+- **마지막 업데이트**: 2026-02-05
+- **라이선스**: Proprietary
+
+---
+
+## ✅ 체크리스트
+
+### 초기 설정
+- [ ] PostgreSQL 18+ 설치 및 데이터베이스 생성
+- [ ] Java 21 설치
+- [ ] application.yml에 데이터베이스 정보 설정
+- [ ] `./gradlew bootRun`으로 애플리케이션 실행
+- [ ] Swagger UI 접속 확인 (`http://localhost:8080/swagger-ui/index.html`)
+
+### 기능 검증
+- [ ] Organization API: 부서 생성, 조회, 이동, 삭제 테스트
+- [ ] User API: 상담사 생성, 역할 할당, 비밀번호 초기화 테스트
+- [ ] RBAC API: 역할/권한 생성, 할당/회수 테스트
+- [ ] 데이터 스코프: 권한 범위 내 조직도 조회 테스트
+- [ ] 멀티테넌시: 다른 테넌트 데이터 격리 확인
+
+### 프로덕션 준비
+- [ ] 모든 테스트 통과 확인 (`./gradlew test`)
+- [ ] 프로덕션 환경 변수 설정
+- [ ] 데이터베이스 백업 전략 수립
+- [ ] 로그 모니터링 설정
+- [ ] 성능 테스트 (부하 테스트)
 
 ---
 

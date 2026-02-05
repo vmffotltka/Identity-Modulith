@@ -1,93 +1,276 @@
 # Identity Modulith - 데이터베이스 가이드
 
-> 📅 최종 업데이트: 2026-01-21  
+> 📅 최종 업데이트: 2026-02-05  
 > 🗄️ DB: PostgreSQL 18+  
-> ⚠️ 주요 변경: PermissionGroup 기능 제거 (v2.0.0)
+> ⚠️ 주요 변경: v3.0.0 - 테이블명 표준화, DepartmentType Enum, 부서 상태 관리
 
 ---
 
-## 📊 전체 테이블 구조 (8개)
+## 📊 전체 테이블 구조 (6개)
 
 | 테이블명 | 모듈 | PK 타입 | 설명 |
 |---------|------|---------|------|
-| **departmentEntities** | Organization | UUID | 조직(부서) 계층 구조 |
-| **agents** | User | UUID | 사용자(상담사) 정보 |
-| **roles** | RBAC | UUID | 역할 정의 |
-| **permissions** | RBAC | UUID | 권한 정의 |
-| **role_permissions** | RBAC | BIGSERIAL | 역할-권한 매핑 (M:N) |
-| **agent_roles** | RBAC | BIGSERIAL | 사용자-역할 매핑 (M:N) |
-| **audit_logs** | RBAC | UUID | 감사 로그 (권한 변경 이력) |
-| **audit_logs_archive** | RBAC | UUID | 감사 로그 아카이브 (6개월+) |
+| **org_departments** | Organization | VARCHAR(50) | 조직(부서) 계층 구조 |
+| **agents** | User | VARCHAR(50) | 사용자(상담사) 정보 |
+| **rbac_roles** | RBAC | VARCHAR(50) | 역할 정의 (POSITION, CHANNEL) |
+| **rbac_permissions** | RBAC | VARCHAR(50) | 권한 정의 |
+| **rbac_role_permissions** | RBAC | Composite PK | 역할-권한 매핑 (M:N) |
+| **rbac_agent_roles** | RBAC | Composite PK | 사용자-역할 매핑 (M:N) |
+
+**변경 사항 (v3.0.0)**:
+- ✅ `departmentEntities` → `org_departments`
+- ✅ `roles` → `rbac_roles`
+- ✅ `permissions` → `rbac_permissions`
+- ✅ `role_permissions` → `rbac_role_permissions`
+- ✅ `agent_roles` → `rbac_agent_roles`
+- ✅ PK 타입: VARCHAR(36) → VARCHAR(50) (UUID + 여유 공간)
+- ✅ `org_departments`에 `type` (DepartmentType Enum), `is_active` 컬럼 추가
 
 ---
 
-## 🏢 1. departmentEntities (조직/부서)
+## 🏢 1. org_departments (조직/부서)
 
-**목적**: 조직 계층 구조 관리 (트리)
+**목적**: 조직 계층 구조 관리 (트리 구조 - Materialized Path 패턴)
 
 | 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
 |--------|------|------|------|----------------|
-| **dept_id** | VARCHAR(36) | ✖ | 부서 ID (PK) | `d0000000-0000-0000-0000-000000000001` |
+| **dept_id** | VARCHAR(50) | ✖ | 부서 ID (PK) | `dept-root-001`, UUID |
 | tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| parent_id | VARCHAR(36) | ✓ | 상위 부서 ID (FK) | NULL=최상위, UUID=하위 |
-| name | VARCHAR(100) | ✖ | 부서명 | `경영지원본부`, `인사팀` |
-| org_path | VARCHAR(500) | ✖ | 조직 경로 | `/루트ID/자식ID` |
+| name | VARCHAR(100) | ✖ | 부서명 | `넥스프론`, `고객서비스본부` |
+| **type** | VARCHAR(20) | ✖ | 부서 타입 (Enum) | `COMPANY`, `DIVISION`, `TEAM`, `GROUP`, `CUSTOM` |
+| custom_type_name | VARCHAR(50) | ✓ | 사용자 정의 타입 이름 | `연구소`, `지사` (type=CUSTOM일 때) |
+| parent_dept_id | VARCHAR(50) | ✓ | 상위 부서 ID (FK) | NULL=최상위, UUID=하위 |
+| org_path | TEXT | ✖ | 조직 경로 (Materialized Path) | `/dept-root-001/dept-div-001/` |
 | depth | INTEGER | ✖ | 트리 깊이 | 0(최상위) ~ 10 |
-| type | VARCHAR(50) | ✓ | 부서 타입 | `본부`, `팀`, `파트`, `실` |
+| display_order | INTEGER | ✖ | 표시 순서 | 1, 2, 3... |
+| manager_id | VARCHAR(50) | ✓ | 부서장 ID | Agent ID |
+| description | TEXT | ✓ | 부서 설명 | `고객 서비스 및 상담 업무 총괄` |
+| **is_active** | BOOLEAN | ✖ | 활성화 상태 | TRUE (활성), FALSE (비활성) |
 | created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
+| created_by | VARCHAR(50) | ✓ | 생성자 ID | Agent ID |
+| updated_by | VARCHAR(50) | ✓ | 수정자 ID | Agent ID |
 
-**인덱스**: `(tenant_id, org_path)` UK, `tenant_id`, `parent_id`, `org_path`  
-**FK**: `parent_id` → `departmentEntities(dept_id)` ON DELETE RESTRICT
+**인덱스**: 
+- `idx_dept_tenant`: `(tenant_id)`
+- `idx_dept_parent`: `(parent_dept_id)`
+- `idx_dept_org_path`: `(org_path)`
+- `idx_dept_active`: `(is_active)`
+
+**FK**: 
+- `parent_dept_id` → `org_departments(dept_id)` ON DELETE RESTRICT
+
+**체크 제약**:
+- `chk_dept_type`: type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM')
+- `chk_custom_type`: type='CUSTOM'일 때만 custom_type_name 필수
+
+**Department Type 설명**:
+| 타입 | 설명 | 사용 예시 |
+|------|------|----------|
+| `COMPANY` | 최상위 조직 | 회사, 계열사 |
+| `DIVISION` | 본부급 조직 | 고객서비스본부, 영업본부 |
+| `TEAM` | 팀급 조직 | 인바운드팀, 아웃바운드팀 |
+| `GROUP` | 그룹/파트 | 개발그룹, 기획파트 |
+| `CUSTOM` | 사용자 정의 | custom_type_name으로 이름 지정 |
 
 **데이터 예시**:
 ```sql
--- 본부 (최상위)
-('d0000000-0000-0000-0000-000000000001', 'tenant-001', NULL, 
- '경영지원본부', '/d0000000-0000-0000-0000-000000000001', 0, '본부', NOW())
+-- 최상위 조직 (COMPANY)
+('dept-root-001', 'tenant-001', '넥스프론', 'COMPANY', NULL, NULL, 
+ '/dept-root-001/', 0, 1, NULL, '넥스프론 주식회사', TRUE, NOW(), NOW(), NULL, NULL)
 
--- 팀 (하위)
-('d0000000-0000-0000-0000-000000000011', 'tenant-001', 
- 'd0000000-0000-0000-0000-000000000001', '인사팀', 
- '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011', 
- 1, '팀', NOW())
+-- 본부 (DIVISION)
+('dept-div-001', 'tenant-001', '고객서비스본부', 'DIVISION', NULL, 'dept-root-001', 
+ '/dept-root-001/dept-div-001/', 1, 1, NULL, '고객 서비스 총괄', TRUE, NOW(), NOW(), NULL, NULL)
+
+-- 팀 (TEAM)
+('dept-team-001', 'tenant-001', '인바운드팀', 'TEAM', NULL, 'dept-div-001', 
+ '/dept-root-001/dept-div-001/dept-team-001/', 2, 1, NULL, '인바운드 전화 상담', TRUE, NOW(), NOW(), NULL, NULL)
 ```
 
 ---
 
 ## 👤 2. agents (사용자/상담사)
 
+
 **목적**: 시스템 사용자 정보 관리
 
 | 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
 |--------|------|------|------|----------------|
-| **agent_id** | VARCHAR(36) | ✖ | 사용자 ID (PK) | UUID |
+| **agent_id** | VARCHAR(50) | ✖ | 사용자 ID (PK) | `agent-admin-001`, UUID |
 | tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| login_id | VARCHAR(100) | ✖ | 로그인 ID (UK) | `admin`, `agent01` (영문+숫자, 4-20자) |
-| password | VARCHAR(255) | ✖ | 비밀번호 | BCrypt (`$2a$10$...`) |
-| name | VARCHAR(100) | ✖ | 사용자명 | `홍길동`, `Kim Admin` (2-50자) |
-| dept_id | VARCHAR(36) | ✓ | 소속 부서 ID (FK) | UUID 또는 NULL |
-| status | VARCHAR(20) | ✖ | 상태 | **`ACTIVE`** (활성), **`RETIRED`** (퇴직) |
-| password_must_change | BOOLEAN | ✓ | 비밀번호 변경 필요 | `true`, `false` |
+| login_id | VARCHAR(50) | ✖ | 로그인 ID (UK) | `admin`, `agent01` (영문+숫자, 4-20자) |
+| password | VARCHAR(255) | ✖ | 비밀번호 (BCrypt) | `$2a$10$...` (BCrypt 해시) |
+| name | VARCHAR(100) | ✖ | 사용자명 | `관리자`, `홍길동` (2-50자) |
+| employee_id | VARCHAR(50) | ✓ | 사원 번호 | `EMP001`, `2024001` |
+| email | VARCHAR(100) | ✓ | 이메일 | `admin@nexfron.com` |
+| phone | VARCHAR(20) | ✓ | 전화번호 | `010-1234-5678` |
+| dept_id | VARCHAR(50) | ✓ | 소속 부서 ID (FK) | org_departments(dept_id) |
+| status | VARCHAR(20) | ✖ | 상태 | **`ACTIVE`** (활성), **`SUSPENDED`** (정지), **`RETIRED`** (퇴사) |
+| password_must_change | BOOLEAN | ✖ | 비밀번호 변경 필요 | `FALSE` (기본값) |
 | created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
-| updated_at | TIMESTAMP | ✓ | 수정 일시 | `2026-01-21 15:00:00` |
-| retired_at | TIMESTAMP | ✓ | 퇴직 일시 | `2025-12-31 23:59:59` |
-| job_title | VARCHAR(100) | ✓ | 직책 | `대리`, `과장`, `팀장` |
-| sync_status | VARCHAR(20) | ✓ | 동기화 상태 | `SYNCED`, `PENDING` (Keycloak용) |
-| role_id | VARCHAR(36) | ✓ | ⚠️ 사용 안 함 | NULL (agent_roles 테이블 사용) |
+| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
+| suspended_at | TIMESTAMP | ✓ | 정지 일시 | `2025-12-31 23:59:59` |
+| retired_at | TIMESTAMP | ✓ | 퇴사 일시 | `2025-12-31 23:59:59` |
+| scheduled_delete_at | TIMESTAMP | ✓ | 삭제 예정 일시 | 퇴사 후 90일 |
+| created_by | VARCHAR(50) | ✓ | 생성자 ID | Agent ID |
+| updated_by | VARCHAR(50) | ✓ | 수정자 ID | Agent ID |
+| suspended_by | VARCHAR(50) | ✓ | 정지 처리자 ID | Agent ID |
+| retired_by | VARCHAR(50) | ✓ | 퇴사 처리자 ID | Agent ID |
+| version | BIGINT | ✖ | 낙관적 잠금 버전 | 0 (기본값) |
 
-**인덱스**: `login_id` UK, `tenant_id`, `dept_id`, `status`  
-**FK**: `dept_id` → `departmentEntities(dept_id)` ON DELETE SET NULL
+**인덱스**: 
+- UK: `(tenant_id, login_id)` (복합 유니크)
+- `idx_agent_tenant`: `(tenant_id)`
+- `idx_agent_login`: `(login_id)`
+- `idx_agent_dept`: `(dept_id)`
+- `idx_agent_status`: `(status)`
+- `idx_agent_scheduled_delete`: `(scheduled_delete_at)` WHERE scheduled_delete_at IS NOT NULL
+
+**FK**: 
+- `dept_id` → `org_departments(dept_id)` ON DELETE SET NULL
+
+**체크 제약**:
+- `chk_agent_status`: status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')
 
 **데이터 예시**:
 ```sql
-('a0000000-0000-0000-0000-000000000001', 'tenant-001', 'admin', 
- '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 
- 'System Admin', NULL, 'ACTIVE', false, NOW(), NULL, NULL, 'Admin', NULL, NULL)
+-- 관리자 (비밀번호: password123)
+('agent-admin-001', 'tenant-001', 'admin', 
+ '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', 
+ '관리자', 'EMP001', 'admin@nexfron.com', '010-1234-5678', 
+ 'dept-root-001', 'ACTIVE', FALSE, NOW(), NOW(), NULL, NULL, NULL, 
+ NULL, NULL, NULL, NULL, 0)
+
+-- 팀장
+('agent-lead-001', 'tenant-001', 'teamlead01', 
+ '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', 
+ '김팀장', 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 
+ 'dept-div-001', 'ACTIVE', FALSE, NOW(), NOW(), NULL, NULL, NULL, 
+ NULL, NULL, NULL, NULL, 0)
+```
+
+**비밀번호 해시**:
+- **알고리즘**: BCrypt (Spring Security 기본)
+- **강도**: 10 rounds
+- **테스트 비밀번호**: `password123`
+- **해시 값**: `$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy`
+
+---
+
+## 🎭 3. rbac_roles (역할)
+
+**목적**: 역할 정의 및 관리 (POSITION, CHANNEL 타입)
+
+| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+|--------|------|------|------|----------------|
+| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK) | `role-admin-001`, UUID |
+| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
+| name | VARCHAR(50) | ✖ | 역할명 (UK) | **`ADMIN`**, **`TEAM_LEAD`**, **`AGENT`** (직급) <br> **`INBOUND_AGENT`**, **`CHAT_AGENT`** (채널) |
+| **type** | VARCHAR(20) | ✖ | 역할 타입 | **`POSITION`** (직급 기반), **`CHANNEL`** (채널 기반) |
+| **data_scope** | VARCHAR(20) | ✓ | 데이터 스코프 레벨 | **`ADMIN`**, **`TEAM_LEAD`**, **`MEMBER`** (POSITION일 때만) |
+| description | VARCHAR(255) | ✓ | 역할 설명 | `시스템 전체 관리자 - 모든 권한 보유` |
+| is_active | BOOLEAN | ✖ | 활성화 상태 | TRUE (기본값) |
+| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
+
+**인덱스**: 
+- UK: `(tenant_id, name)` (복합 유니크)
+- `idx_role_tenant`: `(tenant_id)`
+- `idx_role_type`: `(type)`
+- `idx_role_active`: `(is_active)`
+
+**체크 제약**:
+- `chk_role_type`: type IN ('POSITION', 'CHANNEL')
+- `chk_role_data_scope`: 
+  - POSITION일 때: data_scope IN ('ADMIN', 'TEAM_LEAD', 'MEMBER')
+  - CHANNEL일 때: data_scope IS NULL
+
+**역할 타입 설명**:
+| 타입 | 설명 | 예시 | data_scope |
+|------|------|------|------------|
+| `POSITION` | 직급 기반 역할 | ADMIN, TEAM_LEAD, AGENT | 필수 (ADMIN, TEAM_LEAD, MEMBER) |
+| `CHANNEL` | 채널 기반 역할 | INBOUND_AGENT, CHAT_AGENT | NULL |
+
+**데이터 스코프 레벨**:
+| 레벨 | 설명 | 조회 범위 |
+|------|------|----------|
+| `ADMIN` | 전체 데이터 접근 | 테넌트 내 모든 부서 |
+| `TEAM_LEAD` | 본인 부서 + 하위 | 본인 부서와 하위 부서 전체 |
+| `MEMBER` | 본인 부서만 | 본인이 소속된 부서만 |
+
+**데이터 예시**:
+```sql
+-- POSITION 역할
+('role-admin-001', 'tenant-001', 'ADMIN', 'POSITION', 'ADMIN', 
+ '시스템 관리자 (전체 조직 접근)', TRUE, NOW(), NOW()),
+('role-teamlead-001', 'tenant-001', 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', 
+ '팀장 (본인 팀 + 하위 부서 접근)', TRUE, NOW(), NOW()),
+('role-agent-001', 'tenant-001', 'AGENT', 'POSITION', 'MEMBER', 
+ '일반 상담사 (본인 팀만 접근)', TRUE, NOW(), NOW())
+
+-- CHANNEL 역할
+('role-ch-inbound', 'tenant-001', 'INBOUND_AGENT', 'CHANNEL', NULL, 
+ '인바운드 전화 상담', TRUE, NOW(), NOW()),
+('role-ch-chat', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', NULL, 
+ '채팅 상담', TRUE, NOW(), NOW())
 ```
 
 ---
 
-## 🎭 3. roles (역할)
+## 🔑 4. rbac_permissions (권한)
+
+**목적**: 권한 정의 및 관리
+
+| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+|--------|------|------|------|----------------|
+| **permission_id** | VARCHAR(50) | ✖ | 권한 ID (PK) | `perm-agent-001`, UUID |
+| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
+| code | VARCHAR(100) | ✖ | 권한 코드 (UK) | `agent:create`, `dept:read`, `role:manage` |
+| name | VARCHAR(100) | ✓ | 권한 이름 | `상담사 생성`, `부서 조회`, `역할 관리` |
+| description | VARCHAR(255) | ✓ | 권한 설명 | `새로운 상담사 계정 생성` |
+| category | VARCHAR(50) | ✓ | 권한 카테고리 | `AGENT`, `DEPARTMENT`, `RBAC`, `CHANNEL` |
+| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
+
+**인덱스**: 
+- UK: `(tenant_id, code)` (복합 유니크)
+- `idx_permission_tenant`: `(tenant_id)`
+- `idx_permission_category`: `(category)`
+
+**권한 코드 형식**: `도메인:액션`
+- 도메인: agent, dept, role, permission, channel
+- 액션: create, read, update, delete, suspend, activate, transfer 등
+
+**권한 카테고리**:
+| 카테고리 | 설명 | 권한 예시 |
+|----------|------|----------|
+| `AGENT` | 상담사 관리 | agent:create, agent:read, agent:update, agent:delete |
+| `DEPARTMENT` | 부서 관리 | dept:create, dept:read, dept:update, dept:delete, dept:move |
+| `RBAC` | 역할/권한 관리 | role:create, role:delete, permission:assign |
+| `CHANNEL` | 채널별 권한 | channel:inbound:receive, channel:chat:message |
+
+**데이터 예시**:
+```sql
+-- AGENT 카테고리
+('perm-agent-001', 'tenant-001', 'agent:create', '상담사 생성', 
+ '새로운 상담사 계정 생성', 'AGENT', NOW()),
+('perm-agent-002', 'tenant-001', 'agent:read', '상담사 조회', 
+ '상담사 정보 조회', 'AGENT', NOW()),
+
+-- DEPARTMENT 카테고리
+('perm-dept-001', 'tenant-001', 'dept:create', '부서 생성', 
+ '새로운 부서 생성', 'DEPARTMENT', NOW()),
+('perm-dept-002', 'tenant-001', 'dept:read', '부서 조회', 
+ '부서 정보 조회', 'DEPARTMENT', NOW()),
+
+-- CHANNEL 카테고리
+('perm-ch-in-001', 'tenant-001', 'channel:inbound:receive', '인바운드 수신', 
+ '인바운드 전화 수신', 'CHANNEL', NOW()),
+('perm-ch-chat-001', 'tenant-001', 'channel:chat:message', '채팅 메시지', 
+ '채팅 메시지 송수신', 'CHANNEL', NOW())
+```
+
+---
 
 **목적**: 역할 정의 및 관리
 
@@ -194,26 +377,250 @@
 
 ---
 
-## 🔗 5. role_permissions (역할-권한 매핑)
+## 🔗 5. rbac_role_permissions (역할-권한 매핑)
 
-**목적**: 역할과 권한의 다대다 관계
+**목적**: 역할과 권한의 다대다 관계 (M:N)
 
 | 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
 |--------|------|------|------|----------------|
-| **id** | BIGSERIAL | ✖ | 매핑 ID (PK) | 1, 2, 3... |
-| role_id | VARCHAR(36) | ✖ | 역할 ID (FK) | UUID |
-| permission_id | VARCHAR(36) | ✖ | 권한 ID (FK) | UUID |
+| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK, FK) | `role-admin-001` |
+| **permission_id** | VARCHAR(50) | ✖ | 권한 ID (PK, FK) | `perm-agent-001` |
 | assigned_at | TIMESTAMP | ✖ | 할당 일시 | `2026-01-21 10:00:00` |
+| assigned_by | VARCHAR(50) | ✓ | 할당자 ID | Agent ID |
 
-**인덱스**: `(role_id, permission_id)` UK  
-**FK**: `role_id` → `roles(role_id)` ON DELETE CASCADE  
-**FK**: `permission_id` → `permissions(permission_id)` ON DELETE CASCADE
+**PK**: `(role_id, permission_id)` (복합 PK)
 
-**매핑 수 (77개)**:
-- ADMIN: 35개 (전체)
-- MANAGER: 12개
-- TEAM_LEAD: 5개
-- MEMBER: 4개
+**인덱스**: 
+- `idx_rp_role`: `(role_id)`
+- `idx_rp_permission`: `(permission_id)`
+
+**FK**: 
+- `role_id` → `rbac_roles(role_id)` ON DELETE CASCADE
+- `permission_id` → `rbac_permissions(permission_id)` ON DELETE CASCADE
+
+**초기 매핑 수**:
+- **ADMIN**: 35개 권한 (전체 권한)
+- **TEAM_LEAD**: 6개 권한 (agent:read, agent:update, agent:transfer, dept:read, role:read, permission:read)
+- **AGENT**: 3개 권한 (agent:read, dept:read, role:read)
+- **INBOUND_AGENT**: 3개 권한 (channel:inbound:receive, channel:inbound:hold, channel:inbound:transfer)
+- **CHAT_AGENT**: 3개 권한 (channel:chat:message, channel:chat:file, channel:chat:emoji)
+- **MULTI_CHANNEL_AGENT**: 14개 권한 (모든 채널 권한)
+
+**데이터 예시**:
+```sql
+-- ADMIN 역할에 모든 권한 할당
+('role-admin-001', 'perm-agent-001', NOW(), NULL),
+('role-admin-001', 'perm-agent-002', NOW(), NULL),
+('role-admin-001', 'perm-dept-001', NOW(), NULL),
+...
+
+-- TEAM_LEAD 역할에 일부 권한 할당
+('role-teamlead-001', 'perm-agent-002', NOW(), NULL),  -- agent:read
+('role-teamlead-001', 'perm-agent-003', NOW(), NULL),  -- agent:update
+('role-teamlead-001', 'perm-dept-002', NOW(), NULL),   -- dept:read
+...
+```
+
+---
+
+## 👥 6. rbac_agent_roles (사용자-역할 매핑)
+
+**목적**: 사용자와 역할의 다대다 관계 (M:N) - 하나의 사용자에게 여러 역할 할당 가능
+
+| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+|--------|------|------|------|----------------|
+| **agent_id** | VARCHAR(50) | ✖ | 사용자 ID (PK, FK) | `agent-admin-001` |
+| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK, FK) | `role-admin-001` |
+| assigned_at | TIMESTAMP | ✖ | 할당 일시 | `2026-01-21 10:00:00` |
+| assigned_by | VARCHAR(50) | ✓ | 할당자 ID | Agent ID |
+
+**PK**: `(agent_id, role_id)` (복합 PK)
+
+**인덱스**: 
+- `idx_ar_agent`: `(agent_id)`
+- `idx_ar_role`: `(role_id)`
+
+**FK**: 
+- `agent_id` → `agents(agent_id)` ON DELETE CASCADE
+- `role_id` → `rbac_roles(role_id)` ON DELETE CASCADE
+
+**사용 예시**:
+한 사용자가 여러 역할을 동시에 가질 수 있습니다:
+- POSITION 역할 1개 + CHANNEL 역할 N개
+- 예: `TEAM_LEAD` (직급) + `INBOUND_AGENT` (채널) + `CHAT_AGENT` (채널)
+
+**데이터 예시**:
+```sql
+-- 관리자: ADMIN 역할만
+('agent-admin-001', 'role-admin-001', NOW(), NULL),
+
+-- 팀장: TEAM_LEAD + INBOUND_AGENT
+('agent-lead-001', 'role-teamlead-001', NOW(), NULL),
+('agent-lead-001', 'role-ch-inbound', NOW(), NULL),
+
+-- 일반 상담사: AGENT + INBOUND_AGENT + CHAT_AGENT (멀티 채널)
+('agent-001', 'role-agent-001', NOW(), NULL),
+('agent-001', 'role-ch-inbound', NOW(), NULL),
+('agent-001', 'role-ch-chat', NOW(), NULL)
+```
+
+---
+
+## 📊 초기 데이터 요약
+
+### 역할 (8개)
+| 역할명 | 타입 | 데이터 스코프 | 설명 |
+|--------|------|---------------|------|
+| ADMIN | POSITION | ADMIN | 시스템 관리자 (전체 권한) |
+| TEAM_LEAD | POSITION | TEAM_LEAD | 팀장 (팀 + 하위 접근) |
+| AGENT | POSITION | MEMBER | 일반 상담사 (본인 팀만) |
+| INBOUND_AGENT | CHANNEL | NULL | 인바운드 전화 상담 |
+| OUTBOUND_AGENT | CHANNEL | NULL | 아웃바운드 전화 상담 |
+| CHAT_AGENT | CHANNEL | NULL | 채팅 상담 |
+| EMAIL_AGENT | CHANNEL | NULL | 이메일 상담 |
+| MULTI_CHANNEL_AGENT | CHANNEL | NULL | 멀티채널 상담 (모든 채널) |
+
+### 권한 (35개)
+| 카테고리 | 권한 수 | 예시 |
+|----------|---------|------|
+| AGENT | 9개 | agent:create, agent:read, agent:update, agent:delete, agent:suspend, agent:activate, agent:transfer, agent:role:assign, agent:password:reset |
+| DEPARTMENT | 6개 | dept:create, dept:read, dept:update, dept:delete, dept:move, dept:deactivate |
+| RBAC | 6개 | role:create, role:read, role:update, role:delete, permission:read, permission:assign |
+| CHANNEL | 14개 | channel:inbound:receive, channel:outbound:call, channel:chat:message, channel:email:send 등 |
+
+### 샘플 데이터
+**부서 (4개)**:
+```
+넥스프론 (COMPANY)
+└── 고객서비스본부 (DIVISION)
+    ├── 인바운드팀 (TEAM)
+    └── 아웃바운드팀 (TEAM)
+```
+
+**사용자 (3개)**:
+| 로그인 ID | 이름 | 부서 | 역할 | 비밀번호 |
+|-----------|------|------|------|----------|
+| admin | 관리자 | 넥스프론 | ADMIN | password123 |
+| teamlead01 | 김팀장 | 고객서비스본부 | TEAM_LEAD, INBOUND_AGENT | password123 |
+| agent01 | 홍길동 | 인바운드팀 | AGENT, INBOUND_AGENT, CHAT_AGENT | password123 |
+
+---
+
+## 🔍 주요 쿼리 예시
+
+### 1. 사용자의 모든 권한 조회 (계산된 권한)
+```sql
+SELECT DISTINCT p.code, p.name, p.category
+FROM rbac_agent_roles ar
+JOIN rbac_role_permissions rp ON ar.role_id = rp.role_id
+JOIN rbac_permissions p ON rp.permission_id = p.permission_id
+WHERE ar.agent_id = 'agent-admin-001'
+  AND ar.tenant_id = 'tenant-001'
+ORDER BY p.category, p.code;
+```
+
+### 2. 역할별 권한 수 확인
+```sql
+SELECT r.name AS role_name, r.type, COUNT(rp.permission_id) AS permission_count
+FROM rbac_roles r
+LEFT JOIN rbac_role_permissions rp ON r.role_id = rp.role_id
+WHERE r.tenant_id = 'tenant-001'
+GROUP BY r.role_id, r.name, r.type
+ORDER BY r.type, r.name;
+```
+
+### 3. 부서별 사용자 수 (활성 사용자만)
+```sql
+SELECT d.name AS dept_name, COUNT(a.agent_id) AS agent_count
+FROM org_departments d
+LEFT JOIN agents a ON d.dept_id = a.dept_id AND a.status = 'ACTIVE'
+WHERE d.tenant_id = 'tenant-001' AND d.is_active = TRUE
+GROUP BY d.dept_id, d.name
+ORDER BY d.org_path;
+```
+
+### 4. 하위 부서 조회 (Materialized Path 활용)
+```sql
+SELECT dept_id, name, type, depth, org_path
+FROM org_departments
+WHERE tenant_id = 'tenant-001'
+  AND org_path LIKE '/dept-root-001/%'
+ORDER BY org_path;
+```
+
+### 5. 특정 권한을 가진 사용자 찾기
+```sql
+SELECT DISTINCT a.login_id, a.name, a.email
+FROM agents a
+JOIN rbac_agent_roles ar ON a.agent_id = ar.agent_id
+JOIN rbac_role_permissions rp ON ar.role_id = rp.role_id
+JOIN rbac_permissions p ON rp.permission_id = p.permission_id
+WHERE p.code = 'agent:delete'
+  AND a.tenant_id = 'tenant-001'
+  AND a.status = 'ACTIVE'
+ORDER BY a.name;
+```
+
+---
+
+## 🚀 성능 최적화
+
+### 인덱스 전략
+1. **복합 유니크 인덱스**: 테넌트 격리 및 중복 방지
+   - `(tenant_id, login_id)` - agents
+   - `(tenant_id, name)` - rbac_roles
+   - `(tenant_id, code)` - rbac_permissions
+
+2. **조회 성능 인덱스**:
+   - `org_path` - 하위 부서 조회 최적화
+   - `status` - 활성 사용자 필터링
+   - `type`, `is_active` - 역할/부서 타입별 조회
+
+3. **FK 인덱스**: JOIN 성능 향상
+   - `parent_dept_id`, `dept_id`, `role_id`, `permission_id`
+
+### 쿼리 최적화 팁
+1. **Materialized Path**: `LIKE '/parent/%'`로 하위 부서 빠르게 조회
+2. **복합 PK**: 매핑 테이블에서 중복 방지 및 빠른 조회
+3. **ON DELETE CASCADE**: 역할/권한 삭제 시 매핑 자동 정리
+4. **낙관적 잠금**: `version` 컬럼으로 동시성 제어
+
+---
+
+## 📝 마이그레이션 가이드
+
+### v2.x → v3.0.0 마이그레이션
+
+**1. 테이블명 변경**:
+```sql
+ALTER TABLE departmentEntities RENAME TO org_departments;
+ALTER TABLE roles RENAME TO rbac_roles;
+ALTER TABLE permissions RENAME TO rbac_permissions;
+ALTER TABLE role_permissions RENAME TO rbac_role_permissions;
+ALTER TABLE agent_roles RENAME TO rbac_agent_roles;
+```
+
+**2. 부서 타입 및 상태 컬럼 추가**:
+```sql
+ALTER TABLE org_departments ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'TEAM';
+ALTER TABLE org_departments ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE org_departments ADD CONSTRAINT chk_dept_type 
+  CHECK (type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM'));
+```
+
+**3. 역할 테이블에 data_scope 추가**:
+```sql
+ALTER TABLE rbac_roles ADD COLUMN data_scope VARCHAR(20);
+UPDATE rbac_roles SET data_scope = 'ADMIN' WHERE type = 'POSITION' AND name = 'ADMIN';
+UPDATE rbac_roles SET data_scope = 'TEAM_LEAD' WHERE type = 'POSITION' AND name = 'TEAM_LEAD';
+UPDATE rbac_roles SET data_scope = 'MEMBER' WHERE type = 'POSITION' AND name IN ('AGENT', 'MEMBER');
+```
+
+---
+
+**최종 업데이트**: 2026-02-05  
+**버전**: v3.0.0  
+**작성자**: Identity Modulith Development Team
 - PHONE_AGENT: 3개
 - CHAT_AGENT: 2개
 - EMAIL_AGENT: 1개
@@ -237,109 +644,48 @@
 **FK**: `role_id` → `roles(role_id)` ON DELETE CASCADE
 
 **💡 사용자는 여러 역할을 동시에 가질 수 있습니다**:
-- 예: `MANAGER` + `PHONE_AGENT` = 관리자이면서 전화 상담도 가능
-
----
-
-## 📝 7. audit_logs (감사 로그)
-
-**목적**: 권한 관련 모든 변경사항 추적
-
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
-|--------|------|------|------|----------------|
-| **audit_id** | VARCHAR(36) | ✖ | 감사 로그 ID (PK) | UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| action | VARCHAR(32) | ✖ | 작업 유형 | **`CREATE`**, **`UPDATE`**, **`DELETE`**, **`ASSIGN`**, **`REVOKE`** |
-| resource_type | VARCHAR(64) | ✖ | 리소스 타입 | **`ROLE`**, **`PERMISSION`**, **`AGENT_ROLE`**, **`ROLE_PERMISSION`** |
-| resource_id | VARCHAR(255) | ✖ | 리소스 ID | UUID 또는 복합키 |
-| operator_id | VARCHAR(255) | ✖ | 작업자 ID | UUID |
-| changes | TEXT | ✓ | 변경 내용 (JSON) | `{"before":"...","after":"..."}` |
-| timestamp | TIMESTAMP | ✖ | 작업 일시 | `2026-01-21 10:00:00` |
-| remarks | TEXT | ✓ | 추가 정보 | 메모, 실패 원인 등 |
-| ip_address | VARCHAR(45) | ✓ | 클라이언트 IP | `192.168.1.100` |
-
-**인덱스**: `tenant_id`, `resource_type`, `operator_id`, `timestamp DESC`
-
-**자동 기록 시점**:
-- 역할 생성/수정/삭제
-- 권한 생성/수정/삭제
-- 역할-권한 할당/회수
-- 사용자-역할 할당/회수
-
----
-
-## 📦 8. audit_logs_archive (감사 로그 아카이브)
-
-**목적**: 6개월 이상 경과한 로그 보관
-
-| 컬럼명 | 타입 | 설명 |
-|--------|------|------|
-| *(audit_logs와 동일)* | | |
-| archived_at | TIMESTAMP | 아카이브 일시 |
-
-**인덱스**: `tenant_id`, `timestamp DESC`, `(resource_type, resource_id)`, `operator_id`
-
-**자동 아카이빙 배치**:
-- **스케줄**: 매월 1일 00:00:00 (CRON: `0 0 1 * * *`)
-- **기준**: **6개월** 이전 로그 자동 이동
-- **처리 흐름**:
-  1. `audit_logs`에서 6개월 이전 데이터 조회
-  2. `audit_logs_archive`로 복사 (`archived_at` = 복사 시각)
-  3. 원본 데이터 삭제
-  4. 처리 건수 로깅
-- **구현**: `AuditLogArchivingBatchService` (네이티브 쿼리 사용)
-- **활성화**: `@EnableScheduling` (IdentityModulithApplication)
-
-**💡 데이터 보존 정책**:
-- `audit_logs`: 최근 **6개월**
-- `audit_logs_archive`: **6개월 이상** (장기 보관)
-
-**로그 예시**:
-```
-[감사 로그 아카이빙] 배치 시작: 대상=2025-07-21 00:00:00 이전 로그
-[감사 로그 아카이빙] 아카이브 테이블 복사 완료: 1,234건
-[감사 로그 아카이빙] 배치 완료: 복사=1,234, 삭제=1,234, 소요시간=1,500ms
-```
+- 예: `TEAM_LEAD` + `INBOUND_AGENT` = 팀장이면서 인바운드 전화 상담도 가능
+- 예: `AGENT` + `INBOUND_AGENT` + `CHAT_AGENT` = 멀티 채널 상담사
 
 ---
 
 ## 🔄 테이블 간 관계도
 
 ```
-departmentEntities (부서)
-    ↓ 1:N (parent_id)
-departmentEntities (하위 부서)
+org_departments (부서)
+    ↓ 1:N (parent_dept_id)
+org_departments (하위 부서)
     ↓ 1:N (dept_id)
 agents (사용자)
-    ↓ M:N (agent_roles)
-roles (역할)
-    ↓ M:N (role_permissions)
-permissions (권한)
+    ↓ M:N (rbac_agent_roles)
+rbac_roles (역할)
+    ↓ M:N (rbac_role_permissions)
+rbac_permissions (권한)
 ```
 
 ---
 
 ## 🚀 초기화 방법
 
-### 1. 데이터베이스 완전 초기화
-```bash
-# PostgreSQL 클라이언트에서
-psql -U nexfron -d nexfron -f reset_database_clean.sql
-```
-
-### 2. 애플리케이션 실행
+### 1. 애플리케이션 실행 (권장)
 ```bash
 ./gradlew bootRun
 ```
 
-Flyway가 자동으로 `V1_0_0__Complete_Init.sql` 실행 → 8개 테이블 + 표준 데이터 생성
+Flyway가 자동으로 `V1_0_0__Complete_Init.sql` 실행 → 6개 테이블 + 표준 데이터 생성
+
+### 2. 수동 초기화 (필요 시)
+```bash
+# PostgreSQL 클라이언트에서
+psql -U your_user -d your_database -f src/main/resources/db/migration/V1_0_0__Complete_Init.sql
+```
 
 ### 3. 확인
 ```sql
-SELECT 'departmentEntities' as table_name, COUNT(*) FROM departmentEntities
+SELECT 'org_departments' as table_name, COUNT(*) FROM org_departments
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
-UNION ALL SELECT 'roles', COUNT(*) FROM roles
-UNION ALL SELECT 'permissions', COUNT(*) FROM permissions
+UNION ALL SELECT 'rbac_roles', COUNT(*) FROM rbac_roles
+UNION ALL SELECT 'rbac_permissions', COUNT(*) FROM rbac_permissions
 UNION ALL SELECT 'role_permissions', COUNT(*) FROM role_permissions
 UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 ```

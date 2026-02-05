@@ -1,28 +1,101 @@
 # 📋 프로젝트 변경 이력 (Changelog)
 
+## 🎯 v3.0.0 - 2026-02-05
+
+### ✨ 주요 개선 사항
+
+#### 1️⃣ **Port/Adapter 패턴 완전 적용**
+- ✅ **모듈 간 직접 의존성 제거**
+  - User → RBAC: `RbacPort` 인터페이스 + `RbacAdapter` 구현
+  - Organization → User: `OrgUserPort` 인터페이스 + `AgentOrgUserAdapter` 구현
+  - RBAC → User: `PermissionPort` 인터페이스 + `AgentPermissionAdapter` 구현
+- ✅ **Infrastructure 레이어에서만 외부 모듈 의존**
+  - Presentation/Application 레이어는 Port 인터페이스만 의존
+  - 테스트 용이성 향상 (Mock 주입 가능)
+- ✅ **DDD + Modular Monolith 아키텍처 강화**
+
+#### 2️⃣ **Department 모듈 기능 확장**
+- ✅ **DepartmentType Enum 추가**
+  - `COMPANY`: 최상위 조직 (회사, 계열사)
+  - `DIVISION`: 본부급 조직
+  - `TEAM`: 팀급 조직
+  - `GROUP`: 그룹/파트
+  - `CUSTOM`: 사용자 정의 타입
+- ✅ **부서 상태 관리 구현**
+  - `activateDepartment()`: 부서 활성화
+  - `deactivateDepartment()`: 부서 비활성화
+  - `is_active` 컬럼 추가
+- ✅ **추가 조회 API 구현**
+  - 키워드 검색, 하위 부서 트리, 깊이별 조회, 타입별 조회, 부서별 사용자 목록
+
+#### 3️⃣ **비즈니스 규칙 강화**
+- ✅ **순환 참조 방지**: 부서를 자신이나 하위 부서로 이동 불가
+- ✅ **삭제 제약 조건**: 하위 부서/소속 직원 존재 시 삭제 불가
+- ✅ **에러 코드 체계화**: `DepartmentErrorCode` enum 추가
+
+#### 4️⃣ **Swagger 문서 완벽 적용**
+- ✅ **모든 Controller에 Swagger 어노테이션 추가**
+  - @Tag, @Operation, @ApiResponses, @Parameter
+- ✅ **Swagger UI 접근**: `http://localhost:8080/swagger-ui/index.html`
+
+#### 5️⃣ **데이터베이스 구조 개선**
+- ✅ **테이블명 표준화**: `org_departments`, `rbac_roles`, `rbac_permissions` 등
+- ✅ **단일 마이그레이션 파일**: `V1_0_0__Complete_Init.sql`
+- ✅ **초기 데이터**: 역할 8개, 권한 35개, 샘플 사용자 3개, 샘플 부서 4개
+
+#### 6️⃣ **문서화 대폭 강화**
+- ✅ **새 문서 추가**: `ORGANIZATION_API_TEST_GUIDE.md`
+- ✅ **기존 문서 업데이트**: `README.md`, `DB_COMPREHENSIVE_GUIDE.md`, `CHANGELOG.md`
+
+### 📁 주요 파일 변경
+
+**추가된 파일**:
+```
+✅ Docs/ORGANIZATION_API_TEST_GUIDE.md                    - Organization API 테스트 가이드
+✅ organization/domain/model/DepartmentType.java          - 부서 타입 Enum
+✅ organization/exception/DepartmentErrorCode.java        - 에러 코드 Enum
+✅ user/application/port/RbacPort.java                    - RBAC 연동 인터페이스
+✅ user/infrastructure/adapter/RbacAdapter.java           - RbacPort 구현체
+```
+
+**수정된 파일**:
+```
+🔧 README.md                                              - v3.0.0 전체 리마스터
+🔧 organization/domain/model/DepartmentEntity.java        - DepartmentType 적용
+🔧 organization/application/service/DepartmentServiceImpl.java - 추가 API 구현
+🔧 organization/presentation/DepartmentController.java    - Swagger 완벽 적용
+🔧 모든 테스트 파일                                        - DepartmentType 적용
+```
+
+### 🐛 버그 수정
+- 🐛 **순환 의존성 해결**: Port/Adapter 패턴으로 모듈 간 순환 참조 제거
+- 🐛 **Flyway 버전 충돌**: V1_0_13 중복 파일 제거
+- 🐛 **에러 코드 누락**: `INSUFFICIENT_PERMISSION` 에러 코드 추가
+- 🐛 **테스트 실패**: DepartmentType Enum 적용으로 테스트 코드 수정
+
+---
+
 ## 🎯 v2.0.0 - 2026-01-21
 
 ### ✨ 주요 개선 사항
 
 #### 1️⃣ **데이터베이스 표준화**
-- ✅ **모든 PK를 UUID로 통일** (VARCHAR(36))
+- ✅ **모든 PK를 UUID로 통일** (VARCHAR(50))
 - ✅ **명명 규칙 통일** (snake_case, 소문자)
-- ✅ **핵심 테이블 8개 유지**
+- ✅ **핵심 테이블 6개 유지**
   ```
-  1. departmentEntities         (조직 관리)
-  2. agents             (사용자 관리)
-  3. roles              (역할 관리)
-  4. permissions        (권한 관리)
-  5. role_permissions   (역할-권한 매핑)
-  6. agent_roles        (사용자-역할 매핑)
-  7. audit_logs         (감사 로그)
-  8. audit_logs_archive (감사 로그 아카이브)
+  1. org_departments        (조직 관리)
+  2. agents                 (사용자 관리)
+  3. rbac_roles             (역할 관리)
+  4. rbac_permissions       (권한 관리)
+  5. rbac_role_permissions  (역할-권한 매핑)
+  6. rbac_agent_roles       (사용자-역할 매핑)
   ```
 - ✅ **표준 데이터 자동 삽입**
-  - 35개 권한 (RBAC 관리, 조직 관리, 보고서, 설정)
-  - 8개 역할 (ADMIN, TEAM_LEADER, MEMBER 등)
-  - 16개 사용자 (테스트용)
-  - 16개 부서 (3단계 조직 구조)
+  - 35개 권한 (RBAC 관리, 조직 관리, 채널별)
+  - 8개 역할 (ADMIN, TEAM_LEAD, AGENT, 채널별 역할 등)
+  - 3개 샘플 사용자 (admin, teamlead01, agent01)
+  - 4개 샘플 부서 (넥스프론, 고객서비스본부, 인바운드팀, 아웃바운드팀)
 
 #### 2️⃣ **RBAC 레벨 수정**
 - ❌ **계층형 RBAC (Level 2)** 제거
@@ -40,22 +113,6 @@
 - ✅ **TenantContextHolder** - 멀티테넌시 컨텍스트 관리
 - ✅ **AuthPrincipal** - 인증 사용자 정보
 - ✅ **UnauthorizedException** - 권한 예외 처리
-- ✅ **CacheKeyGenerator** - 캐시 키 생성 유틸
-
-#### 5️⃣ **캐싱 전략 적용**
-- ✅ **Spring Cache 통합**
-  - `userPermissions` - 사용자별 권한 캐시
-  - `rolePermissions` - 역할별 권한 캐시
-  - `accessibleDepts` - 접근 가능 부서 캐시
-- ✅ **자동 캐시 무효화** (@CacheEvict)
-
-#### 6️⃣ **감사 로그(Audit Log) 구현**
-- ✅ **모든 권한 변경 추적**
-  - 역할 생성/수정/삭제
-  - 권한 생성/삭제
-  - 역할-권한 할당/회수
-  - 사용자-역할 할당/회수
-- ✅ **자동 아카이빙 배치** - 6개월 이상 로그 자동 이동
 
 ---
 
@@ -66,9 +123,6 @@
 ✅ common/security/TenantContextHolder.java               - 멀티테넌시 핵심
 ✅ common/security/AuthPrincipal.java                     - 인증 정보
 ✅ common/security/UnauthorizedException.java             - 권한 예외
-✅ common/cache/CacheKeyGenerator.java                    - 캐시 키 유틸
-✅ rbac/application/AuditLogService.java                  - 감사 로그 서비스
-✅ rbac/infrastructure/batch/AuditLogArchivingBatch.java  - 로그 아카이빙
 ✅ DB_COMPREHENSIVE_GUIDE.md                              - DB 설계 가이드
 ✅ CHANGELOG.md                                           - 이 파일
 ```
