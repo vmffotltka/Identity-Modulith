@@ -85,6 +85,19 @@ public class OrganizationException extends RuntimeException {
         CIRCULAR_REFERENCE("CIRCULAR_REFERENCE", "자신의 하위 부서로 이동할 수 없습니다", 400),
         CHILD_DEPARTMENT_EXISTS("CHILD_DEPT_EXISTS", "하위 부서가 존재하여 삭제할 수 없습니다", 409),
         ACTIVE_USERS_EXIST("ACTIVE_USERS_EXIST", "소속 구성원이 존재하여 삭제할 수 없습니다", 409),
+        DUPLICATE_DEPT_CODE("DUPLICATE_DEPT_CODE", "이미 존재하는 부서 코드입니다", 409),
+
+        // 루트 부서 관련 에러 (DEPARTMENT_SCENARIOS.md 기준 추가)
+        ROOT_ALREADY_EXISTS("ROOT_ALREADY_EXISTS", "테넌트에 이미 루트 부서가 존재합니다", 409),
+        CANNOT_MOVE_ROOT("CANNOT_MOVE_ROOT", "루트 부서는 이동할 수 없습니다", 400),
+        CANNOT_DEACTIVATE_ROOT("CANNOT_DEACTIVATE_ROOT", "루트 부서는 비활성화할 수 없습니다", 400),
+        CANNOT_DELETE_ROOT("CANNOT_DELETE_ROOT", "루트 부서는 삭제할 수 없습니다", 400),
+
+        // 부서 상태 및 검증 에러
+        PARENT_DEPT_INACTIVE("PARENT_DEPT_INACTIVE", "상위 부서가 비활성 상태입니다", 400),
+        CUSTOM_TYPE_NAME_REQUIRED("CUSTOM_TYPE_NAME_REQUIRED", "CUSTOM 타입은 커스텀 타입명이 필수입니다", 400),
+        CODE_CANNOT_BE_CHANGED("CODE_CANNOT_BE_CHANGED", "부서 코드는 변경할 수 없습니다", 400),
+        SAME_PARENT_DEPARTMENT("SAME_PARENT_DEPT", "이미 동일한 상위 부서입니다", 400),
 
         // 사용자 관련 에러 (EntityNotFoundException 대체)
         USER_NOT_FOUND("USER_NOT_FOUND", "사용자를 찾을 수 없습니다", 404),

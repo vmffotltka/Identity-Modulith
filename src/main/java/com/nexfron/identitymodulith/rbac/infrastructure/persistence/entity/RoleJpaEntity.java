@@ -1,5 +1,7 @@
 package com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity;
 
+import com.nexfron.identitymodulith.rbac.domain.DataScopeLevel;
+import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -51,12 +53,12 @@ import java.time.LocalDateTime;
  *
  * 권장 사항:
  * - 역할 이름은 대문자 영문으로 작성 (ADMIN, TEAM_LEADER, MEMBER)
- * - 역할 타입은 미리 정의된 타입으로 관리 (POSITION, CHANNEL, SKILL)
+ * - 역할 타입은 미리 정의된 타입으로 관리 (POSITION, CHANNEL)
  * - 권한 변경 시 영향받는 사용자 수를 먼저 확인
  */
 @Entity
 @Table(
-        name = "roles",
+        name = "rbac_roles",  // V1_0_20: 표준 명명 규칙 적용 (roles → rbac_roles)
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_roles_tenant_name",
                 columnNames = {"tenant_id", "name"}
@@ -99,23 +101,37 @@ public class RoleJpaEntity {
     private String name;
 
     /**
-     * 역할의 타입 (POSITION / CHANNEL / SKILL)
+     * 역할의 타입 (POSITION / CHANNEL)
      * 역할을 분류하여 관리 및 조회 효율성 증대:
      *
-     * - POSITION: 직급 관련 역할
-     *   예: ADMIN, MANAGER, TEAM_LEADER, MEMBER
+     * - POSITION: 직급 관련 역할 (필수, 1개만)
+     *   예: ADMIN, TEAM_LEAD, AGENT
      *
-     * - CHANNEL: 채널(통신 수단) 관련 역할
-     *   예: PHONE_AGENT, CHAT_AGENT, EMAIL_AGENT
+     * - CHANNEL: 채널(통신 수단) 관련 역할 (선택, 여러 개 가능)
+     *   예: VOICE_INBOUND, VOICE_OUTBOUND, CHAT, EMAIL, CALLBACK
      *
-     * - SKILL: 전문 능력 관련 역할
-     *   예: TECHNICAL_SUPPORT, BILLING_EXPERT, VIP_SPECIALIST
-     *
-     * 길이: 최대 32자
      * 필수값: NOT NULL
      */
+    @Enumerated(EnumType.STRING)
     @Column(name = "type", length = 32, nullable = false)
-    private String type;
+    private RoleType type;
+
+    /**
+     * 데이터 접근 범위 (POSITION 역할에만 적용)
+     *
+     * - ADMIN: 전체 조직 접근
+     * - TEAM_LEAD: 본인 부서 + 하위 부서 접근
+     * - MEMBER: 본인 부서만 접근
+     *
+     * 규칙:
+     * - POSITION 역할일 때만 필수
+     * - CHANNEL 역할일 때는 NULL
+     *
+     * 선택 사항 (CHANNEL 역할은 NULL)
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "data_scope", length = 32)
+    private DataScopeLevel dataScope;
 
     /**
      * 역할 설명

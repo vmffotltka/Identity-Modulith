@@ -1,6 +1,7 @@
 package com.nexfron.identitymodulith.organization.presentation;
 
 import com.nexfron.identitymodulith.organization.application.service.DepartmentServiceImpl;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -223,6 +224,35 @@ public class DepartmentController {
     }
 
     /**
+     * 하위 부서 트리 조회
+     *
+     * <h3>동작:</h3>
+     * - 지정된 부서 및 모든 하위 부서를 트리 구조로 반환
+     * - orgPath 기반으로 효율적 조회 (Materialized Path 패턴)
+     *
+     * <h3>사용 예시:</h3>
+     * - 특정 본부의 전체 하위 조직도 조회
+     * - 부서 선택 UI에서 하위 부서만 표시
+     *
+     * @param deptId 조회할 부서 ID
+     * @return 해당 부서 및 모든 하위 부서 목록
+     */
+    @Operation(summary = "하위 부서 트리 조회",
+               description = "지정된 부서와 그 하위의 모든 부서를 조회합니다. (DEPARTMENT_SCENARIOS.md)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "404", description = "부서 없음")
+    })
+    @GetMapping("/{deptId}/subtree")
+    public ResponseEntity<List<DepartmentDto.Response>> getSubtree(
+            @Parameter(description = "부서 ID (UUID)", required = true)
+            @PathVariable String deptId) {
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        List<DepartmentDto.Response> result = departmentServiceImpl.getSubtree(tenantId, deptId);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * 부서 조회 (깊이별)
      *
      * <h3>사용 예시:</h3>
@@ -253,7 +283,7 @@ public class DepartmentController {
      * - type=TEAM: 팀 단위만
      * - type=DIVISION: 사업부만
      *
-     * @param type     부서 타입 (쿼리 파라미터)
+     * @param type     부서 타입 (쿼리 파라미터, Enum)
      * @return 해당 타입의 부서 목록
      */
     @Operation(summary = "부서 조회 (타입별)", description = "특정 타입의 부서를 조회합니다.")
@@ -264,7 +294,7 @@ public class DepartmentController {
     @GetMapping("/by-type")
     public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByType(
             @Parameter(description = "부서 타입", example = "TEAM", required = true)
-            @RequestParam String type) {
+            @RequestParam DepartmentType type) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         List<DepartmentDto.Response> result = departmentServiceImpl.getDepartmentsByType(tenantId, type);
         return ResponseEntity.ok(result);
@@ -472,6 +502,94 @@ public class DepartmentController {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
         UUID userId = UUID.fromString(userIdStr);
         departmentServiceImpl.deleteDepartment(tenantId, userId, deptId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ============================================================
+    // 부서 상태 관리
+    // ============================================================
+
+    /**
+     * 부서 비활성화
+     *
+     * <h3>비활성화 조건:</h3>
+     * 1. 활성 하위 부서가 없어야 함
+     * 2. 소속 직원이 있어도 비활성화 가능 (경고 로그 출력)
+     * 3. 사용자가 해당 부서에 대한 권한을 가져야 함
+     *
+     * <h3>주의:</h3>
+     * - 비활성화된 부서는 신규 직원 배치 불가
+     * - 비활성화된 부서는 조직도에서 비활성으로 표시
+     * - 활성화로 복구 가능
+     *
+     * @param userIdStr 사용자 ID
+     * @param deptId 비활성화할 부서 ID
+     * @return HTTP 204 No Content
+     *
+     * @apiNote
+     * 요청 예시:
+     * POST /api/org/departments/550e8400.../deactivate
+     * X-Tenant-Id: tenant-001
+     * X-User-Id: 550e8400-e29b-41d4-a716-446655440100
+     */
+    @Operation(summary = "부서 비활성화", description = "부서를 비활성화합니다. (활성 하위 부서가 없어야 함)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "부서 비활성화 성공"),
+            @ApiResponse(responseCode = "400", description = "활성 하위 부서 존재"),
+            @ApiResponse(responseCode = "401", description = "인증 필요"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "부서 없음")
+    })
+    @PostMapping("/{deptId}/deactivate")
+    public ResponseEntity<Void> deactivateDepartment(
+            @Parameter(description = "사용자 ID (UUID)", required = true)
+            @RequestHeader(value = "X-User-Id") String userIdStr,
+            @Parameter(description = "비활성화할 부서 ID (UUID)", required = true)
+            @PathVariable String deptId) {
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        UUID userId = UUID.fromString(userIdStr);
+        departmentServiceImpl.deactivateDepartment(tenantId, userId, deptId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 부서 활성화
+     *
+     * <h3>활성화 조건:</h3>
+     * 1. 상위 부서가 활성 상태여야 함
+     * 2. 사용자가 해당 부서에 대한 권한을 가져야 함
+     *
+     * <h3>효과:</h3>
+     * - 활성화된 부서는 신규 직원 배치 가능
+     * - 조직도에서 정상적으로 표시
+     *
+     * @param userIdStr 사용자 ID
+     * @param deptId 활성화할 부서 ID
+     * @return HTTP 204 No Content
+     *
+     * @apiNote
+     * 요청 예시:
+     * POST /api/org/departments/550e8400.../activate
+     * X-Tenant-Id: tenant-001
+     * X-User-Id: 550e8400-e29b-41d4-a716-446655440100
+     */
+    @Operation(summary = "부서 활성화", description = "비활성화된 부서를 다시 활성화합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "부서 활성화 성공"),
+            @ApiResponse(responseCode = "400", description = "상위 부서가 비활성 상태"),
+            @ApiResponse(responseCode = "401", description = "인증 필요"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "부서 없음")
+    })
+    @PostMapping("/{deptId}/activate")
+    public ResponseEntity<Void> activateDepartment(
+            @Parameter(description = "사용자 ID (UUID)", required = true)
+            @RequestHeader(value = "X-User-Id") String userIdStr,
+            @Parameter(description = "활성화할 부서 ID (UUID)", required = true)
+            @PathVariable String deptId) {
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        UUID userId = UUID.fromString(userIdStr);
+        departmentServiceImpl.activateDepartment(tenantId, userId, deptId);
         return ResponseEntity.noContent().build();
     }
 }

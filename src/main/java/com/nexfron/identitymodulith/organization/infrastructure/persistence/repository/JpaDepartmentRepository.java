@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.organization.infrastructure.persistence.repository;
 
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
 import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -122,11 +123,11 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
      *
      * 사용처:
      * - 타입별 부서 필터링
-     * - 예: "TEAM" 타입의 부서만 조회
+     * - 예: TEAM 타입의 부서만 조회
      *
      * @param tenantId 테넌트 ID
-     * @param type 부서 타입 (예: "TEAM", "DIVISION", "DEPARTMENT")
+     * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
      * @return 해당 타입의 부서 리스트
      */
-    List<DepartmentEntity> findByTenantIdAndType(String tenantId, String type);
+    List<DepartmentEntity> findByTenantIdAndType(String tenantId, DepartmentType type);
 }

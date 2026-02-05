@@ -1,8 +1,8 @@
 package com.nexfron.identitymodulith.rbac.application;
 
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
-import com.nexfron.identitymodulith.rbac.application.service.AuditLogService;
 import com.nexfron.identitymodulith.rbac.application.service.RbacManagementServiceImpl;
+import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
@@ -41,8 +41,6 @@ class RbacAgentRoleManagementTest {
     @Mock
     private AgentRoleJpaRepository agentRoleRepository;
 
-    @Mock
-    private AuditLogService auditLogService;
 
     @Mock
     private SecurityContext securityContext;
@@ -81,7 +79,7 @@ class RbacAgentRoleManagementTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name(roleName)
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -96,9 +94,6 @@ class RbacAgentRoleManagementTest {
 
         // Then
         verify(agentRoleRepository, times(1)).save(any(AgentRoleJpaEntity.class));
-        verify(auditLogService, times(1)).recordAgentRoleAssignment(
-                eq(tenantId), eq(agentId), eq(roleName), anyString()
-        );
     }
 
     @Test
@@ -115,26 +110,29 @@ class RbacAgentRoleManagementTest {
     }
 
     @Test
-    @DisplayName("사용자에게 역할 할당 - 이미 할당된 역할")
+    @DisplayName("사용자에게 역할 할당 - 이미 할당된 역할 (무시 처리)")
     void testAssignRoleToAgent_AlreadyAssigned() {
         // Given
         RoleJpaEntity role = RoleJpaEntity.builder()
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name(roleName)
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        // ✅ P0: DB 제약 위반 시뮬레이션 (동시성 제어)
+        // ✅ RA-004: DB 제약 위반 시뮬레이션 (중복 할당은 무시)
         when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate key"));
 
-        // When & Then
-        assertThrows(RbacException.class, () -> {
+        // When & Then - 예외가 발생하지 않고 정상 처리되어야 함
+        assertDoesNotThrow(() -> {
             rbacManagementService.assignRoleToAgent(agentId, roleName);
         });
+
+        // 로그 확인을 위해 save는 호출되었어야 함
+        verify(agentRoleRepository, times(1)).save(any(AgentRoleJpaEntity.class));
     }
 
     // ============================================================
@@ -149,7 +147,7 @@ class RbacAgentRoleManagementTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name(roleName)
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         AgentRoleJpaEntity agentRole = new AgentRoleJpaEntity();
@@ -166,9 +164,6 @@ class RbacAgentRoleManagementTest {
 
         // Then
         verify(agentRoleRepository, times(1)).delete(agentRole);
-        verify(auditLogService, times(1)).recordAgentRoleRevocation(
-                eq(tenantId), eq(agentId), eq(roleName), anyString()
-        );
     }
 
     @Test
@@ -196,14 +191,14 @@ class RbacAgentRoleManagementTest {
                 .roleId("role-001")
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         RoleJpaEntity role2 = RoleJpaEntity.builder()
                 .roleId("role-002")
                 .tenantId(tenantId)
                 .name("MANAGER")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         AgentRoleJpaEntity agentRole1 = new AgentRoleJpaEntity();
@@ -256,7 +251,7 @@ class RbacAgentRoleManagementTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name(roleName)
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         AgentRoleJpaEntity agentRole1 = new AgentRoleJpaEntity();
@@ -291,18 +286,18 @@ class RbacAgentRoleManagementTest {
     }
 
     // ============================================================
-    // 캐시 무효화 및 감사 로그 통합 테스트
+    // 역할 할당 통합 테스트
     // ============================================================
 
     @Test
-    @DisplayName("역할 할당 시 캐시 무효화 및 감사 로그 기록")
+    @DisplayName("역할 할당 시 정상 작동 확인")
     void testAssignRoleIntegration_CacheEvictAndAuditLog() {
         // Given
         RoleJpaEntity role = RoleJpaEntity.builder()
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name(roleName)
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName))
@@ -316,13 +311,6 @@ class RbacAgentRoleManagementTest {
         rbacManagementService.assignRoleToAgent(agentId, roleName);
 
         // Then
-        // 캐시 무효화 확인 - @CacheEvict 적용됨
-        // 감사 로그 기록 확인
-        verify(auditLogService, times(1)).recordAgentRoleAssignment(
-                eq(tenantId),
-                eq(agentId),
-                eq(roleName),
-                anyString()
-        );
+        verify(agentRoleRepository, times(1)).save(any(AgentRoleJpaEntity.class));
     }
 }

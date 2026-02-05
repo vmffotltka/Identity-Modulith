@@ -1,9 +1,9 @@
 package com.nexfron.identitymodulith.rbac.application;
 
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
-import com.nexfron.identitymodulith.rbac.application.service.AuditLogService;
 import com.nexfron.identitymodulith.rbac.application.service.RbacManagementService;
 import com.nexfron.identitymodulith.rbac.application.service.RbacManagementServiceImpl;
+import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissionJpaEntity;
@@ -59,8 +59,6 @@ class RbacManagementServiceImplTest {
     @Mock
     private AgentRoleJpaRepository agentRoleRepository;
 
-    @Mock
-    private AuditLogService auditLogService;
 
     @Mock
     private SecurityContext securityContext;
@@ -84,13 +82,6 @@ class RbacManagementServiceImplTest {
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
         // TenantContextHolder가 인식하는 "tenantId:userId" 형식
         lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
-
-        // AuditLogService는 항상 동작하도록 설정
-        lenient().doNothing().when(auditLogService).recordRoleCreation(anyString(), anyString(), anyString(), anyString());
-        lenient().doNothing().when(auditLogService).recordRoleDeletion(anyString(), anyString(), anyString(), anyString());
-        lenient().doNothing().when(auditLogService).recordPermissionCreation(anyString(), anyString(), anyString());
-        lenient().doNothing().when(auditLogService).recordRolePermissionAssignment(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
-        lenient().doNothing().when(auditLogService).recordRolePermissionRevocation(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     // ============================================================
@@ -105,7 +96,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -130,7 +121,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -143,7 +134,7 @@ class RbacManagementServiceImplTest {
         // Then
         assertNotNull(result);
         assertEquals("ADMIN", result.name());
-        assertEquals("POSITION", result.type());
+        assertEquals(RoleType.POSITION, result.type());
     }
 
     @Test
@@ -163,7 +154,24 @@ class RbacManagementServiceImplTest {
     @DisplayName("역할 생성 - 성공")
     void testCreateRole_Success() {
         // Given
-        var request = new RbacManagementService.CreateRoleRequest("NEW_ROLE", "POSITION");
+        var request = new RbacManagementService.CreateRoleRequest("NEW_ROLE", RoleType.POSITION);
+
+        // ADMIN 권한 검증을 위한 Mock 설정
+        RoleJpaEntity adminRole = RoleJpaEntity.builder()
+                .roleId("admin-role-id")
+                .name("ADMIN")
+                .type(RoleType.POSITION)
+                .build();
+
+        when(agentRoleRepository.findByAgentId(userId))
+                .thenReturn(java.util.List.of(
+                    com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity.builder()
+                        .roleId("admin-role-id")
+                        .build()
+                ));
+
+        when(roleRepository.findById("admin-role-id"))
+                .thenReturn(Optional.of(adminRole));
 
         when(roleRepository.existsByTenantIdAndName(tenantId, "NEW_ROLE"))
                 .thenReturn(false);
@@ -172,7 +180,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("NEW_ROLE")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -192,7 +200,24 @@ class RbacManagementServiceImplTest {
     @DisplayName("역할 생성 - 실패 (중복 역할명)")
     void testCreateRole_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreateRoleRequest("ADMIN", "POSITION");
+        var request = new RbacManagementService.CreateRoleRequest("ADMIN", RoleType.POSITION);
+
+        // ADMIN 권한 검증을 위한 Mock 설정
+        RoleJpaEntity adminRole = RoleJpaEntity.builder()
+                .roleId("admin-role-id")
+                .name("ADMIN")
+                .type(RoleType.POSITION)
+                .build();
+
+        when(agentRoleRepository.findByAgentId(userId))
+                .thenReturn(java.util.List.of(
+                    com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity.builder()
+                        .roleId("admin-role-id")
+                        .build()
+                ));
+
+        when(roleRepository.findById("admin-role-id"))
+                .thenReturn(Optional.of(adminRole));
 
         when(roleRepository.existsByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(true);
@@ -211,7 +236,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -257,7 +282,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 성공")
     void testCreatePermission_Success() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest("user:manage", null);
+        var request = new RbacManagementService.CreatePermissionRequest("user:manage", "사용자 관리 권한", "WRITE");
 
         lenient().when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(false);
@@ -266,6 +291,8 @@ class RbacManagementServiceImplTest {
                 .permissionId(permissionId)
                 .tenantId(tenantId)
                 .code("user:manage")
+                .description("사용자 관리 권한")
+                .category("WRITE")
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -284,7 +311,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 실패 (중복 권한)")
     void testCreatePermission_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest("user:create", null);
+        var request = new RbacManagementService.CreatePermissionRequest("user:create", "사용자 생성 권한", "WRITE");
 
         lenient().when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:create"))
                 .thenReturn(true);
@@ -307,7 +334,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         PermissionJpaEntity permission = PermissionJpaEntity.builder()
@@ -316,12 +343,27 @@ class RbacManagementServiceImplTest {
                 .code("user:manage")
                 .build();
 
-        lenient().when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
+        // ADMIN 권한 검증을 위한 Mock 설정
+        RoleJpaEntity adminRole = RoleJpaEntity.builder()
+                .roleId("admin-role-id")
+                .name("ADMIN")
+                .type(RoleType.POSITION)
+                .build();
+
+        when(agentRoleRepository.findByAgentId(userId))
+                .thenReturn(java.util.List.of(
+                    com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity.builder()
+                        .roleId("admin-role-id")
+                        .build()
+                ));
+
+        when(roleRepository.findById("admin-role-id"))
+                .thenReturn(Optional.of(adminRole));
+
+        when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(Optional.of(role));
-        lenient().when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
+        when(permissionRepository.findByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(Optional.of(permission));
-        lenient().when(rolePermissionRepository.existsByRoleIdAndPermissionId(roleId, permissionId))
-                .thenReturn(false);
 
         // When
         rbacManagementService.assignPermissionToRole("ADMIN", "user:manage");
@@ -338,7 +380,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         PermissionJpaEntity permission = PermissionJpaEntity.builder()
@@ -346,6 +388,23 @@ class RbacManagementServiceImplTest {
                 .tenantId(tenantId)
                 .code("user:manage")
                 .build();
+
+        // ADMIN 권한 검증을 위한 Mock 설정
+        RoleJpaEntity adminRole = RoleJpaEntity.builder()
+                .roleId("admin-role-id")
+                .name("ADMIN")
+                .type(RoleType.POSITION)
+                .build();
+
+        when(agentRoleRepository.findByAgentId(userId))
+                .thenReturn(java.util.List.of(
+                    com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity.builder()
+                        .roleId("admin-role-id")
+                        .build()
+                ));
+
+        when(roleRepository.findById("admin-role-id"))
+                .thenReturn(Optional.of(adminRole));
 
         when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(Optional.of(role));
@@ -369,7 +428,7 @@ class RbacManagementServiceImplTest {
                 .roleId(roleId)
                 .tenantId(tenantId)
                 .name("ADMIN")
-                .type("POSITION")
+                .type(RoleType.POSITION)
                 .build();
 
         PermissionJpaEntity permission = PermissionJpaEntity.builder()

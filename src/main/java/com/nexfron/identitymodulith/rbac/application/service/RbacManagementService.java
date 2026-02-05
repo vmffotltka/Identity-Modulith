@@ -1,7 +1,7 @@
 package com.nexfron.identitymodulith.rbac.application.service;
 
-import com.nexfron.identitymodulith.rbac.presentation.dto.AuditLogDto;
 import com.nexfron.identitymodulith.rbac.domain.RbacConstants;
+import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -45,6 +45,8 @@ public interface RbacManagementService {
     Set<PermissionDto> getPermissionsByRole(String roleName);
     void assignPermissionToRole(String roleName, String permissionCode);
     void revokePermissionFromRole(String roleName, String permissionCode);
+    BatchAssignmentResult batchAssignPermissionsToRole(String roleName, Set<String> permissionCodes);
+    BatchAssignmentResult batchRevokePermissionsFromRole(String roleName, Set<String> permissionCodes);
 
     // ============================================================
     // 사용자-역할 관계
@@ -69,20 +71,12 @@ public interface RbacManagementService {
     RoleDto cloneRole(String sourceRoleName, CloneRoleRequest request);  // 신규: 역할 복사
 
 
-    // ============================================================
-    // 권한 변경 이력 조회 (Audit Log)
-    // ============================================================
-
-    List<AuditLogDto> getAgentPermissionChangeHistory(String agentId, LocalDateTime from, LocalDateTime to);
-    List<AuditLogDto> getRolePermissionChangeHistory(String roleName, LocalDateTime from, LocalDateTime to);
-    List<AuditLogDto> getAllPermissionChangeHistory(LocalDateTime from, LocalDateTime to, Integer pageSize);
-    List<AuditLogDto> getOperatorPermissionActions(String operatorId, LocalDateTime from, LocalDateTime to);
 
     // ============================================================
     // DTOs
     // ============================================================
 
-    record RoleDto(String name, String type, String description, Boolean isActive) {}
+    record RoleDto(String name, RoleType type, String description, Boolean isActive) {}
 
     record CreateRoleRequest(
             @NotBlank(message = "역할명은 필수입니다")
@@ -93,26 +87,23 @@ public interface RbacManagementService {
             )
             String name,
 
-            @NotBlank(message = "역할 타입은 필수입니다")
-            @Pattern(regexp = "POSITION|CHANNEL|SKILL", message = "역할 타입은 POSITION, CHANNEL, SKILL 중 하나여야 합니다")
-            String type
+            RoleType type
     ) {}
 
     record UpdateRoleRequest(
-            @Pattern(regexp = "POSITION|CHANNEL|SKILL", message = "역할 타입은 POSITION, CHANNEL, SKILL 중 하나여야 합니다")
-            String type,
+            RoleType type,
 
             @Size(max = RbacConstants.ROLE_DESCRIPTION_MAX_LENGTH, message = "설명은 255자 이하여야 합니다")
             String description,
 
             Boolean isActive
     ) {
-        public UpdateRoleRequest(String type) {
+        public UpdateRoleRequest(RoleType type) {
             this(type, null, null);
         }
     }
 
-    record PermissionDto(String code, String description) {}
+    record PermissionDto(String code, String description, String category) {}
 
     record CreatePermissionRequest(
             @NotBlank(message = "권한 코드는 필수입니다")
@@ -121,7 +112,11 @@ public interface RbacManagementService {
             String code,
 
             @Size(max = RbacConstants.PERMISSION_DESCRIPTION_MAX_LENGTH, message = "설명은 500자 이하여야 합니다")
-            String description
+            String description,
+
+            @NotBlank(message = "카테고리는 필수입니다 (READ, WRITE, DELETE, ADMIN)")
+            @Pattern(regexp = "^(READ|WRITE|DELETE|ADMIN)$", message = "카테고리는 READ, WRITE, DELETE, ADMIN 중 하나여야 합니다")
+            String category
     ) {}
 
     record UpdatePermissionRequest(
@@ -130,7 +125,10 @@ public interface RbacManagementService {
             String code,
 
             @Size(max = RbacConstants.PERMISSION_DESCRIPTION_MAX_LENGTH, message = "설명은 500자 이하여야 합니다")
-            String description
+            String description,
+
+            @Pattern(regexp = "^(READ|WRITE|DELETE|ADMIN)$", message = "카테고리는 READ, WRITE, DELETE, ADMIN 중 하나여야 합니다")
+            String category
     ) {}
 
 
@@ -162,5 +160,12 @@ public interface RbacManagementService {
             int assignedPermissionCount,
             boolean canDelete,
             String impactDetails
+    ) {}
+
+    record BatchAssignmentResult(
+            int successCount,
+            int failedCount,
+            int skippedCount,
+            List<String> errors
     ) {}
 }

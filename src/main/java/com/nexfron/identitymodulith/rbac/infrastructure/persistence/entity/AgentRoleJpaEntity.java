@@ -44,7 +44,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(
-        name = "agent_roles",
+        name = "user_agent_roles",  // V1_0_20: 표준 명명 규칙 적용 (agent_roles → user_agent_roles)
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_agent_roles",
                 columnNames = {"agent_id", "role_id"}

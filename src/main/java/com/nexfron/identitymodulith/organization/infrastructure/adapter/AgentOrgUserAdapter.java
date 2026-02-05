@@ -3,9 +3,12 @@ package com.nexfron.identitymodulith.organization.infrastructure.adapter;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserView;
 import com.nexfron.identitymodulith.organization.domain.model.DataScopeLevel;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
+import com.nexfron.identitymodulith.organization.infrastructure.persistence.repository.JpaDepartmentRepository;
 import com.nexfron.identitymodulith.user.UserModuleApi;
 import com.nexfron.identitymodulith.user.AgentExternalInfo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -46,7 +49,6 @@ import java.util.UUID;
  */
 @Service
 @Primary  // OrgUserPort의 기본 구현체로 지정
-@RequiredArgsConstructor
 public class AgentOrgUserAdapter implements OrgUserPort {
 
     /**
@@ -54,6 +56,21 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * (Organization 모듈은 Agent 엔티티를 직접 알지 않음)
      */
     private final UserModuleApi userModuleApi;
+
+    /**
+     * Department 정보 조회용 Repository
+     * (departmentName, departmentPath 조회에 사용)
+     */
+    private final JpaDepartmentRepository departmentRepository;
+
+    /**
+     * 생성자 - Lazy 초기화로 순환 참조 방지
+     */
+    public AgentOrgUserAdapter(@Lazy UserModuleApi userModuleApi,
+                               JpaDepartmentRepository departmentRepository) {
+        this.userModuleApi = userModuleApi;
+        this.departmentRepository = departmentRepository;
+    }
 
     /**
      * 특정 부서에 "활성 상태"의 사용자가 존재하는지 여부 확인
@@ -170,19 +187,76 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * AgentExternalInfo → OrgUserView 변환
      *
      * Organization 모듈이 필요로 하는 정보만 추려서 전달
+     * Department 정보를 조회하여 departmentName과 departmentPath 설정
      */
     private OrgUserView toViewFromExternal(AgentExternalInfo info) {
         // organizationId는 이미 부서 ID (UUID 문자열)
         String deptId = info.getOrganizationId();
+
+        // Department 정보 조회
+        String departmentName = null;
+        String departmentPath = null;
+
+        if (deptId != null && !deptId.isEmpty()) {
+            departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId())
+                .ifPresent(dept -> {
+                    // departmentName은 직접 설정
+                    // departmentPath는 orgPath에서 각 부서 이름을 조회하여 구성
+                });
+
+            // departmentName 설정
+            departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId())
+                .ifPresent(dept -> {});
+
+            java.util.Optional<DepartmentEntity> deptOpt =
+                departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId());
+
+            if (deptOpt.isPresent()) {
+                DepartmentEntity dept = deptOpt.get();
+                departmentName = dept.getName();
+
+                // departmentPath 구성: orgPath를 따라 올라가며 이름 수집
+                departmentPath = buildDepartmentPath(dept, info.getTenantId());
+            }
+        }
 
         return OrgUserView.builder()
                 .userId(info.getId())
                 .tenantId(info.getTenantId())
                 .deptId(deptId)
                 .deptOrgPath(null)
+                .departmentName(departmentName)
+                .departmentPath(departmentPath)
                 .roleLevel(mapRoleLevelFromExternal(info))
                 .active(info.isActive())
                 .build();
+    }
+
+    /**
+     * Department 전체 경로 구성 (예: "넥스프론 > 고객서비스본부 > 인바운드팀")
+     *
+     * @param dept 대상 부서
+     * @param tenantId 테넌트 ID
+     * @return 부서 전체 경로 문자열
+     */
+    private String buildDepartmentPath(DepartmentEntity dept, String tenantId) {
+        java.util.List<String> pathNames = new java.util.ArrayList<>();
+        DepartmentEntity current = dept;
+
+        // 현재 부서부터 루트까지 올라가며 이름 수집
+        while (current != null) {
+            pathNames.add(0, current.getName());  // 앞에 추가 (역순으로)
+
+            if (current.getParent() != null) {
+                String parentId = current.getParent().getDeptId();
+                current = departmentRepository.findByDeptIdAndTenantId(parentId, tenantId)
+                    .orElse(null);
+            } else {
+                break;
+            }
+        }
+
+        return String.join(" > ", pathNames);
     }
 
 

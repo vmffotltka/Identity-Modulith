@@ -27,6 +27,8 @@ public class OrgUserView {
 
     private String deptId;         // 소속 부서 ID (UUID 문자열, FK: departments.dept_id)
     private String deptOrgPath;    // 소속 부서 orgPath (없으면 Dept에서 계산 가능)
+    private String departmentName; // 소속 부서명 (예: "인바운드팀")
+    private String departmentPath; // 소속 부서 전체 경로 (예: "넥스프론 > 고객서비스본부 > 인바운드팀")
 
     private DataScopeLevel roleLevel; // Level 1 RBAC용 역할 레벨
     private boolean active;           // 재직 여부

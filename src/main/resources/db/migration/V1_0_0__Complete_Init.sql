@@ -1,541 +1,383 @@
--- ============================================================
--- Identity Modulith 데이터베이스 통합 초기화 스크립트
--- 버전: 2.0.0 CLEAN (PostgreSQL)
--- 날짜: 2026-01-21
--- DB: PostgreSQL 18+
--- 설명: RBAC, Organization 모듈의 전체 스키마 + 표준 데이터
--- ============================================================
+-- =============================================================================
+-- Identity Modulith - 통합 초기화 스크립트
+-- 버전: V1.0.0
+-- 설명: 전체 스키마 및 초기 데이터 생성 (통합본)
+-- 작성일: 2026-02-04
+-- =============================================================================
 
--- ============================================================
--- Phase 1: 전체 데이터 정리 (존재하면 삭제)
--- ============================================================
+-- =============================================================================
+-- 1. 조직(Organization) 모듈 테이블
+-- =============================================================================
 
--- PermissionGroup 관련 (삭제된 기능)
-DROP TABLE IF EXISTS role_permission_groups CASCADE;
-DROP TABLE IF EXISTS permission_group_permissions CASCADE;
-DROP TABLE IF EXISTS permission_groups CASCADE;
+-- 부서(Department) 테이블
+CREATE TABLE IF NOT EXISTS org_departments (
+    dept_id             VARCHAR(50)     PRIMARY KEY,
+    tenant_id           VARCHAR(50)     NOT NULL,
+    name                VARCHAR(100)    NOT NULL,
+    type                VARCHAR(20)     NOT NULL,  -- COMPANY, DIVISION, TEAM, GROUP, CUSTOM
+    custom_type_name    VARCHAR(50),
+    parent_dept_id      VARCHAR(50),
+    org_path            TEXT            NOT NULL,
+    depth               INTEGER         NOT NULL DEFAULT 0,
+    display_order       INTEGER         NOT NULL DEFAULT 0,
+    manager_id          VARCHAR(50),
+    description         TEXT,
+    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by          VARCHAR(50),
+    updated_by          VARCHAR(50),
 
--- 기존 테이블
-DROP TABLE IF EXISTS audit_logs_archive CASCADE;
-DROP TABLE IF EXISTS audit_logs CASCADE;
-DROP TABLE IF EXISTS agent_roles CASCADE;
-DROP TABLE IF EXISTS role_permissions CASCADE;
-DROP TABLE IF EXISTS roles CASCADE;
-DROP TABLE IF EXISTS permissions CASCADE;
-DROP TABLE IF EXISTS agents CASCADE;
-DROP TABLE IF EXISTS departmentEntities CASCADE;
-
--- ============================================================
--- Phase 2: 모든 테이블 생성 (UUID 기반)
--- ============================================================
-
--- Departments 테이블 (조직 구조)
-CREATE TABLE departmentEntities (
-    dept_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    parent_id VARCHAR(36),
-    name VARCHAR(100) NOT NULL,
-    org_path VARCHAR(500) NOT NULL,
-    depth INTEGER NOT NULL,
-    type VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    CONSTRAINT fk_parent_dept FOREIGN KEY (parent_dept_id)
+        REFERENCES org_departments(dept_id) ON DELETE RESTRICT,
+    CONSTRAINT chk_dept_type CHECK (type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM')),
+    CONSTRAINT chk_custom_type CHECK (
+        (type = 'CUSTOM' AND custom_type_name IS NOT NULL) OR
+        (type != 'CUSTOM')
+    )
 );
 
-COMMENT ON TABLE departmentEntities IS '조직 (부서) 관리 테이블';
-COMMENT ON COLUMN departmentEntities.dept_id IS '부서 ID (UUID)';
-COMMENT ON COLUMN departmentEntities.tenant_id IS '테넌트 ID (멀티테넌시)';
-COMMENT ON COLUMN departmentEntities.parent_id IS '상위 부서 ID (자기참조)';
-COMMENT ON COLUMN departmentEntities.name IS '부서명';
-COMMENT ON COLUMN departmentEntities.org_path IS '조직 경로 (트리 탐색용)';
-COMMENT ON COLUMN departmentEntities.depth IS '트리 깊이';
-COMMENT ON COLUMN departmentEntities.type IS '부서 타입';
-COMMENT ON COLUMN departmentEntities.created_at IS '생성 일시';
+CREATE INDEX IF NOT EXISTS idx_dept_tenant ON org_departments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_dept_parent ON org_departments(parent_dept_id);
+CREATE INDEX IF NOT EXISTS idx_dept_org_path ON org_departments(org_path);
+CREATE INDEX IF NOT EXISTS idx_dept_active ON org_departments(is_active);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_departments_tenant_path ON departmentEntities(tenant_id, org_path);
-CREATE INDEX IF NOT EXISTS idx_departments_tenant_id ON departmentEntities(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_departments_parent_id ON departmentEntities(parent_id);
-CREATE INDEX IF NOT EXISTS idx_departments_org_path ON departmentEntities(org_path);
+COMMENT ON TABLE org_departments IS '조직 부서 테이블';
+COMMENT ON COLUMN org_departments.type IS '부서 타입: COMPANY(회사), DIVISION(본부), TEAM(팀), GROUP(그룹), CUSTOM(사용자정의)';
+COMMENT ON COLUMN org_departments.org_path IS 'Materialized Path 방식 경로 (예: /root/dept1/dept2/)';
 
--- 자기참조 FK (부모-자식)
-ALTER TABLE departmentEntities ADD CONSTRAINT fk_departments_parent
-    FOREIGN KEY (parent_id) REFERENCES departmentEntities(dept_id) ON DELETE RESTRICT;
+-- =============================================================================
+-- 2. RBAC 모듈 테이블
+-- =============================================================================
 
--- Agents 테이블 (사용자)
-CREATE TABLE agents (
-    agent_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    login_id VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    dept_id VARCHAR(36),
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    password_must_change BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP,
-    retired_at TIMESTAMP,
-    job_title VARCHAR(100),
-    sync_status VARCHAR(20),
-    role_id VARCHAR(50)
+-- 역할(Role) 테이블
+CREATE TABLE IF NOT EXISTS rbac_roles (
+    role_id             VARCHAR(50)     PRIMARY KEY,
+    tenant_id           VARCHAR(50)     NOT NULL,
+    name                VARCHAR(50)     NOT NULL,
+    type                VARCHAR(20)     NOT NULL,  -- POSITION, CHANNEL
+    data_scope          VARCHAR(20),               -- ADMIN, TEAM_LEAD, MEMBER (POSITION일 때만)
+    description         VARCHAR(255),
+    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uk_role_tenant_name UNIQUE (tenant_id, name),
+    CONSTRAINT chk_role_type CHECK (type IN ('POSITION', 'CHANNEL')),
+    CONSTRAINT chk_role_data_scope CHECK (
+        (type = 'POSITION' AND data_scope IN ('ADMIN', 'TEAM_LEAD', 'MEMBER')) OR
+        (type = 'CHANNEL' AND data_scope IS NULL)
+    )
 );
 
-COMMENT ON TABLE agents IS '사용자 (에이전트) 관리 테이블';
-COMMENT ON COLUMN agents.agent_id IS '사용자 ID (UUID)';
-COMMENT ON COLUMN agents.tenant_id IS '테넌트 ID (멀티테넌시)';
-COMMENT ON COLUMN agents.login_id IS '로그인 ID';
-COMMENT ON COLUMN agents.password IS '비밀번호 (BCrypt)';
-COMMENT ON COLUMN agents.name IS '사용자명';
-COMMENT ON COLUMN agents.dept_id IS '소속 부서 ID (UUID, FK)';
-COMMENT ON COLUMN agents.status IS '상태 (ACTIVE, RETIRED)';
-COMMENT ON COLUMN agents.password_must_change IS '비밀번호 변경 필요 여부';
-COMMENT ON COLUMN agents.created_at IS '생성 일시';
-COMMENT ON COLUMN agents.retired_at IS '퇴직 일시';
+CREATE INDEX IF NOT EXISTS idx_role_tenant ON rbac_roles(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_role_type ON rbac_roles(type);
+CREATE INDEX IF NOT EXISTS idx_role_active ON rbac_roles(is_active);
 
-CREATE INDEX IF NOT EXISTS idx_agents_tenant_id ON agents(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_agents_dept_id ON agents(dept_id);
-CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-CREATE INDEX IF NOT EXISTS idx_agents_login_id ON agents(login_id);
+COMMENT ON TABLE rbac_roles IS '역할 정의 테이블';
+COMMENT ON COLUMN rbac_roles.type IS 'POSITION: 직급(ADMIN, TEAM_LEAD, AGENT), CHANNEL: 채널(VOICE, CHAT 등)';
+COMMENT ON COLUMN rbac_roles.data_scope IS 'DataScope 레벨 (POSITION 타입일 때만 사용)';
 
--- FK: agents.dept_id → departmentEntities.dept_id
-ALTER TABLE agents ADD CONSTRAINT fk_agents_dept
-    FOREIGN KEY (dept_id) REFERENCES departmentEntities(dept_id) ON DELETE SET NULL;
+-- 권한(Permission) 테이블
+CREATE TABLE IF NOT EXISTS rbac_permissions (
+    permission_id       VARCHAR(50)     PRIMARY KEY,
+    tenant_id           VARCHAR(50)     NOT NULL,
+    code                VARCHAR(100)    NOT NULL,
+    name                VARCHAR(100),
+    description         VARCHAR(255),
+    category            VARCHAR(50),
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Permissions 테이블 (권한)
-CREATE TABLE permissions (
-    permission_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    code VARCHAR(128) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+    CONSTRAINT uk_permission_tenant_code UNIQUE (tenant_id, code)
 );
 
-COMMENT ON TABLE permissions IS '권한 관리 테이블';
-COMMENT ON COLUMN permissions.permission_id IS '권한 ID (UUID)';
-COMMENT ON COLUMN permissions.tenant_id IS '테넌트 ID (멀티테넌시)';
-COMMENT ON COLUMN permissions.code IS '권한 코드 (domain:action)';
-COMMENT ON COLUMN permissions.created_at IS '생성 일시';
+CREATE INDEX IF NOT EXISTS idx_permission_tenant ON rbac_permissions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_permission_category ON rbac_permissions(category);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_permissions_tenant_code ON permissions(tenant_id, code);
-CREATE INDEX IF NOT EXISTS idx_permissions_tenant_id ON permissions(tenant_id);
+COMMENT ON TABLE rbac_permissions IS '권한 정의 테이블';
+COMMENT ON COLUMN rbac_permissions.code IS '권한 코드 (예: agent:create, dept:read)';
+COMMENT ON COLUMN rbac_permissions.category IS '권한 카테고리 (예: AGENT, DEPARTMENT, CHANNEL)';
 
--- Roles 테이블 (역할)
-CREATE TABLE roles (
-    role_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    name VARCHAR(64) NOT NULL,
-    type VARCHAR(32) NOT NULL,
-    description VARCHAR(255),
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    version BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+-- 역할-권한 매핑 테이블
+CREATE TABLE IF NOT EXISTS rbac_role_permissions (
+    role_id             VARCHAR(50)     NOT NULL,
+    permission_id       VARCHAR(50)     NOT NULL,
+    assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    assigned_by         VARCHAR(50),
+
+    PRIMARY KEY (role_id, permission_id),
+    CONSTRAINT fk_rp_role FOREIGN KEY (role_id)
+        REFERENCES rbac_roles(role_id) ON DELETE CASCADE,
+    CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id)
+        REFERENCES rbac_permissions(permission_id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE roles IS '역할 관리 테이블';
-COMMENT ON COLUMN roles.role_id IS '역할 ID (UUID)';
-COMMENT ON COLUMN roles.tenant_id IS '테넌트 ID (멀티테넌시)';
-COMMENT ON COLUMN roles.name IS '역할명 (ADMIN, TEAM_LEADER 등)';
-COMMENT ON COLUMN roles.type IS '역할 타입 (POSITION, CHANNEL, SKILL)';
-COMMENT ON COLUMN roles.description IS '역할 설명 (목적 및 권한 범위)';
-COMMENT ON COLUMN roles.is_active IS '활성화 상태 (true=활성, false=비활성/논리적 삭제)';
-COMMENT ON COLUMN roles.version IS '낙관적 잠금 버전 (동시성 제어용)';
-COMMENT ON COLUMN roles.created_at IS '생성 일시';
-COMMENT ON COLUMN roles.updated_at IS '마지막 수정 일시';
+CREATE INDEX IF NOT EXISTS idx_rp_role ON rbac_role_permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_rp_permission ON rbac_role_permissions(permission_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_roles_tenant_name ON roles(tenant_id, name);
-CREATE INDEX IF NOT EXISTS idx_roles_tenant_id ON roles(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_roles_is_active ON roles(is_active);
+COMMENT ON TABLE rbac_role_permissions IS '역할-권한 매핑 테이블 (M:N)';
 
--- Role-Permission 매핑 테이블
-CREATE TABLE role_permissions (
-    id BIGSERIAL PRIMARY KEY,
-    role_id VARCHAR(36) NOT NULL,
-    permission_id VARCHAR(36) NOT NULL,
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+-- =============================================================================
+-- 3. User 모듈 테이블
+-- =============================================================================
+
+-- 상담사(Agent) 테이블
+CREATE TABLE IF NOT EXISTS agents (
+    agent_id            VARCHAR(50)     PRIMARY KEY,
+    tenant_id           VARCHAR(50)     NOT NULL,
+    login_id            VARCHAR(50)     NOT NULL,
+    password            VARCHAR(255)    NOT NULL,
+    name                VARCHAR(100)    NOT NULL,
+    employee_id         VARCHAR(50),
+    email               VARCHAR(100),
+    phone               VARCHAR(20),
+    dept_id             VARCHAR(50),
+    status              VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
+    password_must_change BOOLEAN        NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    suspended_at        TIMESTAMP,
+    retired_at          TIMESTAMP,
+    scheduled_delete_at TIMESTAMP,
+    created_by          VARCHAR(50),
+    updated_by          VARCHAR(50),
+    suspended_by        VARCHAR(50),
+    retired_by          VARCHAR(50),
+    version             BIGINT          NOT NULL DEFAULT 0,
+
+    CONSTRAINT uk_agent_tenant_login UNIQUE (tenant_id, login_id),
+    CONSTRAINT chk_agent_status CHECK (status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')),
+    CONSTRAINT fk_agent_dept FOREIGN KEY (dept_id)
+        REFERENCES org_departments(dept_id) ON DELETE SET NULL
 );
 
-COMMENT ON TABLE role_permissions IS '역할-권한 매핑 테이블';
-COMMENT ON COLUMN role_permissions.id IS '매핑 ID';
-COMMENT ON COLUMN role_permissions.role_id IS '역할 ID (FK)';
-COMMENT ON COLUMN role_permissions.permission_id IS '권한 ID (FK)';
-COMMENT ON COLUMN role_permissions.assigned_at IS '할당 일시';
+CREATE INDEX IF NOT EXISTS idx_agent_tenant ON agents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_agent_login ON agents(login_id);
+CREATE INDEX IF NOT EXISTS idx_agent_dept ON agents(dept_id);
+CREATE INDEX IF NOT EXISTS idx_agent_status ON agents(status);
+CREATE INDEX IF NOT EXISTS idx_agent_scheduled_delete ON agents(scheduled_delete_at)
+    WHERE scheduled_delete_at IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_role_permissions ON role_permissions(role_id, permission_id);
-ALTER TABLE role_permissions ADD CONSTRAINT fk_role_permissions_role
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE;
-ALTER TABLE role_permissions ADD CONSTRAINT fk_role_permissions_permission
-    FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE;
+COMMENT ON TABLE agents IS '상담사(Agent) 테이블';
+COMMENT ON COLUMN agents.status IS 'ACTIVE: 활성, SUSPENDED: 정지, RETIRED: 퇴사';
+COMMENT ON COLUMN agents.version IS 'Optimistic Locking용 버전';
 
--- Agent-Role 매핑 테이블
-CREATE TABLE agent_roles (
-    id BIGSERIAL PRIMARY KEY,
-    agent_id VARCHAR(36) NOT NULL,
-    role_id VARCHAR(36) NOT NULL,
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+-- 상담사-역할 매핑 테이블
+CREATE TABLE IF NOT EXISTS rbac_agent_roles (
+    agent_id            VARCHAR(50)     NOT NULL,
+    role_id             VARCHAR(50)     NOT NULL,
+    assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    assigned_by         VARCHAR(50),
+
+    PRIMARY KEY (agent_id, role_id),
+    CONSTRAINT fk_ar_agent FOREIGN KEY (agent_id)
+        REFERENCES agents(agent_id) ON DELETE CASCADE,
+    CONSTRAINT fk_ar_role FOREIGN KEY (role_id)
+        REFERENCES rbac_roles(role_id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE agent_roles IS '사용자-역할 매핑 테이블 (다대다 관계)';
-COMMENT ON COLUMN agent_roles.id IS '매핑 ID';
-COMMENT ON COLUMN agent_roles.agent_id IS '사용자 ID (FK to agents)';
-COMMENT ON COLUMN agent_roles.role_id IS '역할 ID (FK to roles)';
-COMMENT ON COLUMN agent_roles.assigned_at IS '할당 일시';
+CREATE INDEX IF NOT EXISTS idx_ar_agent ON rbac_agent_roles(agent_id);
+CREATE INDEX IF NOT EXISTS idx_ar_role ON rbac_agent_roles(role_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_roles ON agent_roles(agent_id, role_id);
-CREATE INDEX IF NOT EXISTS idx_agent_roles_agent_id ON agent_roles(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agent_roles_role_id ON agent_roles(role_id);
+COMMENT ON TABLE rbac_agent_roles IS '상담사-역할 매핑 테이블 (M:N)';
 
-ALTER TABLE agent_roles ADD CONSTRAINT fk_agent_roles_agent
-    FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE;
-ALTER TABLE agent_roles ADD CONSTRAINT fk_agent_roles_role
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE;
+-- =============================================================================
+-- 4. 초기 데이터 - 기본 역할(Role)
+-- =============================================================================
 
--- Audit Logs 테이블 (감사 로그)
-CREATE TABLE audit_logs (
-    audit_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    action VARCHAR(32) NOT NULL,
-    resource_type VARCHAR(64) NOT NULL,
-    resource_id VARCHAR(255) NOT NULL,
-    operator_id VARCHAR(255) NOT NULL,
-    changes TEXT,
-    timestamp TIMESTAMP NOT NULL,
-    remarks TEXT,
-    ip_address VARCHAR(45)
-);
+-- POSITION 역할 (직급)
+INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope, description, is_active, created_at, updated_at)
+VALUES
+    ('role-admin-001', 'tenant-001', 'ADMIN', 'POSITION', 'ADMIN', '시스템 관리자 (전체 조직 접근)', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-teamlead-001', 'tenant-001', 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', '팀장 (본인 팀 + 하위 부서 접근)', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-agent-001', 'tenant-001', 'AGENT', 'POSITION', 'MEMBER', '일반 상담사 (본인 팀만 접근)', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, name) DO NOTHING;
 
-COMMENT ON TABLE audit_logs IS '감사 로그 - 권한 관련 모든 변경사항 추적';
-COMMENT ON COLUMN audit_logs.audit_id IS '감사 로그 ID (UUID)';
-COMMENT ON COLUMN audit_logs.tenant_id IS '테넌트 ID';
-COMMENT ON COLUMN audit_logs.action IS '작업 유형 (CREATE, UPDATE, DELETE, ASSIGN, REVOKE)';
-COMMENT ON COLUMN audit_logs.resource_type IS '대상 리소스 타입 (ROLE, PERMISSION, AGENT_ROLE 등)';
-COMMENT ON COLUMN audit_logs.resource_id IS '대상 리소스 ID';
-COMMENT ON COLUMN audit_logs.operator_id IS '작업 수행자 ID';
-COMMENT ON COLUMN audit_logs.changes IS '변경 내용 (JSON 형식)';
-COMMENT ON COLUMN audit_logs.timestamp IS '작업 발생 일시';
-COMMENT ON COLUMN audit_logs.remarks IS '추가 정보 (메모, 실패 원인 등)';
-COMMENT ON COLUMN audit_logs.ip_address IS '클라이언트 IP 주소';
+-- CHANNEL 역할 (채널)
+INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope, description, is_active, created_at, updated_at)
+VALUES
+    ('role-ch-inbound', 'tenant-001', 'INBOUND_AGENT', 'CHANNEL', NULL, '인바운드 전화 상담', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-ch-outbound', 'tenant-001', 'OUTBOUND_AGENT', 'CHANNEL', NULL, '아웃바운드 전화 상담', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-ch-chat', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', NULL, '채팅 상담', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-ch-email', 'tenant-001', 'EMAIL_AGENT', 'CHANNEL', NULL, '이메일 상담', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role-ch-multi', 'tenant-001', 'MULTI_CHANNEL_AGENT', 'CHANNEL', NULL, '멀티채널 상담 (모든 채널)', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, name) DO NOTHING;
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON audit_logs(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_type ON audit_logs(resource_type);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_operator_id ON audit_logs(operator_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+-- =============================================================================
+-- 5. 초기 데이터 - 권한(Permission)
+-- =============================================================================
 
--- Audit Logs Archive 테이블 (6개월 이상 오래된 로그 보관)
-CREATE TABLE audit_logs_archive (
-    audit_id VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    action VARCHAR(32) NOT NULL,
-    resource_type VARCHAR(64) NOT NULL,
-    resource_id VARCHAR(255) NOT NULL,
-    operator_id VARCHAR(255) NOT NULL,
-    changes TEXT,
-    timestamp TIMESTAMP NOT NULL,
-    remarks TEXT,
-    ip_address VARCHAR(45),
-    archived_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+-- AGENT 카테고리 권한
+INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, description, category, created_at)
+VALUES
+    ('perm-agent-001', 'tenant-001', 'agent:create', '상담사 생성', '새로운 상담사 계정 생성', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-002', 'tenant-001', 'agent:read', '상담사 조회', '상담사 정보 조회', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-003', 'tenant-001', 'agent:update', '상담사 수정', '상담사 정보 수정', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-004', 'tenant-001', 'agent:delete', '상담사 삭제', '상담사 계정 삭제', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-005', 'tenant-001', 'agent:suspend', '상담사 정지', '상담사 계정 정지', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-006', 'tenant-001', 'agent:activate', '상담사 활성화', '정지된 상담사 활성화', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-007', 'tenant-001', 'agent:transfer', '상담사 이동', '상담사 부서 이동', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-008', 'tenant-001', 'agent:role:assign', '역할 할당', '상담사에게 역할 할당', 'AGENT', CURRENT_TIMESTAMP),
+    ('perm-agent-009', 'tenant-001', 'agent:password:reset', '비밀번호 초기화', '상담사 비밀번호 초기화', 'AGENT', CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, code) DO NOTHING;
 
-COMMENT ON TABLE audit_logs_archive IS '감사 로그 아카이브 - 6개월 이상 경과한 로그';
-COMMENT ON COLUMN audit_logs_archive.archived_at IS '아카이브 일시';
+-- DEPARTMENT 카테고리 권한
+INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, description, category, created_at)
+VALUES
+    ('perm-dept-001', 'tenant-001', 'dept:create', '부서 생성', '새로운 부서 생성', 'DEPARTMENT', CURRENT_TIMESTAMP),
+    ('perm-dept-002', 'tenant-001', 'dept:read', '부서 조회', '부서 정보 조회', 'DEPARTMENT', CURRENT_TIMESTAMP),
+    ('perm-dept-003', 'tenant-001', 'dept:update', '부서 수정', '부서 정보 수정', 'DEPARTMENT', CURRENT_TIMESTAMP),
+    ('perm-dept-004', 'tenant-001', 'dept:delete', '부서 삭제', '부서 삭제', 'DEPARTMENT', CURRENT_TIMESTAMP),
+    ('perm-dept-005', 'tenant-001', 'dept:move', '부서 이동', '부서 위치 이동', 'DEPARTMENT', CURRENT_TIMESTAMP),
+    ('perm-dept-006', 'tenant-001', 'dept:deactivate', '부서 비활성화', '부서 비활성화', 'DEPARTMENT', CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, code) DO NOTHING;
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_tenant ON audit_logs_archive(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_timestamp ON audit_logs_archive(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_resource ON audit_logs_archive(resource_type, resource_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_archive_operator ON audit_logs_archive(operator_id);
+-- RBAC 카테고리 권한
+INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, description, category, created_at)
+VALUES
+    ('perm-rbac-001', 'tenant-001', 'role:create', '역할 생성', '새로운 역할 생성', 'RBAC', CURRENT_TIMESTAMP),
+    ('perm-rbac-002', 'tenant-001', 'role:read', '역할 조회', '역할 정보 조회', 'RBAC', CURRENT_TIMESTAMP),
+    ('perm-rbac-003', 'tenant-001', 'role:update', '역할 수정', '역할 정보 수정', 'RBAC', CURRENT_TIMESTAMP),
+    ('perm-rbac-004', 'tenant-001', 'role:delete', '역할 삭제', '역할 삭제', 'RBAC', CURRENT_TIMESTAMP),
+    ('perm-rbac-005', 'tenant-001', 'permission:read', '권한 조회', '권한 목록 조회', 'RBAC', CURRENT_TIMESTAMP),
+    ('perm-rbac-006', 'tenant-001', 'permission:assign', '권한 할당', '역할에 권한 할당', 'RBAC', CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, code) DO NOTHING;
 
--- ============================================================
--- Phase 3: RBAC 표준 데이터 삽입 (35권한 + 8역할 + 77매핑)
--- ============================================================
+-- CHANNEL 카테고리 권한
+INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, description, category, created_at)
+VALUES
+    ('perm-ch-in-001', 'tenant-001', 'channel:inbound:receive', '인바운드 수신', '인바운드 전화 수신', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-in-002', 'tenant-001', 'channel:inbound:hold', '통화 대기', '통화 대기 처리', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-in-003', 'tenant-001', 'channel:inbound:transfer', '호 전환', '다른 상담사에게 호 전환', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-out-001', 'tenant-001', 'channel:outbound:call', '아웃바운드 발신', '아웃바운드 전화 발신', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-out-002', 'tenant-001', 'channel:outbound:campaign', '캠페인 관리', '캠페인 관리', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-chat-001', 'tenant-001', 'channel:chat:message', '채팅 메시지', '채팅 메시지 송수신', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-chat-002', 'tenant-001', 'channel:chat:file', '파일 전송', '채팅 파일 전송', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-chat-003', 'tenant-001', 'channel:chat:emoji', '이모티콘', '이모티콘 사용', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-email-001', 'tenant-001', 'channel:email:send', '이메일 발송', '이메일 발송', 'CHANNEL', CURRENT_TIMESTAMP),
+    ('perm-ch-email-002', 'tenant-001', 'channel:email:receive', '이메일 수신', '이메일 수신', 'CHANNEL', CURRENT_TIMESTAMP)
+ON CONFLICT (tenant_id, code) DO NOTHING;
 
--- Permissions (35개)
-INSERT INTO permissions (permission_id, tenant_id, code, created_at) VALUES
-('550e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'user:create', NOW()),
-('550e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'user:read', NOW()),
-('550e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'user:read:self', NOW()),
-('550e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'user:update', NOW()),
-('550e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'user:update:self', NOW()),
-('550e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'user:delete', NOW()),
-('550e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'user:manage', NOW()),
-('550e8400-e29b-41d4-a716-446655440008', 'tenant-001', 'user:assign:role', NOW()),
-('550e8400-e29b-41d4-a716-446655440009', 'tenant-001', 'user:reset:password', NOW()),
-('550e8400-e29b-41d4-a716-446655440010', 'tenant-001', 'org:view', NOW()),
-('550e8400-e29b-41d4-a716-446655440011', 'tenant-001', 'org:create', NOW()),
-('550e8400-e29b-41d4-a716-446655440012', 'tenant-001', 'org:update', NOW()),
-('550e8400-e29b-41d4-a716-446655440013', 'tenant-001', 'org:move', NOW()),
-('550e8400-e29b-41d4-a716-446655440014', 'tenant-001', 'org:delete', NOW()),
-('550e8400-e29b-41d4-a716-446655440015', 'tenant-001', 'org:manage', NOW()),
-('550e8400-e29b-41d4-a716-446655440016', 'tenant-001', 'rbac:view', NOW()),
-('550e8400-e29b-41d4-a716-446655440017', 'tenant-001', 'rbac:create:role', NOW()),
-('550e8400-e29b-41d4-a716-446655440018', 'tenant-001', 'rbac:update:role', NOW()),
-('550e8400-e29b-41d4-a716-446655440019', 'tenant-001', 'rbac:delete:role', NOW()),
-('550e8400-e29b-41d4-a716-446655440020', 'tenant-001', 'rbac:create:permission', NOW()),
-('550e8400-e29b-41d4-a716-446655440021', 'tenant-001', 'rbac:update:permission', NOW()),
-('550e8400-e29b-41d4-a716-446655440022', 'tenant-001', 'rbac:delete:permission', NOW()),
-('550e8400-e29b-41d4-a716-446655440023', 'tenant-001', 'rbac:assign:permission', NOW()),
-('550e8400-e29b-41d4-a716-446655440024', 'tenant-001', 'rbac:configure', NOW()),
-('550e8400-e29b-41d4-a716-446655440025', 'tenant-001', 'report:view', NOW()),
-('550e8400-e29b-41d4-a716-446655440026', 'tenant-001', 'report:read', NOW()),
-('550e8400-e29b-41d4-a716-446655440027', 'tenant-001', 'report:export', NOW()),
-('550e8400-e29b-41d4-a716-446655440028', 'tenant-001', 'report:manage', NOW()),
-('550e8400-e29b-41d4-a716-446655440029', 'tenant-001', 'phone:accept', NOW()),
-('550e8400-e29b-41d4-a716-446655440030', 'tenant-001', 'phone:hold', NOW()),
-('550e8400-e29b-41d4-a716-446655440031', 'tenant-001', 'phone:transfer', NOW()),
-('550e8400-e29b-41d4-a716-446655440032', 'tenant-001', 'chat:send', NOW()),
-('550e8400-e29b-41d4-a716-446655440033', 'tenant-001', 'chat:read', NOW()),
-('550e8400-e29b-41d4-a716-446655440034', 'tenant-001', 'email:send', NOW()),
-('550e8400-e29b-41d4-a716-446655440035', 'tenant-001', 'queue:manage', NOW())
-ON CONFLICT DO NOTHING;
+-- =============================================================================
+-- 6. 초기 데이터 - 역할-권한 매핑
+-- =============================================================================
 
--- Roles (8개)
-INSERT INTO roles (role_id, tenant_id, name, type, description, is_active, version, created_at, updated_at) VALUES
-('660e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'ADMIN', 'POSITION', '시스템 전체 관리자 - 모든 권한 보유', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'MANAGER', 'POSITION', '부서 관리자 - 조직 및 사용자 관리', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'TEAM_LEAD', 'POSITION', '팀 리더 - 팀원 조회 및 보고서 확인', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'MEMBER', 'POSITION', '일반 사용자 - 기본 조회 권한', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'PHONE_AGENT', 'CHANNEL', '전화 상담사 - 인바운드/아웃바운드 통화', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', '채팅 상담사 - 실시간 채팅 응대', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'EMAIL_AGENT', 'CHANNEL', '이메일 상담사 - 이메일 응대', true, 0, NOW(), NOW()),
-('660e8400-e29b-41d4-a716-446655440008', 'tenant-001', 'SUPERVISOR', 'CHANNEL', '슈퍼바이저 - 실시간 모니터링 및 큐 관리', true, 0, NOW(), NOW())
-ON CONFLICT DO NOTHING;
+-- ADMIN 역할에 모든 권한 할당
+INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at)
+SELECT 'role-admin-001', permission_id, CURRENT_TIMESTAMP
+FROM rbac_permissions
+WHERE tenant_id = 'tenant-001'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- Role-Permission 매핑 (77개)
--- ADMIN: 35개 (전체)
-INSERT INTO role_permissions (role_id, permission_id, assigned_at)
-SELECT '660e8400-e29b-41d4-a716-446655440001', permission_id, NOW()
-FROM permissions WHERE tenant_id = 'tenant-001'
-ON CONFLICT DO NOTHING;
+-- TEAM_LEAD 역할에 일부 권한 할당
+INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at)
+SELECT 'role-teamlead-001', permission_id, CURRENT_TIMESTAMP
+FROM rbac_permissions
+WHERE tenant_id = 'tenant-001'
+  AND code IN ('agent:read', 'agent:update', 'agent:transfer', 'dept:read', 'role:read', 'permission:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- MANAGER: 12개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440001', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440002', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440004', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440008', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440009', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440010', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440011', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440012', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440013', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440025', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440026', NOW()),
-('660e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440027', NOW())
-ON CONFLICT DO NOTHING;
+-- AGENT 역할에 기본 권한 할당
+INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at)
+SELECT 'role-agent-001', permission_id, CURRENT_TIMESTAMP
+FROM rbac_permissions
+WHERE tenant_id = 'tenant-001'
+  AND code IN ('agent:read', 'dept:read', 'role:read')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- TEAM_LEAD: 5개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440002', NOW()),
-('660e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440005', NOW()),
-('660e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440010', NOW()),
-('660e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440025', NOW()),
-('660e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440026', NOW())
-ON CONFLICT DO NOTHING;
+-- 채널 역할에 채널별 권한 할당
+INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at)
+VALUES
+    -- INBOUND_AGENT
+    ('role-ch-inbound', 'perm-ch-in-001', CURRENT_TIMESTAMP),
+    ('role-ch-inbound', 'perm-ch-in-002', CURRENT_TIMESTAMP),
+    ('role-ch-inbound', 'perm-ch-in-003', CURRENT_TIMESTAMP),
+    -- OUTBOUND_AGENT
+    ('role-ch-outbound', 'perm-ch-out-001', CURRENT_TIMESTAMP),
+    ('role-ch-outbound', 'perm-ch-out-002', CURRENT_TIMESTAMP),
+    -- CHAT_AGENT
+    ('role-ch-chat', 'perm-ch-chat-001', CURRENT_TIMESTAMP),
+    ('role-ch-chat', 'perm-ch-chat-002', CURRENT_TIMESTAMP),
+    ('role-ch-chat', 'perm-ch-chat-003', CURRENT_TIMESTAMP),
+    -- EMAIL_AGENT
+    ('role-ch-email', 'perm-ch-email-001', CURRENT_TIMESTAMP),
+    ('role-ch-email', 'perm-ch-email-002', CURRENT_TIMESTAMP)
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- MEMBER: 4개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440003', NOW()),
-('660e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440005', NOW()),
-('660e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440010', NOW()),
-('660e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440025', NOW())
-ON CONFLICT DO NOTHING;
+-- MULTI_CHANNEL_AGENT에 모든 채널 권한 할당
+INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at)
+SELECT 'role-ch-multi', permission_id, CURRENT_TIMESTAMP
+FROM rbac_permissions
+WHERE tenant_id = 'tenant-001' AND category = 'CHANNEL'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
 
--- PHONE_AGENT: 3개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440005', '550e8400-e29b-41d4-a716-446655440029', NOW()),
-('660e8400-e29b-41d4-a716-446655440005', '550e8400-e29b-41d4-a716-446655440030', NOW()),
-('660e8400-e29b-41d4-a716-446655440005', '550e8400-e29b-41d4-a716-446655440031', NOW())
-ON CONFLICT DO NOTHING;
+-- =============================================================================
+-- 7. 초기 샘플 데이터
+-- =============================================================================
 
--- CHAT_AGENT: 2개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440006', '550e8400-e29b-41d4-a716-446655440032', NOW()),
-('660e8400-e29b-41d4-a716-446655440006', '550e8400-e29b-41d4-a716-446655440033', NOW())
-ON CONFLICT DO NOTHING;
+-- 샘플 부서 생성
+INSERT INTO org_departments (dept_id, tenant_id, name, type, parent_dept_id, org_path, depth, display_order, is_active)
+VALUES
+    ('dept-root-001', 'tenant-001', '넥스프론', 'COMPANY', NULL, '/dept-root-001/', 0, 1, TRUE),
+    ('dept-div-001', 'tenant-001', '고객서비스본부', 'DIVISION', 'dept-root-001', '/dept-root-001/dept-div-001/', 1, 1, TRUE),
+    ('dept-team-001', 'tenant-001', '인바운드팀', 'TEAM', 'dept-div-001', '/dept-root-001/dept-div-001/dept-team-001/', 2, 1, TRUE),
+    ('dept-team-002', 'tenant-001', '아웃바운드팀', 'TEAM', 'dept-div-001', '/dept-root-001/dept-div-001/dept-team-002/', 2, 2, TRUE)
+ON CONFLICT (dept_id) DO NOTHING;
 
--- EMAIL_AGENT: 1개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440007', '550e8400-e29b-41d4-a716-446655440034', NOW())
-ON CONFLICT DO NOTHING;
+-- 샘플 상담사 생성 (비밀번호: password123, BCrypt 인코딩)
+INSERT INTO agents (agent_id, tenant_id, login_id, password, name, employee_id, email, phone, dept_id, status, password_must_change)
+VALUES
+    ('agent-admin-001', 'tenant-001', 'admin', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '관리자', 'EMP001', 'admin@nexfron.com', '010-1234-5678', 'dept-root-001', 'ACTIVE', FALSE),
+    ('agent-lead-001', 'tenant-001', 'teamlead01', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '김팀장', 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 'dept-div-001', 'ACTIVE', FALSE),
+    ('agent-001', 'tenant-001', 'agent01', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '홍길동', 'EMP003', 'agent01@nexfron.com', '010-3456-7890', 'dept-team-001', 'ACTIVE', FALSE)
+ON CONFLICT (tenant_id, login_id) DO NOTHING;
 
--- SUPERVISOR: 7개
-INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440029', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440030', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440031', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440032', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440033', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440034', NOW()),
-('660e8400-e29b-41d4-a716-446655440008', '550e8400-e29b-41d4-a716-446655440035', NOW())
-ON CONFLICT DO NOTHING;
+-- 샘플 상담사 역할 할당
+INSERT INTO rbac_agent_roles (agent_id, role_id, assigned_at)
+VALUES
+    ('agent-admin-001', 'role-admin-001', CURRENT_TIMESTAMP),
+    ('agent-lead-001', 'role-teamlead-001', CURRENT_TIMESTAMP),
+    ('agent-lead-001', 'role-ch-inbound', CURRENT_TIMESTAMP),
+    ('agent-001', 'role-agent-001', CURRENT_TIMESTAMP),
+    ('agent-001', 'role-ch-inbound', CURRENT_TIMESTAMP),
+    ('agent-001', 'role-ch-chat', CURRENT_TIMESTAMP)
+ON CONFLICT (agent_id, role_id) DO NOTHING;
 
--- ============================================================
--- Phase 4: Organization 표준 데이터 삽입 (13개 부서)
--- ============================================================
+-- =============================================================================
+-- 8. 검증 쿼리 (주석 처리 - 필요 시 실행)
+-- =============================================================================
 
--- 최상위 조직
-INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
-('d50e8400-e29b-41d4-a716-446655440001', 'tenant-001', NULL, '넥스프론 본부', '/d50e8400-e29b-41d4-a716-446655440001', 0, 'HEADQUARTERS', NOW())
-ON CONFLICT DO NOTHING;
+-- 생성된 테이블 확인
+-- SELECT schemaname, tablename FROM pg_tables
+-- WHERE schemaname = 'public'
+--   AND (tablename LIKE 'org_%' OR tablename LIKE 'rbac_%' OR tablename = 'agents')
+-- ORDER BY tablename;
 
--- 1차 사업부
-INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
-('d50e8400-e29b-41d4-a716-446655440002', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '고객지원사업부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002', 1, 'DIVISION', NOW()),
-('d50e8400-e29b-41d4-a716-446655440003', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '영업사업부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003', 1, 'DIVISION', NOW()),
-('d50e8400-e29b-41d4-a716-446655440004', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440001', '기술개발본부', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004', 1, 'DIVISION', NOW())
-ON CONFLICT DO NOTHING;
+-- 생성된 역할 확인
+-- SELECT r.name, r.type, r.data_scope, COUNT(rp.permission_id) AS permission_count
+-- FROM rbac_roles r
+-- LEFT JOIN rbac_role_permissions rp ON r.role_id = rp.role_id
+-- WHERE r.tenant_id = 'tenant-001'
+-- GROUP BY r.role_id, r.name, r.type, r.data_scope
+-- ORDER BY r.type, r.name;
 
--- 2차 팀 - 고객지원사업부
-INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
-('d50e8400-e29b-41d4-a716-446655440005', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '전화상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440005', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440006', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '채팅상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440006', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440007', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', '이메일상담팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440007', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440008', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440002', 'VIP고객지원팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440002/d50e8400-e29b-41d4-a716-446655440008', 2, 'TEAM', NOW())
-ON CONFLICT DO NOTHING;
+-- 생성된 권한 확인
+-- SELECT category, COUNT(*) AS permission_count
+-- FROM rbac_permissions
+-- WHERE tenant_id = 'tenant-001'
+-- GROUP BY category
+-- ORDER BY category;
 
--- 2차 팀 - 영업사업부
-INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
-('d50e8400-e29b-41d4-a716-446655440009', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440003', '기업영업팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003/d50e8400-e29b-41d4-a716-446655440009', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440010', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440003', '소비자영업팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440003/d50e8400-e29b-41d4-a716-446655440010', 2, 'TEAM', NOW())
-ON CONFLICT DO NOTHING;
+-- 샘플 데이터 확인
+-- SELECT a.login_id, a.name, d.name AS dept_name, STRING_AGG(r.name, ', ') AS roles
+-- FROM agents a
+-- LEFT JOIN org_departments d ON a.dept_id = d.dept_id
+-- LEFT JOIN rbac_agent_roles ar ON a.agent_id = ar.agent_id
+-- LEFT JOIN rbac_roles r ON ar.role_id = r.role_id
+-- WHERE a.tenant_id = 'tenant-001'
+-- GROUP BY a.agent_id, a.login_id, a.name, d.name
+-- ORDER BY a.login_id;
 
--- 2차 팀 - 기술개발본부
-INSERT INTO departmentEntities (dept_id, tenant_id, parent_id, name, org_path, depth, type, created_at) VALUES
-('d50e8400-e29b-41d4-a716-446655440011', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'Backend개발팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440011', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440012', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'Frontend개발팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440012', 2, 'TEAM', NOW()),
-('d50e8400-e29b-41d4-a716-446655440013', 'tenant-001', 'd50e8400-e29b-41d4-a716-446655440004', 'DevOps팀', '/d50e8400-e29b-41d4-a716-446655440001/d50e8400-e29b-41d4-a716-446655440004/d50e8400-e29b-41d4-a716-446655440013', 2, 'TEAM', NOW())
-ON CONFLICT DO NOTHING;
-
--- ============================================================
--- Phase 5: User 표준 데이터 삽입 (16명)
--- ============================================================
-
--- 관리자
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440101', 'tenant-001', 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '시스템관리자', 'd50e8400-e29b-41d4-a716-446655440001', 'ACTIVE', false, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440102', 'tenant-001', 'manager01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '김부장', 'd50e8400-e29b-41d4-a716-446655440002', 'ACTIVE', false, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 전화상담팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440103', 'tenant-001', 'phone_supervisor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '이팀장', 'd50e8400-e29b-41d4-a716-446655440005', 'ACTIVE', false, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440104', 'tenant-001', 'phone_agent01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '박상담', 'd50e8400-e29b-41d4-a716-446655440005', 'ACTIVE', true, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440105', 'tenant-001', 'phone_agent02', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '최상담', 'd50e8400-e29b-41d4-a716-446655440005', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 채팅상담팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440106', 'tenant-001', 'chat_agent01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '정상담', 'd50e8400-e29b-41d4-a716-446655440006', 'ACTIVE', true, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440107', 'tenant-001', 'chat_agent02', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '강상담', 'd50e8400-e29b-41d4-a716-446655440006', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 이메일상담팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440108', 'tenant-001', 'email_agent01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '한상담', 'd50e8400-e29b-41d4-a716-446655440007', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- VIP지원팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440109', 'tenant-001', 'vip_supervisor', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '윤팀장', 'd50e8400-e29b-41d4-a716-446655440008', 'ACTIVE', false, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440110', 'tenant-001', 'vip_agent01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '송상담', 'd50e8400-e29b-41d4-a716-446655440008', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 영업팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440111', 'tenant-001', 'sales_manager', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '조부장', 'd50e8400-e29b-41d4-a716-446655440009', 'ACTIVE', false, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440112', 'tenant-001', 'sales_member01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '임사원', 'd50e8400-e29b-41d4-a716-446655440010', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 개발팀
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440113', 'tenant-001', 'dev_lead', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '전팀장', 'd50e8400-e29b-41d4-a716-446655440011', 'ACTIVE', false, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440114', 'tenant-001', 'dev_member01', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '신개발', 'd50e8400-e29b-41d4-a716-446655440011', 'ACTIVE', true, NOW(), NULL),
-('550e8400-e29b-41d4-a716-446655440115', 'tenant-001', 'frontend_dev', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '유개발', 'd50e8400-e29b-41d4-a716-446655440012', 'ACTIVE', true, NOW(), NULL)
-ON CONFLICT DO NOTHING;
-
--- 퇴직자
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, dept_id, status, password_must_change, created_at, retired_at) VALUES
-('550e8400-e29b-41d4-a716-446655440199', 'tenant-001', 'retired_user', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '퇴직자', 'd50e8400-e29b-41d4-a716-446655440005', 'RETIRED', true, NOW() - INTERVAL '1 year', NOW() - INTERVAL '1 month')
-ON CONFLICT DO NOTHING;
-
--- ============================================================
--- Phase 6: Agent-Role 매핑 (약 30개)
--- ============================================================
-
--- 관리자
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440101', '660e8400-e29b-41d4-a716-446655440001', NOW())
-ON CONFLICT DO NOTHING;
-
--- 부장급
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440102', '660e8400-e29b-41d4-a716-446655440002', NOW())
-ON CONFLICT DO NOTHING;
-
--- 팀장급
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440103', '660e8400-e29b-41d4-a716-446655440003', NOW()),
-('550e8400-e29b-41d4-a716-446655440103', '660e8400-e29b-41d4-a716-446655440008', NOW()),
-('550e8400-e29b-41d4-a716-446655440109', '660e8400-e29b-41d4-a716-446655440003', NOW()),
-('550e8400-e29b-41d4-a716-446655440109', '660e8400-e29b-41d4-a716-446655440008', NOW()),
-('550e8400-e29b-41d4-a716-446655440111', '660e8400-e29b-41d4-a716-446655440002', NOW()),
-('550e8400-e29b-41d4-a716-446655440113', '660e8400-e29b-41d4-a716-446655440003', NOW())
-ON CONFLICT DO NOTHING;
-
--- 전화상담사
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440104', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440104', '660e8400-e29b-41d4-a716-446655440005', NOW()),
-('550e8400-e29b-41d4-a716-446655440105', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440105', '660e8400-e29b-41d4-a716-446655440005', NOW())
-ON CONFLICT DO NOTHING;
-
--- 채팅상담사
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440106', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440106', '660e8400-e29b-41d4-a716-446655440006', NOW()),
-('550e8400-e29b-41d4-a716-446655440107', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440107', '660e8400-e29b-41d4-a716-446655440006', NOW())
-ON CONFLICT DO NOTHING;
-
--- 이메일상담사
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440108', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440108', '660e8400-e29b-41d4-a716-446655440007', NOW())
-ON CONFLICT DO NOTHING;
-
--- VIP상담사
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440110', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440110', '660e8400-e29b-41d4-a716-446655440005', NOW()),
-('550e8400-e29b-41d4-a716-446655440110', '660e8400-e29b-41d4-a716-446655440006', NOW()),
-('550e8400-e29b-41d4-a716-446655440110', '660e8400-e29b-41d4-a716-446655440007', NOW())
-ON CONFLICT DO NOTHING;
-
--- 기타팀
-INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
-('550e8400-e29b-41d4-a716-446655440112', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440114', '660e8400-e29b-41d4-a716-446655440004', NOW()),
-('550e8400-e29b-41d4-a716-446655440115', '660e8400-e29b-41d4-a716-446655440004', NOW())
-ON CONFLICT DO NOTHING;
-
--- ============================================================
--- Phase 7: 검증 및 완료
--- ============================================================
-
-SELECT '✅ 데이터베이스 초기화 완료!' as result;
-
-SELECT
-    'departmentEntities' as table_name,
-    COUNT(*) as row_count
-FROM departmentEntities
-UNION ALL
-SELECT 'agents', COUNT(*) FROM agents
-UNION ALL
-SELECT 'permissions', COUNT(*) FROM permissions
-UNION ALL
-SELECT 'roles', COUNT(*) FROM roles
-UNION ALL
-SELECT 'role_permissions', COUNT(*) FROM role_permissions
-UNION ALL
-SELECT 'agent_roles', COUNT(*) FROM agent_roles
-UNION ALL
-SELECT 'audit_logs', COUNT(*) FROM audit_logs
-ORDER BY table_name;
-
+-- =============================================================================
+-- 초기화 완료
+-- =============================================================================

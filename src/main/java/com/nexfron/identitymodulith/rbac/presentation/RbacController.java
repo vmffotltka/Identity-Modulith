@@ -2,10 +2,8 @@ package com.nexfron.identitymodulith.rbac.presentation;
 
 import com.nexfron.identitymodulith.rbac.application.service.RbacManagementService;
 import com.nexfron.identitymodulith.rbac.application.service.RbacManagementService.*;
-import com.nexfron.identitymodulith.rbac.presentation.dto.AuditLogDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,7 +14,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -86,7 +83,22 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.updateRole(roleName, request));
     }
 
-    @Operation(summary = "역할 삭제 영향도 조회", description = "역할 삭제 시 영향받을 사용자와 권한 정보를 조회합니다.")
+    @Operation(summary = "역할 삭제", description = "역할을 삭제합니다. force=true일 경우 사용자가 있어도 강제 삭제합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "역할 삭제 성공"),
+            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음"),
+            @ApiResponse(responseCode = "409", description = "사용자가 존재하여 삭제 불가 (force=false일 때)")
+    })
+    @DeleteMapping("/roles/{roleName}")
+    public ResponseEntity<RoleDeletionResult> deleteRole(
+            @Parameter(description = "역할명", example = "ADMIN", required = true)
+            @PathVariable String roleName,
+            @Parameter(description = "강제 삭제 여부 (true: 사용자가 있어도 삭제)", example = "false")
+            @RequestParam(defaultValue = "false") boolean forceDelete) {
+        return ResponseEntity.ok(rbacManagementService.deleteRole(roleName, forceDelete));
+    }
+
+    @Operation(summary = "역할 삭제 영향도 조회", description = "역할 삭제 시 영향을 미치는 사용자 수와 권한 수를 조회합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
@@ -98,40 +110,12 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.getRoleDeletionImpact(roleName));
     }
 
-    @Operation(summary = "역할 삭제 (강화된 버전)", description = "역할을 삭제합니다. 사용자 확인 및 강제 삭제 옵션을 지원합니다.")
+    @Operation(summary = "역할 비활성화", description = "역할을 비활성화합니다. 비활성화된 역할은 새로 할당할 수 없습니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "역할 삭제 성공"),
-            @ApiResponse(responseCode = "400", description = "사용자가 할당된 역할 (force=false인 경우)"),
+            @ApiResponse(responseCode = "200", description = "비활성화 성공"),
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
-    @DeleteMapping("/roles/{roleName}")
-    public ResponseEntity<RoleDeletionResult> deleteRole(
-            @Parameter(description = "역할명", example = "ADMIN", required = true)
-            @PathVariable String roleName,
-            @Parameter(description = "강제 삭제 여부", example = "false")
-            @RequestParam(defaultValue = "false") boolean force) {
-        return ResponseEntity.ok(rbacManagementService.deleteRole(roleName, force));
-    }
-
-    @Operation(summary = "역할 활성화", description = "비활성화된 역할을 다시 활성화합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "역할 활성화 성공"),
-            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
-    })
-    @PatchMapping("/roles/{roleName}/activate")
-    public ResponseEntity<Void> activateRole(
-            @Parameter(description = "역할명", example = "ADMIN", required = true)
-            @PathVariable String roleName) {
-        rbacManagementService.activateRole(roleName);
-        return ResponseEntity.ok().build();
-    }
-
-    @Operation(summary = "역할 비활성화", description = "역할을 비활성화합니다 (논리적 삭제).")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "역할 비활성화 성공"),
-            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
-    })
-    @PatchMapping("/roles/{roleName}/deactivate")
+    @PostMapping("/roles/{roleName}/deactivate")
     public ResponseEntity<Void> deactivateRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
@@ -139,19 +123,17 @@ public class RbacController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "역할 복사", description = "기존 역할의 모든 권한을 포함한 새 역할을 생성합니다.")
+    @Operation(summary = "역할 활성화", description = "비활성화된 역할을 다시 활성화합니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "역할 복사 성공"),
-            @ApiResponse(responseCode = "404", description = "원본 역할을 찾을 수 없음"),
-            @ApiResponse(responseCode = "409", description = "새 역할명이 이미 존재함")
+            @ApiResponse(responseCode = "200", description = "활성화 성공"),
+            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
-    @PostMapping("/roles/{sourceRoleName}/clone")
-    public ResponseEntity<RoleDto> cloneRole(
-            @Parameter(description = "복사할 원본 역할명", example = "ADMIN", required = true)
-            @PathVariable String sourceRoleName,
-            @Valid @RequestBody CloneRoleRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(rbacManagementService.cloneRole(sourceRoleName, request));
+    @PostMapping("/roles/{roleName}/activate")
+    public ResponseEntity<Void> activateRole(
+            @Parameter(description = "역할명", example = "ADMIN", required = true)
+            @PathVariable String roleName) {
+        rbacManagementService.activateRole(roleName);
+        return ResponseEntity.ok().build();
     }
 
     // ============================================================
@@ -262,77 +244,34 @@ public class RbacController {
         return ResponseEntity.noContent().build();
     }
 
-
-    // ============================================================
-    // 권한 변경 이력 조회 (Audit Log) 엔드포인트
-    // ============================================================
-
-    @Operation(summary = "사용자 권한 변경 이력 조회", description = "특정 사용자의 권한 관련 변경 이력을 조회합니다.")
+    @Operation(summary = "역할에 여러 권한 한 번에 할당", description = "특정 역할에 여러 권한을 한 번에 할당합니다. 이미 할당된 권한은 건너뜁니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "404", description = "사용자를 찾을 수 없음")
-    })
-    @GetMapping("/audit/agents/{agentId}")
-    public ResponseEntity<List<AuditLogDto>> getAgentPermissionChangeHistory(
-            @Parameter(description = "사용자 ID", example = "550e8400-e29b-41d4-a716-446655440000", required = true)
-            @PathVariable String agentId,
-            @Parameter(description = "시작 일시 (ISO 형식)", example = "2024-01-01T00:00:00")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @Parameter(description = "종료 일시 (ISO 형식)", example = "2024-12-31T23:59:59")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(rbacManagementService.getAgentPermissionChangeHistory(agentId, from, to));
-    }
-
-    @Operation(summary = "역할 권한 변경 이력 조회", description = "특정 역할의 권한 관련 변경 이력을 조회합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "200", description = "대량 할당 완료"),
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
-    @GetMapping("/audit/roles/{roleName}")
-    public ResponseEntity<List<AuditLogDto>> getRolePermissionChangeHistory(
+    @PostMapping("/roles/{roleName}/permissions/batch")
+    public ResponseEntity<BatchAssignmentResult> batchAssignPermissionsToRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
-            @Parameter(description = "시작 일시 (ISO 형식)", example = "2024-01-01T00:00:00")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @Parameter(description = "종료 일시 (ISO 형식)", example = "2024-12-31T23:59:59")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(rbacManagementService.getRolePermissionChangeHistory(roleName, from, to));
+            @RequestBody Set<String> permissionCodes) {
+        return ResponseEntity.ok(rbacManagementService.batchAssignPermissionsToRole(roleName, permissionCodes));
     }
 
-    @Operation(summary = "전체 권한 변경 이력 조회", description = "전체 권한 관련 변경 이력을 조회합니다. (관리자용)")
+    @Operation(summary = "역할에서 여러 권한 한 번에 제거", description = "특정 역할에서 여러 권한을 한 번에 제거합니다. 할당되지 않은 권한은 건너뜁니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "400", description = "잘못된 페이지 크기")
+            @ApiResponse(responseCode = "200", description = "대량 제거 완료"),
+            @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
-    @GetMapping("/audit/all")
-    public ResponseEntity<List<AuditLogDto>> getAllPermissionChangeHistory(
-            @Parameter(description = "시작 일시 (ISO 형식)", example = "2024-01-01T00:00:00")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @Parameter(description = "종료 일시 (ISO 형식)", example = "2024-12-31T23:59:59")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @Parameter(description = "페이지 크기", example = "100")
-            @RequestParam(defaultValue = "100") Integer pageSize) {
-        return ResponseEntity.ok(rbacManagementService.getAllPermissionChangeHistory(from, to, pageSize));
-    }
-
-    @Operation(summary = "작업자 권한 작업 이력 조회", description = "특정 작업자의 권한 관련 작업 이력을 조회합니다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "404", description = "작업자를 찾을 수 없음")
-    })
-    @GetMapping("/audit/operators/{operatorId}")
-    public ResponseEntity<List<AuditLogDto>> getOperatorPermissionActions(
-            @Parameter(description = "작업자 ID", example = "550e8400-e29b-41d4-a716-446655440000", required = true)
-            @PathVariable String operatorId,
-            @Parameter(description = "시작 일시 (ISO 형식)", example = "2024-01-01T00:00:00")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @Parameter(description = "종료 일시 (ISO 형식)", example = "2024-12-31T23:59:59")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(rbacManagementService.getOperatorPermissionActions(operatorId, from, to));
+    @DeleteMapping("/roles/{roleName}/permissions/batch")
+    public ResponseEntity<BatchAssignmentResult> batchRevokePermissionsFromRole(
+            @Parameter(description = "역할명", example = "ADMIN", required = true)
+            @PathVariable String roleName,
+            @RequestBody Set<String> permissionCodes) {
+        return ResponseEntity.ok(rbacManagementService.batchRevokePermissionsFromRole(roleName, permissionCodes));
     }
 
     // ============================================================
-    // 사용자-역할 할당 엔드포인트 (누락된 API)
+    // 사용자-역할 할당 엔드포인트
     // ============================================================
 
     @Operation(summary = "사용자에게 역할 할당", description = "특정 사용자에게 역할을 할당합니다.")
@@ -426,3 +365,4 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.getAgentCountByRole(roleName));
     }
 }
+

@@ -2,6 +2,7 @@ package com.nexfron.identitymodulith.organization.presentation;
 
 import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -88,6 +89,47 @@ public class OrganizationExceptionHandler {
                 .build();
 
         return ResponseEntity.status(errorCode.getHttpStatus()).body(response);
+    }
+
+    /**
+     * 데이터베이스 무결성 제약 위반 처리
+     *
+     * <h3>발생 시나리오:</h3>
+     * <ul>
+     *   <li>부서 코드 중복 (uk_departments_tenant_code 위반)</li>
+     *   <li>FK 제약 위반</li>
+     *   <li>UNIQUE 제약 위반</li>
+     * </ul>
+     *
+     * <h3>처리:</h3>
+     * - code 중복: DUPLICATE_DEPT_CODE (409 Conflict)
+     * - 기타: INVALID_REQUEST (400 Bad Request)
+     *
+     * @param e DataIntegrityViolationException
+     * @return HTTP 409 or 400 + 에러 메시지
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
+            DataIntegrityViolationException e) {
+
+        String message = e.getMessage();
+
+        // 부서 코드 중복 감지
+        if (message != null && (message.contains("uk_departments_tenant_code") ||
+                                 message.contains("uk_org_departments_tenant_code"))) {
+            ErrorResponse response = ErrorResponse.builder()
+                    .code("DUPLICATE_DEPT_CODE")
+                    .message("이미 존재하는 부서 코드입니다")
+                    .build();
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
+
+        // 기타 무결성 제약 위반
+        ErrorResponse response = ErrorResponse.builder()
+                .code("INVALID_REQUEST")
+                .message("데이터 무결성 제약 조건을 위반했습니다")
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
 

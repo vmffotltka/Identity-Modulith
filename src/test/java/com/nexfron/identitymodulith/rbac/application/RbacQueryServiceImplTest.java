@@ -1,6 +1,7 @@
 package com.nexfron.identitymodulith.rbac.application;
 
 import com.nexfron.identitymodulith.rbac.application.service.RbacQueryServiceImpl;
+import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
@@ -67,20 +68,20 @@ class RbacQueryServiceImplTest {
                     .roleId("role-1")
                     .tenantId(TENANT_ID)
                     .name("ADMIN")
-                    .type("POSITION")
+                    .type(RoleType.POSITION)
                     .build();
 
             RoleJpaEntity teamLeaderRole = RoleJpaEntity.builder()
                     .roleId("role-2")
                     .tenantId(TENANT_ID)
                     .name("TEAM_LEADER")
-                    .type("POSITION")
+                    .type(RoleType.POSITION)
                     .build();
 
             when(roleRepository.findByTenantIdAndNameIn(TENANT_ID, roleNames))
                     .thenReturn(List.of(adminRole, teamLeaderRole));
 
-            // ✅ List 반환 - any() 대신 구체적인 매처 사용
+            // ✅ List 반환 - any() 또는 구체적인 매처 사용
             when(rolePermissionRepository.findPermissionCodesByRoleIdsAndTenant(
                     any(), eq(TENANT_ID)))
                     .thenReturn(List.of("user:read", "user:create", "org:view"));
@@ -99,7 +100,7 @@ class RbacQueryServiceImplTest {
         }
 
         @Test
-        @DisplayName("역할이 없으면 빈 권한 집합을 반환한다")
+        @DisplayName("역할이 비어있으면 빈 권한 집합을 반환한다")
         void permissionsOfRoles_WithEmptyRoles_ReturnsEmptySet() {
             // Given
             Set<String> roleNames = Set.of();
@@ -113,7 +114,7 @@ class RbacQueryServiceImplTest {
         }
 
         @Test
-        @DisplayName("권한이 없는 역할은 빈 권한 집합을 반환한다")
+        @DisplayName("권한이 없는 역할도 빈 권한 집합을 반환한다")
         void permissionsOfRoles_WithRolesButNoPermissions_ReturnsEmptySet() {
             // Given
             Set<String> roleNames = Set.of("EMPTY_ROLE");
@@ -122,7 +123,7 @@ class RbacQueryServiceImplTest {
                     .roleId("role-1")
                     .tenantId(TENANT_ID)
                     .name("EMPTY_ROLE")
-                    .type("POSITION")
+                    .type(RoleType.POSITION)
                     .build();
 
             when(roleRepository.findByTenantIdAndNameIn(TENANT_ID, roleNames))
@@ -140,7 +141,7 @@ class RbacQueryServiceImplTest {
         }
 
         @Test
-        @DisplayName("존재하지 않는 역할은 빈 권한 집합을 반환한다")
+        @DisplayName("존재하지 않는 역할도 빈 권한 집합을 반환한다")
         void permissionsOfRoles_WithNonExistentRoles_ReturnsEmptySet() {
             // Given
             Set<String> roleNames = Set.of("NON_EXISTENT");
@@ -161,7 +162,7 @@ class RbacQueryServiceImplTest {
     class EdgeCaseTests {
 
         @Test
-        @DisplayName("null roleNames는 빈 권한을 반환한다")
+        @DisplayName("null roleNames도 빈 권한을 반환한다")
         void permissionsOfRoles_WithNullRoleNames_ReturnsEmptySet() {
             // When
             Set<String> permissions = rbacQueryService.permissionsOfRoles(TENANT_ID, null);
@@ -170,6 +171,7 @@ class RbacQueryServiceImplTest {
             assertThat(permissions).isEmpty();
             verify(roleRepository, never()).findByTenantIdAndNameIn(anyString(), anySet());
         }
+        
     }
 }
 

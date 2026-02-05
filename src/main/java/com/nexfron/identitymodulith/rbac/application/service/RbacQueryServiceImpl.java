@@ -7,7 +7,6 @@ import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.R
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -23,10 +22,6 @@ import java.util.stream.Collectors;
  *   <li>permissionsOf() - 특정 사용자의 모든 권한 조회 (권한 검증에 사용)</li>
  *   <li>permissionsOfRoles() - 여러 역할의 통합 권한 조회</li>
  * </ul>
- *
- * <h3>성능 최적화:</h3>
- * - @Cacheable 애노테이션으로 캐싱 적용
- * - 권한 변경 시 캐시 무효화 필요
  *
  * @see RbacQueryService
  */
@@ -157,11 +152,6 @@ public class RbacQueryServiceImpl implements RbacQueryService {
      * WHERE ar.agent_id = ? AND r.tenant_id = ?
      * </pre>
      *
-     * <h3>성능 고려:</h3>
-     * - 캐시 적용 권장 (사용자 로그인 시 한 번만 조회)
-     * - @Cacheable("userPermissions") 애노테이션 추가 가능
-     * - 권한 변경 시 캐시 무효화 필요
-     *
      * <h3>사용 예시:</h3>
      * <pre>
      * UUID userId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
@@ -182,11 +172,6 @@ public class RbacQueryServiceImpl implements RbacQueryService {
      * @see RolePermissionJpaRepository
      */
     @Override
-    @Cacheable(
-        value = "userPermissions",
-        key = "T(com.nexfron.identitymodulith.common.cache.CacheKeyGenerator).userPermissions(#tenantId, #agentId.toString())",
-        unless = "#result.isEmpty()"
-    )
     public Set<String> permissionsOf(String tenantId, UUID agentId) {
         if (tenantId == null || tenantId.isBlank() || agentId == null) {
             log.warn("[RBAC] 권한 조회 입력이 올바르지 않습니다: tenantId={}, agentId={} (빈 Set 반환)", tenantId, agentId);

@@ -1,9 +1,12 @@
 package com.nexfron.identitymodulith.organization.presentation.dto;
 
 import com.nexfron.identitymodulith.organization.domain.OrganizationConstants;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentStatus;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
 import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
@@ -38,16 +41,13 @@ public class DepartmentDto {
         )
         private String name;
 
-        @NotBlank(message = "부서 타입은 필수입니다")
-        @Size(
-                max = OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH,
-                message = "부서 타입은 " + OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH + "자 이하여야 합니다"
-        )
+        @NotNull(message = "부서 타입은 필수입니다")
         @Schema(
-                description = "부서 타입 (TEAM, DIVISION 등)",
-                example = "TEAM"
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
+                example = "TEAM",
+                allowableValues = {"COMPANY", "DIVISION", "TEAM", "GROUP", "CUSTOM"}
         )
-        private String type;
+        private DepartmentType type;
 
         @Schema(
                 description = "상위 부서 ID (최상위 부서인 경우 null, UUID 문자열)",
@@ -77,15 +77,12 @@ public class DepartmentDto {
         )
         private String name;
 
-        @Size(
-                max = OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH,
-                message = "부서 타입은 " + OrganizationConstants.DEPARTMENT_TYPE_MAX_LENGTH + "자 이하여야 합니다"
-        )
         @Schema(
-                description = "변경할 부서 타입 (선택)",
-                example = "TEAM"
+                description = "변경할 부서 타입 (선택, COMPANY/DIVISION/TEAM/GROUP/CUSTOM)",
+                example = "TEAM",
+                allowableValues = {"COMPANY", "DIVISION", "TEAM", "GROUP", "CUSTOM"}
         )
-        private String type;
+        private DepartmentType type;
     }
 
     /**
@@ -125,10 +122,10 @@ public class DepartmentDto {
         private String name;
 
         @Schema(
-                description = "부서 타입",
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
                 example = "TEAM"
         )
-        private String type;
+        private DepartmentType type;
 
         @Schema(
                 description = "조직 경로 (Materialized Path)",
@@ -148,6 +145,12 @@ public class DepartmentDto {
                 nullable = true
         )
         private String parentId;
+
+        @Schema(
+                description = "부서 상태 (ACTIVE: 활성, INACTIVE: 비활성)",
+                example = "ACTIVE"
+        )
+        private DepartmentStatus status;
 
         /**
          * 트리 구조 표현용 자식 노드 리스트
@@ -173,6 +176,7 @@ public class DepartmentDto {
                     .type(dept.getType())
                     .orgPath(dept.getOrgPath())
                     .depth(dept.getDepth())
+                    .status(dept.getStatus())
                     .parentId(
                             dept.getParent() != null
                                     ? dept.getParent().getDeptId()
@@ -203,10 +207,10 @@ public class DepartmentDto {
         private String name;
 
         @Schema(
-                description = "부서 타입",
+                description = "부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)",
                 example = "TEAM"
         )
-        private String type;
+        private DepartmentType type;
 
         @Schema(
                 description = "부서 깊이 (0부터 시작)",

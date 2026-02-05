@@ -2,6 +2,7 @@ package com.nexfron.identitymodulith.organization.application.service;
 
 import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
 import com.nexfron.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
 import com.nexfron.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,8 +34,8 @@ class DepartmentEntityServiceTest {
 
     @BeforeEach
     void setup() {
-        rootDept = DepartmentEntity.create(tenantId, "총무부", "본부", null);
-        childDept = DepartmentEntity.create(tenantId, "HR팀", "팀", rootDept);
+        rootDept = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, null);
+        childDept = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, rootDept);
     }
 
     @Test
@@ -42,7 +43,7 @@ class DepartmentEntityServiceTest {
     void testCreateRootDepartment() {
         assertNotNull(rootDept);
         assertEquals("총무부", rootDept.getName());
-        assertEquals("본부", rootDept.getType());
+        assertEquals(DepartmentType.DIVISION, rootDept.getType());
         assertEquals(0, rootDept.getDepth());
     }
 
@@ -51,7 +52,7 @@ class DepartmentEntityServiceTest {
     void testCreateChildDepartment() {
         assertNotNull(childDept);
         assertEquals("HR팀", childDept.getName());
-        assertEquals("팀", childDept.getType());
+        assertEquals(DepartmentType.TEAM, childDept.getType());
         assertEquals(1, childDept.getDepth());
     }
 
@@ -69,14 +70,14 @@ class DepartmentEntityServiceTest {
         assertEquals(0, rootDept.getDepth());
         assertEquals(1, childDept.getDepth());
 
-        DepartmentEntity grandchild = DepartmentEntity.create(tenantId, "채용팀", "센터", childDept);
+        DepartmentEntity grandchild = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, childDept);
         assertEquals(2, grandchild.getDepth());
     }
 
     @Test
     @DisplayName("부서 부모 변경")
     void testChangeParentDepartment() {
-        DepartmentEntity newParent = DepartmentEntity.create(tenantId, "개발본부", "본부", null);
+        DepartmentEntity newParent = DepartmentEntity.create(tenantId, "개발본부", DepartmentType.DIVISION, null);
         childDept.changeParent(newParent);
 
         assertEquals(1, childDept.getDepth());
@@ -103,9 +104,9 @@ class DepartmentEntityServiceTest {
     @Test
     @DisplayName("3단계 계층 구조")
     void testThreeLayerDepartmentHierarchy() {
-        DepartmentEntity level1 = DepartmentEntity.create(tenantId, "총무부", "본부", null);
-        DepartmentEntity level2 = DepartmentEntity.create(tenantId, "HR팀", "팀", level1);
-        DepartmentEntity level3 = DepartmentEntity.create(tenantId, "채용팀", "센터", level2);
+        DepartmentEntity level1 = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, null);
+        DepartmentEntity level2 = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, level1);
+        DepartmentEntity level3 = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, level2);
 
         assertEquals(0, level1.getDepth());
         assertEquals(1, level2.getDepth());
@@ -123,7 +124,7 @@ class DepartmentEntityServiceTest {
 
         assertNotNull(dto);
         assertEquals("총무부", dto.getName());
-        assertEquals("본부", dto.getType());
+        assertEquals(DepartmentType.DIVISION, dto.getType());
         assertEquals(0, dto.getDepth());
     }
 }

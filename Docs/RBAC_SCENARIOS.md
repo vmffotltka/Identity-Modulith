@@ -392,9 +392,9 @@ public class DataScopeService {
 
 | ID | 규칙 | 실패 시 에러 |
 |----|------|-------------|
-| RC-001 | name은 유일 | DUPLICATE_ROLE |
-| RC-002 | POSITION 타입이면 dataScope 필수 | DATASCOPE_REQUIRED |
-| RC-003 | CHANNEL 타입이면 dataScope는 null | INVALID_DATASCOPE |
+| RC-001 | tenantId + name은 유일 | DUPLICATE_ROLE |
+| RC-002 | 빈 description 허용 | - |
+| RC-003 | POSITION/CHANNEL 타입 검증 | INVALID_ROLE_TYPE |
 | RC-004 | ADMIN만 역할 생성 가능 | INSUFFICIENT_PERMISSION |
 
 ---

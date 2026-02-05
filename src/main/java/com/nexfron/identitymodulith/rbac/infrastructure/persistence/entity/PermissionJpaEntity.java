@@ -71,7 +71,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(
-        name = "permissions",
+        name = "rbac_permissions",  // V1_0_20: 표준 명명 규칙 적용 (permissions → rbac_permissions)
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_permissions_tenant_code",
                 columnNames = {"tenant_id", "code"}
@@ -133,6 +133,30 @@ public class PermissionJpaEntity {
      */
     @Column(name = "description", length = 500)
     private String description;
+
+    /**
+     * 권한 카테고리 (도메인 그룹)
+     * - 권한을 도메인별로 그룹화하여 관리 및 조회 용이성 향상
+     * - RP-001: 권한 카테고리별 그룹화 구현
+     * - 길이: 최대 64자
+     * - 선택값: NULL 허용 (기본 카테고리: GENERAL)
+     *
+     * 카테고리 예시:
+     * - USER_MANAGEMENT: 사용자 계정 관리 (user:create, user:update, user:delete)
+     * - ORG_MANAGEMENT: 조직/부서 관리 (org:create, org:update, dept:manage)
+     * - REPORT: 보고서 관련 (report:view, report:export, report:create)
+     * - TASK: 업무 관리 (task:create, task:assign, task:complete)
+     * - CHANNEL: 채널/통신 관리 (channel:view, channel:message, channel:admin)
+     * - PERMISSION_ADMIN: 권한 관리 (permission:manage, role:create)
+     * - GENERAL: 일반 권한 (기본 카테고리)
+     *
+     * 활용:
+     * - 권한 목록 UI에서 카테고리별 필터링
+     * - 역할 생성 시 카테고리별 권한 그룹 선택
+     * - 감사 로그에서 카테고리별 권한 변경 추적
+     */
+    @Column(name = "category", length = 64)
+    private String category;
 
     /**
      * 생성 일시

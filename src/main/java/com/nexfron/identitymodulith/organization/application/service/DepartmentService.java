@@ -1,5 +1,6 @@
 package com.nexfron.identitymodulith.organization.application.service;
 
+import com.nexfron.identitymodulith.organization.domain.model.DepartmentType;
 import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 
 import java.util.List;
@@ -31,14 +32,14 @@ public interface DepartmentService {
      *
      * @param tenantId 테넌트 ID
      * @param name 부서명 (필수)
-     * @param type 부서 타입 (선택, 예: TEAM, CALL_CENTER, SUPPORT)
+     * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
      * @param parentId 상위 부서 ID (null이면 루트 부서)
      * @return 생성된 부서 정보
      */
     DepartmentDto.Response createDepartment(
             String tenantId,
             String name,
-            String type,
+            DepartmentType type,
             String parentId);
 
     /**
@@ -54,7 +55,7 @@ public interface DepartmentService {
             String tenantId,
             String deptId,
             String name,
-            String type);
+            DepartmentType type);
 
     /**
      * 부서 삭제
@@ -70,6 +71,39 @@ public interface DepartmentService {
      * @param deptId 삭제할 부서 ID
      */
     void deleteDepartment(String tenantId, UUID actorUserId, String deptId);
+
+    // ============================================================
+    // 부서 상태 관리
+    // ============================================================
+
+    /**
+     * 부서 비활성화
+     *
+     * <h3>비활성화 조건:</h3>
+     * <ul>
+     *   <li>활성 하위 부서가 없어야 함</li>
+     *   <li>소속 활성 직원이 있으면 경고 (비활성화는 가능)</li>
+     * </ul>
+     *
+     * @param tenantId 테넌트 ID
+     * @param actorUserId 작업 수행 사용자 ID
+     * @param deptId 비활성화할 부서 ID
+     */
+    void deactivateDepartment(String tenantId, UUID actorUserId, String deptId);
+
+    /**
+     * 부서 활성화
+     *
+     * <h3>활성화 조건:</h3>
+     * <ul>
+     *   <li>상위 부서가 활성 상태여야 함</li>
+     * </ul>
+     *
+     * @param tenantId 테넌트 ID
+     * @param actorUserId 작업 수행 사용자 ID
+     * @param deptId 활성화할 부서 ID
+     */
+    void activateDepartment(String tenantId, UUID actorUserId, String deptId);
 
     // ============================================================
     // 부서 이동 (재조직)
@@ -138,7 +172,14 @@ public interface DepartmentService {
      * @param type 부서 타입 (TEAM, CALL_CENTER, SUPPORT 등)
      * @return 해당 타입의 부서 목록
      */
-    List<DepartmentDto.Response> getDepartmentsByType(String tenantId, String type);
+    /**
+     * 특정 타입의 부서 조회
+     *
+     * @param tenantId 테넌트 ID
+     * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
+     * @return 해당 타입의 부서 목록
+     */
+    List<DepartmentDto.Response> getDepartmentsByType(String tenantId, DepartmentType type);
 
     // ============================================================
     // 부서 통계 및 구성원
