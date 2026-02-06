@@ -101,6 +101,8 @@ public class DepartmentController {
                 tenantId,
                 request.getName(),
                 request.getType(),
+                request.getCode(),
+                request.getCustomTypeName(),
                 request.getParentId()
         );
 

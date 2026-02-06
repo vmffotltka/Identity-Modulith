@@ -284,9 +284,22 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * @return 최고 데이터 스코프 레벨
      */
     private DataScopeLevel mapRoleLevelFromExternal(AgentExternalInfo info) {
-        return info.getRoles().stream()
-                .map(role -> DataScopeLevel.fromRoleName(role.getName()))
+        java.util.List<String> roleNames = info.getRoles().stream()
+                .map(role -> role.getName())
+                .collect(java.util.stream.Collectors.toList());
+
+        System.out.println("[DEBUG] User " + info.getId() + " roles: " + roleNames);
+
+        DataScopeLevel result = info.getRoles().stream()
+                .map(role -> {
+                    DataScopeLevel level = DataScopeLevel.fromRoleName(role.getName());
+                    System.out.println("[DEBUG] Role: " + role.getName() + " -> Level: " + level);
+                    return level;
+                })
                 .max(java.util.Comparator.naturalOrder())  // ADMIN > TEAM_LEAD > MEMBER
                 .orElse(DataScopeLevel.MEMBER);  // 역할이 없으면 MEMBER (최소 권한)
+
+        System.out.println("[DEBUG] Final DataScopeLevel for " + info.getId() + ": " + result);
+        return result;
     }
 }

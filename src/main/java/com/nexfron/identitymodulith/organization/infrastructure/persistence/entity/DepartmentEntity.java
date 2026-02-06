@@ -265,47 +265,23 @@ public class DepartmentEntity {
     /**
      * 정적 팩토리 메서드: 새 부서 생성
      *
-     * 역할:
-     * - Department 엔티티를 생성하는 유일한 방법
-     * - 불변성 보장: 생성자를 private으로 막고 이 메서드만 노출
-     * - 생성 시점에 parent, depth, orgPath를 자동으로 계산
-     *
-     * 불변 규칙:
-     * - parent와 depth는 항상 일치해야 함
-     * - orgPath는 계층 구조를 정확히 반영해야 함
-     *
-     * 생성 예시:
-     * 1. 루트 부서 생성:
-     *    Department 총무부 = Department.create(
-     *        "tenant-001", "총무부", DepartmentType.DIVISION, null
-     *    )
-     *    → deptId: "550e...", depth: 0, orgPath: "/temp"
-     *    → 저장 후 postPersist에서 orgPath: "/{deptId}"로 업데이트
-     *
-     * 2. 자식 부서 생성:
-     *    Department HR팀 = Department.create(
-     *        "tenant-001", "HR팀", DepartmentType.TEAM, 총무부
-     *    )
-     *    → deptId: "550e...", depth: 1, orgPath: "/{총무부ID}/{HR팀ID}"
-     *
-     * 호출 시점:
-     * - 부서 생성 비즈니스 로직에서 호출
-     * - 스프링 빈(new)으로 생성하지 말 것 (이 메서드 사용)
-     *
      * @param tenantId 테넌트 ID
      * @param name 부서명
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
+     * @param code 부서 코드 (필수, 테넌트 내 고유)
+     * @param customTypeName 커스텀 타입명 (type=CUSTOM일 때 필수)
      * @param parent 부모 부서 (NULL 가능 - 루트 부서)
      * @return 새로 생성된 Department 엔티티
-     *
-     * @throws InvalidDepartmentMoveException 부모로 설정할 부서가 자신의 하위 부서인 경우
      */
-    public static DepartmentEntity create(String tenantId, String name, DepartmentType type, DepartmentEntity parent) {
+    public static DepartmentEntity create(String tenantId, String name, DepartmentType type,
+                                          String code, String customTypeName, DepartmentEntity parent) {
         DepartmentEntity dept = new DepartmentEntity();
         dept.deptId = java.util.UUID.randomUUID().toString();  // UUID 생성
         dept.tenantId = tenantId;
         dept.name = name;
         dept.type = type;
+        dept.code = code;
+        dept.customTypeName = customTypeName;
         dept.changeParent(parent);
         return dept;
     }
@@ -453,11 +429,13 @@ public class DepartmentEntity {
          *
          * 역할:
          * - 저장하기 전에 필수값 초기화
-         * - createdAt 설정
+         * - createdAt, updatedAt 설정
          * - depth 초기값 설정
          * - orgPath 임시값 설정
          */
-        this.createdAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        this.createdAt = now;
+        this.updatedAt = now;
         if (this.depth == null) {
             this.depth = (parent == null) ? 0 : parent.getDepth() + 1;
         }

@@ -34,8 +34,8 @@ class DepartmentEntityServiceTest {
 
     @BeforeEach
     void setup() {
-        rootDept = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, null);
-        childDept = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, rootDept);
+        rootDept = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, "ROOT-001", null, null);
+        childDept = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, "HR-001", null, rootDept);
     }
 
     @Test
@@ -70,14 +70,14 @@ class DepartmentEntityServiceTest {
         assertEquals(0, rootDept.getDepth());
         assertEquals(1, childDept.getDepth());
 
-        DepartmentEntity grandchild = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, childDept);
+        DepartmentEntity grandchild = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, "RECRUIT-001", null, childDept);
         assertEquals(2, grandchild.getDepth());
     }
 
     @Test
     @DisplayName("부서 부모 변경")
     void testChangeParentDepartment() {
-        DepartmentEntity newParent = DepartmentEntity.create(tenantId, "개발본부", DepartmentType.DIVISION, null);
+        DepartmentEntity newParent = DepartmentEntity.create(tenantId, "개발본부", DepartmentType.DIVISION, "DEV-001", null, null);
         childDept.changeParent(newParent);
 
         assertEquals(1, childDept.getDepth());
@@ -104,9 +104,9 @@ class DepartmentEntityServiceTest {
     @Test
     @DisplayName("3단계 계층 구조")
     void testThreeLayerDepartmentHierarchy() {
-        DepartmentEntity level1 = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, null);
-        DepartmentEntity level2 = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, level1);
-        DepartmentEntity level3 = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, level2);
+        DepartmentEntity level1 = DepartmentEntity.create(tenantId, "총무부", DepartmentType.DIVISION, "ADMIN-001", null, null);
+        DepartmentEntity level2 = DepartmentEntity.create(tenantId, "HR팀", DepartmentType.TEAM, "HR-002", null, level1);
+        DepartmentEntity level3 = DepartmentEntity.create(tenantId, "채용팀", DepartmentType.GROUP, "RECRUIT-003", null, level2);
 
         assertEquals(0, level1.getDepth());
         assertEquals(1, level2.getDepth());

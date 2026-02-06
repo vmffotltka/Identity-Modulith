@@ -1,7 +1,9 @@
 package com.nexfron.identitymodulith.user.application;
 
 import com.nexfron.identitymodulith.common.security.TenantContextHolder;
+import com.nexfron.identitymodulith.rbac.RbacModuleApi;
 import com.nexfron.identitymodulith.user.AgentExternalInfo;
+// ...existing code...
 import com.nexfron.identitymodulith.user.UserModuleApi;
 import com.nexfron.identitymodulith.user.application.port.OrganizationPort;
 import com.nexfron.identitymodulith.user.domain.model.Agent;
@@ -53,6 +55,7 @@ public class AgentService implements
     private final PasswordEncoder passwordEncoder;
     private final PasswordGenerator passwordGenerator;
     private final OrganizationPort organizationPort;  // Organization 모듈 연동
+    private final RbacModuleApi rbacModuleApi;  // RBAC 모듈 연동
 
     /**
      * 새로운 상담사를 생성합니다.
@@ -495,11 +498,24 @@ private AgentInfo toAgentInfo(Agent agent) {
      * @return 변환된 AgentExternalInfo DTO
      */
     private AgentExternalInfo toAgentExternalInfo(Agent agent) {
-        Set<AgentExternalInfo.RoleInfo> roleInfos = agent.getRoles().stream()
-                .map(role -> new AgentExternalInfo.RoleInfo(
-                        role.getName(),
-                        AgentExternalInfo.RoleInfo.RoleType.valueOf(role.getType().name())
-                ))
+        // RBAC 모듈에서 실제 역할 조회
+        Set<RbacModuleApi.RoleInfo> rbacRoles = rbacModuleApi.getRolesByAgentId(agent.getId().toString());
+
+        // RbacModuleApi.RoleInfo를 AgentExternalInfo.RoleInfo로 변환
+        Set<AgentExternalInfo.RoleInfo> roleInfos = rbacRoles.stream()
+                .map(rbacRole -> {
+                    AgentExternalInfo.RoleInfo.RoleType roleType;
+                    try {
+                        roleType = AgentExternalInfo.RoleInfo.RoleType.valueOf(rbacRole.getType().name());
+                    } catch (IllegalArgumentException e) {
+                        roleType = AgentExternalInfo.RoleInfo.RoleType.POSITION;
+                    }
+
+                    return new AgentExternalInfo.RoleInfo(
+                            rbacRole.getName(),
+                            roleType
+                    );
+                })
                 .collect(Collectors.toSet());
 
         return AgentExternalInfo.builder()

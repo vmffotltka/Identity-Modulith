@@ -33,6 +33,8 @@ public interface DepartmentService {
      * @param tenantId 테넌트 ID
      * @param name 부서명 (필수)
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
+     * @param code 부서 코드 (필수, 테넌트 내 고유)
+     * @param customTypeName 커스텀 타입명 (type=CUSTOM일 때 필수)
      * @param parentId 상위 부서 ID (null이면 루트 부서)
      * @return 생성된 부서 정보
      */
@@ -40,6 +42,8 @@ public interface DepartmentService {
             String tenantId,
             String name,
             DepartmentType type,
+            String code,
+            String customTypeName,
             String parentId);
 
     /**

@@ -1,7 +1,9 @@
 package com.nexfron.identitymodulith.rbac.application.service;
 
 import com.nexfron.identitymodulith.common.security.TenantContextHolder;
+import com.nexfron.identitymodulith.rbac.RbacModuleApi;
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
+// ...existing code...
 import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
@@ -31,7 +33,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
-public class RbacManagementServiceImpl implements RbacManagementService {
+public class RbacManagementServiceImpl implements RbacManagementService, RbacModuleApi {
 
     private final RoleJpaRepository roleRepository;
     private final PermissionJpaRepository permissionRepository;
@@ -905,5 +907,58 @@ public class RbacManagementServiceImpl implements RbacManagementService {
         }
 
         log.debug("[RBAC] ADMIN 권한 확인 완료 - userId={}, action={}", userId, action);
+    }
+
+    // ============================================================
+    // RbacModuleApi 구현 (모듈 간 통신용 Public API)
+    // ============================================================
+
+    /**
+     * 사용자의 역할 정보를 조회합니다.
+     * User 모듈에서 AgentExternalInfo 생성 시 사용됩니다.
+     *
+     * @param agentId 사용자 ID (UUID 문자열)
+     * @return 사용자의 역할 정보 세트
+     */
+    @Override
+    public Set<RbacModuleApi.RoleInfo> getRolesByAgentId(String agentId) {
+        log.debug("[RBAC] 사용자 역할 조회 - agentId={}", agentId);
+
+        List<AgentRoleJpaEntity> agentRoles = agentRoleRepository.findByAgentId(agentId);
+
+        Set<RbacModuleApi.RoleInfo> roleInfos = new HashSet<>();
+
+        for (AgentRoleJpaEntity agentRole : agentRoles) {
+            roleRepository.findById(agentRole.getRoleId()).ifPresent(role -> {
+                // RoleType 변환
+                RbacModuleApi.RoleInfo.RoleType roleType;
+                try {
+                    roleType = RbacModuleApi.RoleInfo.RoleType.valueOf(role.getType().name());
+                } catch (IllegalArgumentException e) {
+                    roleType = RbacModuleApi.RoleInfo.RoleType.POSITION;
+                }
+
+                // DataScopeLevel 변환
+                RbacModuleApi.RoleInfo.DataScopeLevel dataScopeLevel;
+                if (role.getDataScope() != null) {
+                    try {
+                        dataScopeLevel = RbacModuleApi.RoleInfo.DataScopeLevel.valueOf(role.getDataScope().name());
+                    } catch (IllegalArgumentException e) {
+                        dataScopeLevel = RbacModuleApi.RoleInfo.DataScopeLevel.SELF;
+                    }
+                } else {
+                    dataScopeLevel = RbacModuleApi.RoleInfo.DataScopeLevel.SELF;
+                }
+
+                roleInfos.add(new RbacModuleApi.RoleInfo(
+                        role.getName(),
+                        roleType,
+                        dataScopeLevel
+                ));
+            });
+        }
+
+        log.debug("[RBAC] 사용자 역할 조회 완료 - agentId={}, roleCount={}", agentId, roleInfos.size());
+        return roleInfos;
     }
 }

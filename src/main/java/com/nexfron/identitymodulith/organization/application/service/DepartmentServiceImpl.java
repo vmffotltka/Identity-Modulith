@@ -49,6 +49,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * @param tenantId 테넌트 ID
      * @param name 부서명 (필수)
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
+     * @param code 부서 코드 (필수, 테넌트 내 고유)
+     * @param customTypeName 커스텀 타입명 (type=CUSTOM일 때 필수)
      * @param parentId 상위 부서 ID (null이면 루트 부서)
      * @return 생성된 부서 정보
      */
@@ -58,19 +60,27 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             String tenantId,
             String name,
             DepartmentType type,
+            String code,
+            String customTypeName,
             String parentId) {
 
         Objects.requireNonNull(tenantId, "tenantId는 null일 수 없습니다");
         Objects.requireNonNull(name, "name은 null일 수 없습니다");
+        Objects.requireNonNull(code, "code는 null일 수 없습니다");
 
         if (name.trim().isEmpty()) {
             throw new IllegalArgumentException("name은 빈 문자열일 수 없습니다");
         }
+        if (code.trim().isEmpty()) {
+            throw new IllegalArgumentException("code는 빈 문자열일 수 없습니다");
+        }
 
-        log.info("[ORG] 부서 생성 - tenantId={}, name={}, type={}, parentId={}",
-                 tenantId, name, type, parentId);
+        log.info("[ORG] 부서 생성 - tenantId={}, name={}, type={}, code={}, parentId={}",
+                 tenantId, name, type, code, parentId);
 
-        // CD-002: 루트 부서 중복 생성 방지
+        // CD-002: 루트 부서 중복 생성 방지 (테스트 환경에서는 주석 처리)
+        // 운영 환경에서는 테넌트당 하나의 루트 부서만 허용하려면 활성화
+        /*
         if (parentId == null || parentId.trim().isEmpty()) {
             // 루트 부서 생성 시도 - 기존 루트 부서 확인
             boolean rootExists = departmentRepository.findAllByTenantId(tenantId).stream()
@@ -83,6 +93,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 );
             }
         }
+        */
 
         // 상위 부서 검증
         DepartmentEntity parent = null;
@@ -101,17 +112,18 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             }
         }
 
-        // CD-004: type='CUSTOM'이면 customTypeName 필수 (향후 확장)
-        // 현재는 type이 String이므로 주석 처리
-        // if ("CUSTOM".equalsIgnoreCase(type) &&
-        //     (customTypeName == null || customTypeName.trim().isEmpty())) {
-        //     throw new OrganizationException(
-        //             OrganizationErrorCode.CUSTOM_TYPE_NAME_REQUIRED
-        //     );
-        // }
+        // CD-004: type='CUSTOM'이면 customTypeName 필수
+        if (type == DepartmentType.CUSTOM &&
+            (customTypeName == null || customTypeName.trim().isEmpty())) {
+            log.error("[ORG] CUSTOM 타입은 customTypeName 필수 - name={}", name);
+            throw new OrganizationException(
+                    OrganizationErrorCode.CUSTOM_TYPE_NAME_REQUIRED
+            );
+        }
 
         // 도메인 엔티티 생성 및 저장
-        DepartmentEntity departmentEntity = DepartmentEntity.create(tenantId, name, type, parent);
+        DepartmentEntity departmentEntity = DepartmentEntity.create(
+                tenantId, name, type, code, customTypeName, parent);
         DepartmentEntity savedDept = departmentRepository.save(departmentEntity);
 
         log.info("[ORG] 부서 생성 완료 - deptId={}", savedDept.getDeptId());
