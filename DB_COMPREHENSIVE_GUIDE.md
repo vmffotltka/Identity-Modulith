@@ -1,126 +1,126 @@
-# Identity Modulith - 데이터베이스 가이드
+# Identity Modulith - ?�이?�베?�스 가?�드
 
-> 📅 최종 업데이트: 2026-02-05  
-> 🗄️ DB: PostgreSQL 18+  
-> ⚠️ 주요 변경: v3.0.0 - 테이블명 표준화, DepartmentType Enum, 부서 상태 관리
+> ?�� 최종 ?�데?�트: 2026-02-05  
+> ?���?DB: PostgreSQL 18+  
+> ?�️ 주요 변�? v3.0.0 - ?�이블명 ?��??? DepartmentType Enum, 부???�태 관�?
 
 ---
 
-## 📊 전체 테이블 구조 (6개)
+## ?�� ?�체 ?�이�?구조 (6�?
 
-| 테이블명 | 모듈 | PK 타입 | 설명 |
+| ?�이블명 | 모듈 | PK ?�??| ?�명 |
 |---------|------|---------|------|
-| **org_departments** | Organization | VARCHAR(50) | 조직(부서) 계층 구조 |
-| **agents** | User | VARCHAR(50) | 사용자(상담사) 정보 |
-| **rbac_roles** | RBAC | VARCHAR(50) | 역할 정의 (POSITION, CHANNEL) |
-| **rbac_permissions** | RBAC | VARCHAR(50) | 권한 정의 |
-| **rbac_role_permissions** | RBAC | Composite PK | 역할-권한 매핑 (M:N) |
-| **rbac_agent_roles** | RBAC | Composite PK | 사용자-역할 매핑 (M:N) |
+| **org_departments** | Organization | VARCHAR(50) | 조직(부?? 계층 구조 |
+| **agents** | User | VARCHAR(50) | ?�용???�담?? ?�보 |
+| **rbac_roles** | RBAC | VARCHAR(50) | ??�� ?�의 (POSITION, CHANNEL) |
+| **rbac_permissions** | RBAC | VARCHAR(50) | 권한 ?�의 |
+| **rbac_role_permissions** | RBAC | Composite PK | ??��-권한 매핑 (M:N) |
+| **user_agent_roles** | RBAC | Composite PK | ?�용????�� 매핑 (M:N) |
 
-**변경 사항 (v3.0.0)**:
-- ✅ `departmentEntities` → `org_departments`
-- ✅ `roles` → `rbac_roles`
-- ✅ `permissions` → `rbac_permissions`
-- ✅ `role_permissions` → `rbac_role_permissions`
-- ✅ `agent_roles` → `rbac_agent_roles`
-- ✅ PK 타입: VARCHAR(36) → VARCHAR(50) (UUID + 여유 공간)
-- ✅ `org_departments`에 `type` (DepartmentType Enum), `is_active` 컬럼 추가
+**변�??�항 (v3.0.0)**:
+- ??`departmentEntities` ??`org_departments`
+- ??`roles` ??`rbac_roles`
+- ??`permissions` ??`rbac_permissions`
+- ??`role_permissions` ??`rbac_role_permissions`
+- ??`agent_roles` ??`user_agent_roles`
+- ??PK ?�?? VARCHAR(36) ??VARCHAR(50) (UUID + ?�유 공간)
+- ??`org_departments`??`type` (DepartmentType Enum), `is_active` 컬럼 추�?
 
 ---
 
-## 🏢 1. org_departments (조직/부서)
+## ?�� 1. org_departments (조직/부??
 
-**목적**: 조직 계층 구조 관리 (트리 구조 - Materialized Path 패턴)
+**목적**: 조직 계층 구조 관�?(?�리 구조 - Materialized Path ?�턴)
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **dept_id** | VARCHAR(50) | ✖ | 부서 ID (PK) | `dept-root-001`, UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(100) | ✖ | 부서명 | `넥스프론`, `고객서비스본부` |
-| **type** | VARCHAR(20) | ✖ | 부서 타입 (Enum) | `COMPANY`, `DIVISION`, `TEAM`, `GROUP`, `CUSTOM` |
-| custom_type_name | VARCHAR(50) | ✓ | 사용자 정의 타입 이름 | `연구소`, `지사` (type=CUSTOM일 때) |
-| parent_dept_id | VARCHAR(50) | ✓ | 상위 부서 ID (FK) | NULL=최상위, UUID=하위 |
-| org_path | TEXT | ✖ | 조직 경로 (Materialized Path) | `/dept-root-001/dept-div-001/` |
-| depth | INTEGER | ✖ | 트리 깊이 | 0(최상위) ~ 10 |
-| display_order | INTEGER | ✖ | 표시 순서 | 1, 2, 3... |
-| manager_id | VARCHAR(50) | ✓ | 부서장 ID | Agent ID |
-| description | TEXT | ✓ | 부서 설명 | `고객 서비스 및 상담 업무 총괄` |
-| **is_active** | BOOLEAN | ✖ | 활성화 상태 | TRUE (활성), FALSE (비활성) |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
-| created_by | VARCHAR(50) | ✓ | 생성자 ID | Agent ID |
-| updated_by | VARCHAR(50) | ✓ | 수정자 ID | Agent ID |
+| **dept_id** | VARCHAR(50) | ??| 부??ID (PK) | `dept-root-001`, UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| name | VARCHAR(100) | ??| 부?�명 | `?�스?�론`, `고객?�비?�본부` |
+| **type** | VARCHAR(20) | ??| 부???�??(Enum) | `COMPANY`, `DIVISION`, `TEAM`, `GROUP`, `CUSTOM` |
+| custom_type_name | VARCHAR(50) | ??| ?�용???�의 ?�???�름 | `?�구??, `지?? (type=CUSTOM???? |
+| parent_dept_id | VARCHAR(50) | ??| ?�위 부??ID (FK) | NULL=최상?? UUID=?�위 |
+| org_path | TEXT | ??| 조직 경로 (Materialized Path) | `/dept-root-001/dept-div-001/` |
+| depth | INTEGER | ??| ?�리 깊이 | 0(최상?? ~ 10 |
+| display_order | INTEGER | ??| ?�시 ?�서 | 1, 2, 3... |
+| manager_id | VARCHAR(50) | ??| 부?�장 ID | Agent ID |
+| description | TEXT | ??| 부???�명 | `고객 ?�비??�??�담 ?�무 총괄` |
+| **is_active** | BOOLEAN | ??| ?�성???�태 | TRUE (?�성), FALSE (비활?? |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ??| ?�정 ?�시 | `2026-02-05 15:00:00` |
+| created_by | VARCHAR(50) | ??| ?�성??ID | Agent ID |
+| updated_by | VARCHAR(50) | ??| ?�정??ID | Agent ID |
 
-**인덱스**: 
+**?�덱??*: 
 - `idx_dept_tenant`: `(tenant_id)`
 - `idx_dept_parent`: `(parent_dept_id)`
 - `idx_dept_org_path`: `(org_path)`
 - `idx_dept_active`: `(is_active)`
 
 **FK**: 
-- `parent_dept_id` → `org_departments(dept_id)` ON DELETE RESTRICT
+- `parent_dept_id` ??`org_departments(dept_id)` ON DELETE RESTRICT
 
-**체크 제약**:
+**체크 ?�약**:
 - `chk_dept_type`: type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM')
-- `chk_custom_type`: type='CUSTOM'일 때만 custom_type_name 필수
+- `chk_custom_type`: type='CUSTOM'???�만 custom_type_name ?�수
 
-**Department Type 설명**:
-| 타입 | 설명 | 사용 예시 |
+**Department Type ?�명**:
+| ?�??| ?�명 | ?�용 ?�시 |
 |------|------|----------|
-| `COMPANY` | 최상위 조직 | 회사, 계열사 |
-| `DIVISION` | 본부급 조직 | 고객서비스본부, 영업본부 |
-| `TEAM` | 팀급 조직 | 인바운드팀, 아웃바운드팀 |
-| `GROUP` | 그룹/파트 | 개발그룹, 기획파트 |
-| `CUSTOM` | 사용자 정의 | custom_type_name으로 이름 지정 |
+| `COMPANY` | 최상??조직 | ?�사, 계열??|
+| `DIVISION` | 본�?�?조직 | 고객?�비?�본부, ?�업본�? |
+| `TEAM` | ?��?조직 | ?�바?�드?�, ?�웃바운?��? |
+| `GROUP` | 그룹/?�트 | 개발그룹, 기획?�트 |
+| `CUSTOM` | ?�용???�의 | custom_type_name?�로 ?�름 지??|
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- 최상위 조직 (COMPANY)
-('dept-root-001', 'tenant-001', '넥스프론', 'COMPANY', NULL, NULL, 
- '/dept-root-001/', 0, 1, NULL, '넥스프론 주식회사', TRUE, NOW(), NOW(), NULL, NULL)
+-- 최상??조직 (COMPANY)
+('dept-root-001', 'tenant-001', '?�스?�론', 'COMPANY', NULL, NULL, 
+ '/dept-root-001/', 0, 1, NULL, '?�스?�론 주식?�사', TRUE, NOW(), NOW(), NULL, NULL)
 
--- 본부 (DIVISION)
-('dept-div-001', 'tenant-001', '고객서비스본부', 'DIVISION', NULL, 'dept-root-001', 
- '/dept-root-001/dept-div-001/', 1, 1, NULL, '고객 서비스 총괄', TRUE, NOW(), NOW(), NULL, NULL)
+-- 본�? (DIVISION)
+('dept-div-001', 'tenant-001', '고객?�비?�본부', 'DIVISION', NULL, 'dept-root-001', 
+ '/dept-root-001/dept-div-001/', 1, 1, NULL, '고객 ?�비??총괄', TRUE, NOW(), NOW(), NULL, NULL)
 
--- 팀 (TEAM)
-('dept-team-001', 'tenant-001', '인바운드팀', 'TEAM', NULL, 'dept-div-001', 
- '/dept-root-001/dept-div-001/dept-team-001/', 2, 1, NULL, '인바운드 전화 상담', TRUE, NOW(), NOW(), NULL, NULL)
+-- ?� (TEAM)
+('dept-team-001', 'tenant-001', '?�바?�드?�', 'TEAM', NULL, 'dept-div-001', 
+ '/dept-root-001/dept-div-001/dept-team-001/', 2, 1, NULL, '?�바?�드 ?�화 ?�담', TRUE, NOW(), NOW(), NULL, NULL)
 ```
 
 ---
 
-## 👤 2. agents (사용자/상담사)
+## ?�� 2. user_agents (?�용???�담??
 
 
-**목적**: 시스템 사용자 정보 관리
+**목적**: ?�스???�용???�보 관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **agent_id** | VARCHAR(50) | ✖ | 사용자 ID (PK) | `agent-admin-001`, UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| login_id | VARCHAR(50) | ✖ | 로그인 ID (UK) | `admin`, `agent01` (영문+숫자, 4-20자) |
-| password | VARCHAR(255) | ✖ | 비밀번호 (BCrypt) | `$2a$10$...` (BCrypt 해시) |
-| name | VARCHAR(100) | ✖ | 사용자명 | `관리자`, `홍길동` (2-50자) |
-| employee_id | VARCHAR(50) | ✓ | 사원 번호 | `EMP001`, `2024001` |
-| email | VARCHAR(100) | ✓ | 이메일 | `admin@nexfron.com` |
-| phone | VARCHAR(20) | ✓ | 전화번호 | `010-1234-5678` |
-| dept_id | VARCHAR(50) | ✓ | 소속 부서 ID (FK) | org_departments(dept_id) |
-| status | VARCHAR(20) | ✖ | 상태 | **`ACTIVE`** (활성), **`SUSPENDED`** (정지), **`RETIRED`** (퇴사) |
-| password_must_change | BOOLEAN | ✖ | 비밀번호 변경 필요 | `FALSE` (기본값) |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
-| suspended_at | TIMESTAMP | ✓ | 정지 일시 | `2025-12-31 23:59:59` |
-| retired_at | TIMESTAMP | ✓ | 퇴사 일시 | `2025-12-31 23:59:59` |
-| scheduled_delete_at | TIMESTAMP | ✓ | 삭제 예정 일시 | 퇴사 후 90일 |
-| created_by | VARCHAR(50) | ✓ | 생성자 ID | Agent ID |
-| updated_by | VARCHAR(50) | ✓ | 수정자 ID | Agent ID |
-| suspended_by | VARCHAR(50) | ✓ | 정지 처리자 ID | Agent ID |
-| retired_by | VARCHAR(50) | ✓ | 퇴사 처리자 ID | Agent ID |
-| version | BIGINT | ✖ | 낙관적 잠금 버전 | 0 (기본값) |
+| **agent_id** | VARCHAR(50) | ??| ?�용??ID (PK) | `agent-admin-001`, UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| login_id | VARCHAR(50) | ??| 로그??ID (UK) | `admin`, `agent01` (?�문+?�자, 4-20?? |
+| password | VARCHAR(255) | ??| 비�?번호 (BCrypt) | `$2a$10$...` (BCrypt ?�시) |
+| name | VARCHAR(100) | ??| ?�용?�명 | `관리자`, `?�길?? (2-50?? |
+| employee_id | VARCHAR(50) | ??| ?�원 번호 | `EMP001`, `2024001` |
+| email | VARCHAR(100) | ??| ?�메??| `admin@nexfron.com` |
+| phone | VARCHAR(20) | ??| ?�화번호 | `010-1234-5678` |
+| dept_id | VARCHAR(50) | ??| ?�속 부??ID (FK) | org_departments(dept_id) |
+| status | VARCHAR(20) | ??| ?�태 | **`ACTIVE`** (?�성), **`SUSPENDED`** (?��?), **`RETIRED`** (?�사) |
+| password_must_change | BOOLEAN | ??| 비�?번호 변�??�요 | `FALSE` (기본�? |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ??| ?�정 ?�시 | `2026-02-05 15:00:00` |
+| suspended_at | TIMESTAMP | ??| ?��? ?�시 | `2025-12-31 23:59:59` |
+| retired_at | TIMESTAMP | ??| ?�사 ?�시 | `2025-12-31 23:59:59` |
+| scheduled_delete_at | TIMESTAMP | ??| ??�� ?�정 ?�시 | ?�사 ??90??|
+| created_by | VARCHAR(50) | ??| ?�성??ID | Agent ID |
+| updated_by | VARCHAR(50) | ??| ?�정??ID | Agent ID |
+| suspended_by | VARCHAR(50) | ??| ?��? 처리??ID | Agent ID |
+| retired_by | VARCHAR(50) | ??| ?�사 처리??ID | Agent ID |
+| version | BIGINT | ??| ?��????�금 버전 | 0 (기본�? |
 
-**인덱스**: 
-- UK: `(tenant_id, login_id)` (복합 유니크)
+**?�덱??*: 
+- UK: `(tenant_id, login_id)` (복합 ?�니??
 - `idx_agent_tenant`: `(tenant_id)`
 - `idx_agent_login`: `(login_id)`
 - `idx_agent_dept`: `(dept_id)`
@@ -128,293 +128,293 @@
 - `idx_agent_scheduled_delete`: `(scheduled_delete_at)` WHERE scheduled_delete_at IS NOT NULL
 
 **FK**: 
-- `dept_id` → `org_departments(dept_id)` ON DELETE SET NULL
+- `dept_id` ??`org_departments(dept_id)` ON DELETE SET NULL
 
-**체크 제약**:
+**체크 ?�약**:
 - `chk_agent_status`: status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- 관리자 (비밀번호: password123)
+-- 관리자 (비�?번호: password123)
 ('agent-admin-001', 'tenant-001', 'admin', 
  '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', 
  '관리자', 'EMP001', 'admin@nexfron.com', '010-1234-5678', 
  'dept-root-001', 'ACTIVE', FALSE, NOW(), NOW(), NULL, NULL, NULL, 
  NULL, NULL, NULL, NULL, 0)
 
--- 팀장
+-- ?�??
 ('agent-lead-001', 'tenant-001', 'teamlead01', 
  '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', 
- '김팀장', 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 
+ '김?�??, 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 
  'dept-div-001', 'ACTIVE', FALSE, NOW(), NOW(), NULL, NULL, NULL, 
  NULL, NULL, NULL, NULL, 0)
 ```
 
-**비밀번호 해시**:
-- **알고리즘**: BCrypt (Spring Security 기본)
+**비�?번호 ?�시**:
+- **?�고리즘**: BCrypt (Spring Security 기본)
 - **강도**: 10 rounds
-- **테스트 비밀번호**: `password123`
-- **해시 값**: `$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy`
+- **?�스??비�?번호**: `password123`
+- **?�시 �?*: `$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy`
 
 ---
 
-## 🎭 3. rbac_roles (역할)
+## ?�� 3. rbac_roles (??��)
 
-**목적**: 역할 정의 및 관리 (POSITION, CHANNEL 타입)
+**목적**: ??�� ?�의 �?관�?(POSITION, CHANNEL ?�??
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK) | `role-admin-001`, UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(50) | ✖ | 역할명 (UK) | **`ADMIN`**, **`TEAM_LEAD`**, **`AGENT`** (직급) <br> **`INBOUND_AGENT`**, **`CHAT_AGENT`** (채널) |
-| **type** | VARCHAR(20) | ✖ | 역할 타입 | **`POSITION`** (직급 기반), **`CHANNEL`** (채널 기반) |
-| **data_scope** | VARCHAR(20) | ✓ | 데이터 스코프 레벨 | **`ADMIN`**, **`TEAM_LEAD`**, **`MEMBER`** (POSITION일 때만) |
-| description | VARCHAR(255) | ✓ | 역할 설명 | `시스템 전체 관리자 - 모든 권한 보유` |
-| is_active | BOOLEAN | ✖ | 활성화 상태 | TRUE (기본값) |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
+| **role_id** | VARCHAR(50) | ??| ??�� ID (PK) | `role-admin-001`, UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| name | VARCHAR(50) | ??| ??���?(UK) | **`ADMIN`**, **`TEAM_LEAD`**, **`AGENT`** (직급) <br> **`INBOUND_AGENT`**, **`CHAT_AGENT`** (채널) |
+| **type** | VARCHAR(20) | ??| ??�� ?�??| **`POSITION`** (직급 기반), **`CHANNEL`** (채널 기반) |
+| **data_scope** | VARCHAR(20) | ??| ?�이???�코???�벨 | **`ADMIN`**, **`TEAM_LEAD`**, **`MEMBER`** (POSITION???�만) |
+| description | VARCHAR(255) | ??| ??�� ?�명 | `?�스???�체 관리자 - 모든 권한 보유` |
+| is_active | BOOLEAN | ??| ?�성???�태 | TRUE (기본�? |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ??| ?�정 ?�시 | `2026-02-05 15:00:00` |
 
-**인덱스**: 
-- UK: `(tenant_id, name)` (복합 유니크)
+**?�덱??*: 
+- UK: `(tenant_id, name)` (복합 ?�니??
 - `idx_role_tenant`: `(tenant_id)`
 - `idx_role_type`: `(type)`
 - `idx_role_active`: `(is_active)`
 
-**체크 제약**:
+**체크 ?�약**:
 - `chk_role_type`: type IN ('POSITION', 'CHANNEL')
 - `chk_role_data_scope`: 
-  - POSITION일 때: data_scope IN ('ADMIN', 'TEAM_LEAD', 'MEMBER')
-  - CHANNEL일 때: data_scope IS NULL
+  - POSITION???? data_scope IN ('ADMIN', 'TEAM_LEAD', 'MEMBER')
+  - CHANNEL???? data_scope IS NULL
 
-**역할 타입 설명**:
-| 타입 | 설명 | 예시 | data_scope |
+**??�� ?�???�명**:
+| ?�??| ?�명 | ?�시 | data_scope |
 |------|------|------|------------|
-| `POSITION` | 직급 기반 역할 | ADMIN, TEAM_LEAD, AGENT | 필수 (ADMIN, TEAM_LEAD, MEMBER) |
-| `CHANNEL` | 채널 기반 역할 | INBOUND_AGENT, CHAT_AGENT | NULL |
+| `POSITION` | 직급 기반 ??�� | ADMIN, TEAM_LEAD, AGENT | ?�수 (ADMIN, TEAM_LEAD, MEMBER) |
+| `CHANNEL` | 채널 기반 ??�� | INBOUND_AGENT, CHAT_AGENT | NULL |
 
-**데이터 스코프 레벨**:
-| 레벨 | 설명 | 조회 범위 |
+**?�이???�코???�벨**:
+| ?�벨 | ?�명 | 조회 범위 |
 |------|------|----------|
-| `ADMIN` | 전체 데이터 접근 | 테넌트 내 모든 부서 |
-| `TEAM_LEAD` | 본인 부서 + 하위 | 본인 부서와 하위 부서 전체 |
-| `MEMBER` | 본인 부서만 | 본인이 소속된 부서만 |
+| `ADMIN` | ?�체 ?�이???�근 | ?�넌????모든 부??|
+| `TEAM_LEAD` | 본인 부??+ ?�위 | 본인 부?��? ?�위 부???�체 |
+| `MEMBER` | 본인 부?�만 | 본인???�속??부?�만 |
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- POSITION 역할
+-- POSITION ??��
 ('role-admin-001', 'tenant-001', 'ADMIN', 'POSITION', 'ADMIN', 
- '시스템 관리자 (전체 조직 접근)', TRUE, NOW(), NOW()),
+ '?�스??관리자 (?�체 조직 ?�근)', TRUE, NOW(), NOW()),
 ('role-teamlead-001', 'tenant-001', 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', 
- '팀장 (본인 팀 + 하위 부서 접근)', TRUE, NOW(), NOW()),
+ '?�??(본인 ?� + ?�위 부???�근)', TRUE, NOW(), NOW()),
 ('role-agent-001', 'tenant-001', 'AGENT', 'POSITION', 'MEMBER', 
- '일반 상담사 (본인 팀만 접근)', TRUE, NOW(), NOW())
+ '?�반 ?�담??(본인 ?��??�근)', TRUE, NOW(), NOW())
 
--- CHANNEL 역할
+-- CHANNEL ??��
 ('role-ch-inbound', 'tenant-001', 'INBOUND_AGENT', 'CHANNEL', NULL, 
- '인바운드 전화 상담', TRUE, NOW(), NOW()),
+ '?�바?�드 ?�화 ?�담', TRUE, NOW(), NOW()),
 ('role-ch-chat', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', NULL, 
- '채팅 상담', TRUE, NOW(), NOW())
+ '채팅 ?�담', TRUE, NOW(), NOW())
 ```
 
 ---
 
-## 🔑 4. rbac_permissions (권한)
+## ?�� 4. rbac_permissions (권한)
 
-**목적**: 권한 정의 및 관리
+**목적**: 권한 ?�의 �?관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **permission_id** | VARCHAR(50) | ✖ | 권한 ID (PK) | `perm-agent-001`, UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| code | VARCHAR(100) | ✖ | 권한 코드 (UK) | `agent:create`, `dept:read`, `role:manage` |
-| name | VARCHAR(100) | ✓ | 권한 이름 | `상담사 생성`, `부서 조회`, `역할 관리` |
-| description | VARCHAR(255) | ✓ | 권한 설명 | `새로운 상담사 계정 생성` |
-| category | VARCHAR(50) | ✓ | 권한 카테고리 | `AGENT`, `DEPARTMENT`, `RBAC`, `CHANNEL` |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
+| **permission_id** | VARCHAR(50) | ??| 권한 ID (PK) | `perm-agent-001`, UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| code | VARCHAR(100) | ??| 권한 코드 (UK) | `agent:create`, `dept:read`, `role:manage` |
+| name | VARCHAR(100) | ??| 권한 ?�름 | `?�담???�성`, `부??조회`, `??�� 관�? |
+| description | VARCHAR(255) | ??| 권한 ?�명 | `?�로???�담??계정 ?�성` |
+| category | VARCHAR(50) | ??| 권한 카테고리 | `AGENT`, `DEPARTMENT`, `RBAC`, `CHANNEL` |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
 
-**인덱스**: 
-- UK: `(tenant_id, code)` (복합 유니크)
+**?�덱??*: 
+- UK: `(tenant_id, code)` (복합 ?�니??
 - `idx_permission_tenant`: `(tenant_id)`
 - `idx_permission_category`: `(category)`
 
-**권한 코드 형식**: `도메인:액션`
-- 도메인: agent, dept, role, permission, channel
-- 액션: create, read, update, delete, suspend, activate, transfer 등
+**권한 코드 ?�식**: `?�메???�션`
+- ?�메?? agent, dept, role, permission, channel
+- ?�션: create, read, update, delete, suspend, activate, transfer ??
 
 **권한 카테고리**:
-| 카테고리 | 설명 | 권한 예시 |
+| 카테고리 | ?�명 | 권한 ?�시 |
 |----------|------|----------|
-| `AGENT` | 상담사 관리 | agent:create, agent:read, agent:update, agent:delete |
-| `DEPARTMENT` | 부서 관리 | dept:create, dept:read, dept:update, dept:delete, dept:move |
-| `RBAC` | 역할/권한 관리 | role:create, role:delete, permission:assign |
-| `CHANNEL` | 채널별 권한 | channel:inbound:receive, channel:chat:message |
+| `AGENT` | ?�담??관�?| agent:create, agent:read, agent:update, agent:delete |
+| `DEPARTMENT` | 부??관�?| dept:create, dept:read, dept:update, dept:delete, dept:move |
+| `RBAC` | ??��/권한 관�?| role:create, role:delete, permission:assign |
+| `CHANNEL` | 채널�?권한 | channel:inbound:receive, channel:chat:message |
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
 -- AGENT 카테고리
-('perm-agent-001', 'tenant-001', 'agent:create', '상담사 생성', 
- '새로운 상담사 계정 생성', 'AGENT', NOW()),
-('perm-agent-002', 'tenant-001', 'agent:read', '상담사 조회', 
- '상담사 정보 조회', 'AGENT', NOW()),
+('perm-agent-001', 'tenant-001', 'agent:create', '?�담???�성', 
+ '?�로???�담??계정 ?�성', 'AGENT', NOW()),
+('perm-agent-002', 'tenant-001', 'agent:read', '?�담??조회', 
+ '?�담???�보 조회', 'AGENT', NOW()),
 
 -- DEPARTMENT 카테고리
-('perm-dept-001', 'tenant-001', 'dept:create', '부서 생성', 
- '새로운 부서 생성', 'DEPARTMENT', NOW()),
-('perm-dept-002', 'tenant-001', 'dept:read', '부서 조회', 
- '부서 정보 조회', 'DEPARTMENT', NOW()),
+('perm-dept-001', 'tenant-001', 'dept:create', '부???�성', 
+ '?�로??부???�성', 'DEPARTMENT', NOW()),
+('perm-dept-002', 'tenant-001', 'dept:read', '부??조회', 
+ '부???�보 조회', 'DEPARTMENT', NOW()),
 
 -- CHANNEL 카테고리
-('perm-ch-in-001', 'tenant-001', 'channel:inbound:receive', '인바운드 수신', 
- '인바운드 전화 수신', 'CHANNEL', NOW()),
+('perm-ch-in-001', 'tenant-001', 'channel:inbound:receive', '?�바?�드 ?�신', 
+ '?�바?�드 ?�화 ?�신', 'CHANNEL', NOW()),
 ('perm-ch-chat-001', 'tenant-001', 'channel:chat:message', '채팅 메시지', 
- '채팅 메시지 송수신', 'CHANNEL', NOW())
+ '채팅 메시지 ?�수??, 'CHANNEL', NOW())
 ```
 
 ---
 
-**목적**: 역할 정의 및 관리
+**목적**: ??�� ?�의 �?관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **role_id** | VARCHAR(36) | ✖ | 역할 ID (PK) | UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(64) | ✖ | 역할명 (UK) | **`ADMIN`**, **`MANAGER`**, **`TEAM_LEAD`**, **`MEMBER`** (직책) <br> **`PHONE_AGENT`**, **`CHAT_AGENT`**, **`EMAIL_AGENT`** (채널) |
-| type | VARCHAR(32) | ✖ | 역할 타입 | **`POSITION`** (직책 기반), **`CHANNEL`** (채널 기반), **`SKILL`** (스킬 기반) |
-| description | VARCHAR(255) | ✓ | 역할 설명 | `시스템 전체 관리자 - 모든 권한 보유` |
-| is_active | BOOLEAN | ✖ | 활성화 상태 | **`true`** (활성), **`false`** (비활성/논리 삭제) |
-| version | BIGINT | ✖ | 낙관적 잠금 버전 | 0, 1, 2... (동시성 제어용) |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-01-21 15:00:00` |
+| **role_id** | VARCHAR(36) | ??| ??�� ID (PK) | UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| name | VARCHAR(64) | ??| ??���?(UK) | **`ADMIN`**, **`MANAGER`**, **`TEAM_LEAD`**, **`MEMBER`** (직책) <br> **`PHONE_AGENT`**, **`CHAT_AGENT`**, **`EMAIL_AGENT`** (채널) |
+| type | VARCHAR(32) | ??| ??�� ?�??| **`POSITION`** (직책 기반), **`CHANNEL`** (채널 기반), **`SKILL`** (?�킬 기반) |
+| description | VARCHAR(255) | ??| ??�� ?�명 | `?�스???�체 관리자 - 모든 권한 보유` |
+| is_active | BOOLEAN | ??| ?�성???�태 | **`true`** (?�성), **`false`** (비활???�리 ??��) |
+| version | BIGINT | ??| ?��????�금 버전 | 0, 1, 2... (?�시???�어?? |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
+| updated_at | TIMESTAMP | ??| ?�정 ?�시 | `2026-01-21 15:00:00` |
 
-**인덱스**: `(tenant_id, name)` UK, `tenant_id`, `is_active`
+**?�덱??*: `(tenant_id, name)` UK, `tenant_id`, `is_active`
 
-**표준 역할 (8개)**:
+**?��? ??�� (8�?**:
 
 ### 직책 기반 (POSITION)
-1. **ADMIN** - 시스템 전체 관리자 (35개 전체 권한)
-2. **MANAGER** - 부서 관리자 (12개 권한)
-3. **TEAM_LEAD** - 팀 리더 (5개 권한)
-4. **MEMBER** - 일반 사용자 (4개 권한)
+1. **ADMIN** - ?�스???�체 관리자 (35�??�체 권한)
+2. **MANAGER** - 부??관리자 (12�?권한)
+3. **TEAM_LEAD** - ?� 리더 (5�?권한)
+4. **MEMBER** - ?�반 ?�용??(4�?권한)
 
 ### 채널 기반 (CHANNEL)
-5. **PHONE_AGENT** - 전화 상담사 (3개 권한)
-6. **CHAT_AGENT** - 채팅 상담사 (2개 권한)
-7. **EMAIL_AGENT** - 이메일 상담사 (1개 권한)
-8. **SUPERVISOR** - 슈퍼바이저 (큐 관리)
+5. **PHONE_AGENT** - ?�화 ?�담??(3�?권한)
+6. **CHAT_AGENT** - 채팅 ?�담??(2�?권한)
+7. **EMAIL_AGENT** - ?�메???�담??(1�?권한)
+8. **SUPERVISOR** - ?�퍼바이?� (??관�?
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
 ('660e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'ADMIN', 'POSITION', 
- '시스템 전체 관리자 - 모든 권한 보유', true, 0, NOW(), NOW())
+ '?�스???�체 관리자 - 모든 권한 보유', true, 0, NOW(), NOW())
 ```
 
 ---
 
-## 🔑 4. permissions (권한)
+## ?�� 4. permissions (권한)
 
-**목적**: 세분화된 권한 정의
+**목적**: ?�분?�된 권한 ?�의
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **permission_id** | VARCHAR(36) | ✖ | 권한 ID (PK) | UUID |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| code | VARCHAR(128) | ✖ | 권한 코드 (UK) | **`domain:action`** 형식 |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-01-21 10:00:00` |
+| **permission_id** | VARCHAR(36) | ??| 권한 ID (PK) | UUID |
+| tenant_id | VARCHAR(50) | ??| ?�넌??ID | `tenant-001` |
+| code | VARCHAR(128) | ??| 권한 코드 (UK) | **`domain:action`** ?�식 |
+| created_at | TIMESTAMP | ??| ?�성 ?�시 | `2026-01-21 10:00:00` |
 
-**인덱스**: `(tenant_id, code)` UK, `tenant_id`
+**?�덱??*: `(tenant_id, code)` UK, `tenant_id`
 
-**표준 권한 코드 (35개)**:
+**?��? 권한 코드 (35�?**:
 
-### 사용자 관리 (user)
-- `user:create` - 사용자 생성
-- `user:read` - 사용자 조회 (전체)
-- `user:read:self` - 본인 정보 조회
-- `user:update` - 사용자 수정
-- `user:update:self` - 본인 정보 수정
-- `user:delete` - 사용자 삭제
-- `user:manage` - 사용자 전체 관리
-- `user:assign:role` - 역할 할당
-- `user:reset:password` - 비밀번호 초기화
+### ?�용??관�?(user)
+- `user:create` - ?�용???�성
+- `user:read` - ?�용??조회 (?�체)
+- `user:read:self` - 본인 ?�보 조회
+- `user:update` - ?�용???�정
+- `user:update:self` - 본인 ?�보 ?�정
+- `user:delete` - ?�용????��
+- `user:manage` - ?�용???�체 관�?
+- `user:assign:role` - ??�� ?�당
+- `user:reset:password` - 비�?번호 초기??
 
-### 조직 관리 (org)
-- `org:view` - 조직도 조회
-- `org:create` - 부서 생성
-- `org:update` - 부서 수정
-- `org:move` - 부서 이동
-- `org:delete` - 부서 삭제
-- `org:manage` - 조직 전체 관리
+### 조직 관�?(org)
+- `org:view` - 조직??조회
+- `org:create` - 부???�성
+- `org:update` - 부???�정
+- `org:move` - 부???�동
+- `org:delete` - 부????��
+- `org:manage` - 조직 ?�체 관�?
 
-### RBAC 관리 (rbac)
-- `rbac:view` - 역할/권한 조회
-- `rbac:create:role` - 역할 생성
-- `rbac:update:role` - 역할 수정
-- `rbac:delete:role` - 역할 삭제
-- `rbac:create:permission` - 권한 생성
-- `rbac:update:permission` - 권한 수정
-- `rbac:delete:permission` - 권한 삭제
-- `rbac:assign:permission` - 권한 할당
-- `rbac:configure` - RBAC 전체 설정
+### RBAC 관�?(rbac)
+- `rbac:view` - ??��/권한 조회
+- `rbac:create:role` - ??�� ?�성
+- `rbac:update:role` - ??�� ?�정
+- `rbac:delete:role` - ??�� ??��
+- `rbac:create:permission` - 권한 ?�성
+- `rbac:update:permission` - 권한 ?�정
+- `rbac:delete:permission` - 권한 ??��
+- `rbac:assign:permission` - 권한 ?�당
+- `rbac:configure` - RBAC ?�체 ?�정
 
-### 보고서 (report)
-- `report:view` - 보고서 조회
-- `report:read` - 보고서 읽기
-- `report:export` - 보고서 내보내기
-- `report:manage` - 보고서 관리
+### 보고??(report)
+- `report:view` - 보고??조회
+- `report:read` - 보고???�기
+- `report:export` - 보고???�보?�기
+- `report:manage` - 보고??관�?
 
 ### 채널 (phone, chat, email)
-- `phone:accept` - 전화 수신
-- `phone:hold` - 전화 보류
-- `phone:transfer` - 전화 전환
-- `chat:send` - 채팅 전송
-- `chat:read` - 채팅 읽기
-- `email:send` - 이메일 전송
-- `queue:manage` - 큐 관리
+- `phone:accept` - ?�화 ?�신
+- `phone:hold` - ?�화 보류
+- `phone:transfer` - ?�화 ?�환
+- `chat:send` - 채팅 ?�송
+- `chat:read` - 채팅 ?�기
+- `email:send` - ?�메???�송
+- `queue:manage` - ??관�?
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
 ('550e8400-e29b-41d4-a716-446655440001', 'tenant-001', 'user:create', NOW())
 ```
 
 ---
 
-## 🔗 5. rbac_role_permissions (역할-권한 매핑)
+## ?�� 5. rbac_role_permissions (??��-권한 매핑)
 
-**목적**: 역할과 권한의 다대다 관계 (M:N)
+**목적**: ??���?권한???��???관�?(M:N)
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK, FK) | `role-admin-001` |
-| **permission_id** | VARCHAR(50) | ✖ | 권한 ID (PK, FK) | `perm-agent-001` |
-| assigned_at | TIMESTAMP | ✖ | 할당 일시 | `2026-01-21 10:00:00` |
-| assigned_by | VARCHAR(50) | ✓ | 할당자 ID | Agent ID |
+| **role_id** | VARCHAR(50) | ??| ??�� ID (PK, FK) | `role-admin-001` |
+| **permission_id** | VARCHAR(50) | ??| 권한 ID (PK, FK) | `perm-agent-001` |
+| assigned_at | TIMESTAMP | ??| ?�당 ?�시 | `2026-01-21 10:00:00` |
+| assigned_by | VARCHAR(50) | ??| ?�당??ID | Agent ID |
 
 **PK**: `(role_id, permission_id)` (복합 PK)
 
-**인덱스**: 
+**?�덱??*: 
 - `idx_rp_role`: `(role_id)`
 - `idx_rp_permission`: `(permission_id)`
 
 **FK**: 
-- `role_id` → `rbac_roles(role_id)` ON DELETE CASCADE
-- `permission_id` → `rbac_permissions(permission_id)` ON DELETE CASCADE
+- `role_id` ??`rbac_roles(role_id)` ON DELETE CASCADE
+- `permission_id` ??`rbac_permissions(permission_id)` ON DELETE CASCADE
 
-**초기 매핑 수**:
-- **ADMIN**: 35개 권한 (전체 권한)
-- **TEAM_LEAD**: 6개 권한 (agent:read, agent:update, agent:transfer, dept:read, role:read, permission:read)
-- **AGENT**: 3개 권한 (agent:read, dept:read, role:read)
-- **INBOUND_AGENT**: 3개 권한 (channel:inbound:receive, channel:inbound:hold, channel:inbound:transfer)
-- **CHAT_AGENT**: 3개 권한 (channel:chat:message, channel:chat:file, channel:chat:emoji)
-- **MULTI_CHANNEL_AGENT**: 14개 권한 (모든 채널 권한)
+**초기 매핑 ??*:
+- **ADMIN**: 35�?권한 (?�체 권한)
+- **TEAM_LEAD**: 6�?권한 (agent:read, agent:update, agent:transfer, dept:read, role:read, permission:read)
+- **AGENT**: 3�?권한 (agent:read, dept:read, role:read)
+- **INBOUND_AGENT**: 3�?권한 (channel:inbound:receive, channel:inbound:hold, channel:inbound:transfer)
+- **CHAT_AGENT**: 3�?권한 (channel:chat:message, channel:chat:file, channel:chat:emoji)
+- **MULTI_CHANNEL_AGENT**: 14�?권한 (모든 채널 권한)
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- ADMIN 역할에 모든 권한 할당
+-- ADMIN ??��??모든 권한 ?�당
 ('role-admin-001', 'perm-agent-001', NOW(), NULL),
 ('role-admin-001', 'perm-agent-002', NOW(), NULL),
 ('role-admin-001', 'perm-dept-001', NOW(), NULL),
 ...
 
--- TEAM_LEAD 역할에 일부 권한 할당
+-- TEAM_LEAD ??��???��? 권한 ?�당
 ('role-teamlead-001', 'perm-agent-002', NOW(), NULL),  -- agent:read
 ('role-teamlead-001', 'perm-agent-003', NOW(), NULL),  -- agent:update
 ('role-teamlead-001', 'perm-dept-002', NOW(), NULL),   -- dept:read
@@ -423,42 +423,42 @@
 
 ---
 
-## 👥 6. rbac_agent_roles (사용자-역할 매핑)
+## ?�� 6. user_agent_roles (?�용????�� 매핑)
 
-**목적**: 사용자와 역할의 다대다 관계 (M:N) - 하나의 사용자에게 여러 역할 할당 가능
+**목적**: ?�용?��? ??��???��???관�?(M:N) - ?�나???�용?�에�??�러 ??�� ?�당 가??
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **agent_id** | VARCHAR(50) | ✖ | 사용자 ID (PK, FK) | `agent-admin-001` |
-| **role_id** | VARCHAR(50) | ✖ | 역할 ID (PK, FK) | `role-admin-001` |
-| assigned_at | TIMESTAMP | ✖ | 할당 일시 | `2026-01-21 10:00:00` |
-| assigned_by | VARCHAR(50) | ✓ | 할당자 ID | Agent ID |
+| **agent_id** | VARCHAR(50) | ??| ?�용??ID (PK, FK) | `agent-admin-001` |
+| **role_id** | VARCHAR(50) | ??| ??�� ID (PK, FK) | `role-admin-001` |
+| assigned_at | TIMESTAMP | ??| ?�당 ?�시 | `2026-01-21 10:00:00` |
+| assigned_by | VARCHAR(50) | ??| ?�당??ID | Agent ID |
 
 **PK**: `(agent_id, role_id)` (복합 PK)
 
-**인덱스**: 
+**?�덱??*: 
 - `idx_ar_agent`: `(agent_id)`
 - `idx_ar_role`: `(role_id)`
 
 **FK**: 
-- `agent_id` → `agents(agent_id)` ON DELETE CASCADE
-- `role_id` → `rbac_roles(role_id)` ON DELETE CASCADE
+- `agent_id` ??`agents(agent_id)` ON DELETE CASCADE
+- `role_id` ??`rbac_roles(role_id)` ON DELETE CASCADE
 
-**사용 예시**:
-한 사용자가 여러 역할을 동시에 가질 수 있습니다:
-- POSITION 역할 1개 + CHANNEL 역할 N개
-- 예: `TEAM_LEAD` (직급) + `INBOUND_AGENT` (채널) + `CHAT_AGENT` (채널)
+**?�용 ?�시**:
+???�용?��? ?�러 ??��???�시??가�????�습?�다:
+- POSITION ??�� 1�?+ CHANNEL ??�� N�?
+- ?? `TEAM_LEAD` (직급) + `INBOUND_AGENT` (채널) + `CHAT_AGENT` (채널)
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- 관리자: ADMIN 역할만
+-- 관리자: ADMIN ??���?
 ('agent-admin-001', 'role-admin-001', NOW(), NULL),
 
--- 팀장: TEAM_LEAD + INBOUND_AGENT
+-- ?�?? TEAM_LEAD + INBOUND_AGENT
 ('agent-lead-001', 'role-teamlead-001', NOW(), NULL),
 ('agent-lead-001', 'role-ch-inbound', NOW(), NULL),
 
--- 일반 상담사: AGENT + INBOUND_AGENT + CHAT_AGENT (멀티 채널)
+-- ?�반 ?�담?? AGENT + INBOUND_AGENT + CHAT_AGENT (멀??채널)
 ('agent-001', 'role-agent-001', NOW(), NULL),
 ('agent-001', 'role-ch-inbound', NOW(), NULL),
 ('agent-001', 'role-ch-chat', NOW(), NULL)
@@ -466,52 +466,52 @@
 
 ---
 
-## 📊 초기 데이터 요약
+## ?�� 초기 ?�이???�약
 
-### 역할 (8개)
-| 역할명 | 타입 | 데이터 스코프 | 설명 |
+### ??�� (8�?
+| ??���?| ?�??| ?�이???�코??| ?�명 |
 |--------|------|---------------|------|
-| ADMIN | POSITION | ADMIN | 시스템 관리자 (전체 권한) |
-| TEAM_LEAD | POSITION | TEAM_LEAD | 팀장 (팀 + 하위 접근) |
-| AGENT | POSITION | MEMBER | 일반 상담사 (본인 팀만) |
-| INBOUND_AGENT | CHANNEL | NULL | 인바운드 전화 상담 |
-| OUTBOUND_AGENT | CHANNEL | NULL | 아웃바운드 전화 상담 |
-| CHAT_AGENT | CHANNEL | NULL | 채팅 상담 |
-| EMAIL_AGENT | CHANNEL | NULL | 이메일 상담 |
-| MULTI_CHANNEL_AGENT | CHANNEL | NULL | 멀티채널 상담 (모든 채널) |
+| ADMIN | POSITION | ADMIN | ?�스??관리자 (?�체 권한) |
+| TEAM_LEAD | POSITION | TEAM_LEAD | ?�??(?� + ?�위 ?�근) |
+| AGENT | POSITION | MEMBER | ?�반 ?�담??(본인 ?��? |
+| INBOUND_AGENT | CHANNEL | NULL | ?�바?�드 ?�화 ?�담 |
+| OUTBOUND_AGENT | CHANNEL | NULL | ?�웃바운???�화 ?�담 |
+| CHAT_AGENT | CHANNEL | NULL | 채팅 ?�담 |
+| EMAIL_AGENT | CHANNEL | NULL | ?�메???�담 |
+| MULTI_CHANNEL_AGENT | CHANNEL | NULL | 멀?�채???�담 (모든 채널) |
 
-### 권한 (35개)
-| 카테고리 | 권한 수 | 예시 |
+### 권한 (31�?
+| 카테고리 | 권한 ??| ?�시 |
 |----------|---------|------|
-| AGENT | 9개 | agent:create, agent:read, agent:update, agent:delete, agent:suspend, agent:activate, agent:transfer, agent:role:assign, agent:password:reset |
-| DEPARTMENT | 6개 | dept:create, dept:read, dept:update, dept:delete, dept:move, dept:deactivate |
-| RBAC | 6개 | role:create, role:read, role:update, role:delete, permission:read, permission:assign |
-| CHANNEL | 14개 | channel:inbound:receive, channel:outbound:call, channel:chat:message, channel:email:send 등 |
+| AGENT | 9�?| agent:create, agent:read, agent:update, agent:delete, agent:suspend, agent:activate, agent:transfer, agent:role:assign, agent:password:reset |
+| DEPARTMENT | 6�?| dept:create, dept:read, dept:update, dept:delete, dept:move, dept:deactivate |
+| RBAC | 6�?| role:create, role:read, role:update, role:delete, permission:read, permission:assign |
+| CHANNEL | 10�?| channel:inbound:receive/hold/transfer (3), channel:outbound:call/campaign (2), channel:chat:message/file/emoji (3), channel:email:send/receive (2) |
 
-### 샘플 데이터
-**부서 (4개)**:
+### ?�플 ?�이??
+**부??(4�?**:
 ```
-넥스프론 (COMPANY)
-└── 고객서비스본부 (DIVISION)
-    ├── 인바운드팀 (TEAM)
-    └── 아웃바운드팀 (TEAM)
+?�스?�론 (COMPANY)
+?��??� 고객?�비?�본부 (DIVISION)
+    ?��??� ?�바?�드?� (TEAM)
+    ?��??� ?�웃바운?��? (TEAM)
 ```
 
-**사용자 (3개)**:
-| 로그인 ID | 이름 | 부서 | 역할 | 비밀번호 |
+**?�용??(3�?**:
+| 로그??ID | ?�름 | 부??| ??�� | 비�?번호 |
 |-----------|------|------|------|----------|
-| admin | 관리자 | 넥스프론 | ADMIN | password123 |
-| teamlead01 | 김팀장 | 고객서비스본부 | TEAM_LEAD, INBOUND_AGENT | password123 |
-| agent01 | 홍길동 | 인바운드팀 | AGENT, INBOUND_AGENT, CHAT_AGENT | password123 |
+| admin | 관리자 | ?�스?�론 | ADMIN | password123 |
+| teamlead01 | 김?�??| 고객?�비?�본부 | TEAM_LEAD, INBOUND_AGENT | password123 |
+| agent01 | ?�길??| ?�바?�드?� | AGENT, INBOUND_AGENT, CHAT_AGENT | password123 |
 
 ---
 
-## 🔍 주요 쿼리 예시
+## ?�� 주요 쿼리 ?�시
 
-### 1. 사용자의 모든 권한 조회 (계산된 권한)
+### 1. ?�용?�의 모든 권한 조회 (계산??권한)
 ```sql
 SELECT DISTINCT p.code, p.name, p.category
-FROM rbac_agent_roles ar
+FROM user_agent_roles ar
 JOIN rbac_role_permissions rp ON ar.role_id = rp.role_id
 JOIN rbac_permissions p ON rp.permission_id = p.permission_id
 WHERE ar.agent_id = 'agent-admin-001'
@@ -519,7 +519,7 @@ WHERE ar.agent_id = 'agent-admin-001'
 ORDER BY p.category, p.code;
 ```
 
-### 2. 역할별 권한 수 확인
+### 2. ??���?권한 ???�인
 ```sql
 SELECT r.name AS role_name, r.type, COUNT(rp.permission_id) AS permission_count
 FROM rbac_roles r
@@ -529,7 +529,7 @@ GROUP BY r.role_id, r.name, r.type
 ORDER BY r.type, r.name;
 ```
 
-### 3. 부서별 사용자 수 (활성 사용자만)
+### 3. 부?�별 ?�용????(?�성 ?�용?�만)
 ```sql
 SELECT d.name AS dept_name, COUNT(a.agent_id) AS agent_count
 FROM org_departments d
@@ -539,7 +539,7 @@ GROUP BY d.dept_id, d.name
 ORDER BY d.org_path;
 ```
 
-### 4. 하위 부서 조회 (Materialized Path 활용)
+### 4. ?�위 부??조회 (Materialized Path ?�용)
 ```sql
 SELECT dept_id, name, type, depth, org_path
 FROM org_departments
@@ -548,11 +548,11 @@ WHERE tenant_id = 'tenant-001'
 ORDER BY org_path;
 ```
 
-### 5. 특정 권한을 가진 사용자 찾기
+### 5. ?�정 권한??가�??�용??찾기
 ```sql
 SELECT DISTINCT a.login_id, a.name, a.email
 FROM agents a
-JOIN rbac_agent_roles ar ON a.agent_id = ar.agent_id
+JOIN user_agent_roles ar ON a.agent_id = ar.agent_id
 JOIN rbac_role_permissions rp ON ar.role_id = rp.role_id
 JOIN rbac_permissions p ON rp.permission_id = p.permission_id
 WHERE p.code = 'agent:delete'
@@ -563,44 +563,44 @@ ORDER BY a.name;
 
 ---
 
-## 🚀 성능 최적화
+## ?? ?�능 최적??
 
-### 인덱스 전략
-1. **복합 유니크 인덱스**: 테넌트 격리 및 중복 방지
+### ?�덱???�략
+1. **복합 ?�니???�덱??*: ?�넌??격리 �?중복 방�?
    - `(tenant_id, login_id)` - agents
    - `(tenant_id, name)` - rbac_roles
    - `(tenant_id, code)` - rbac_permissions
 
-2. **조회 성능 인덱스**:
-   - `org_path` - 하위 부서 조회 최적화
-   - `status` - 활성 사용자 필터링
-   - `type`, `is_active` - 역할/부서 타입별 조회
+2. **조회 ?�능 ?�덱??*:
+   - `org_path` - ?�위 부??조회 최적??
+   - `status` - ?�성 ?�용???�터�?
+   - `type`, `is_active` - ??��/부???�?�별 조회
 
-3. **FK 인덱스**: JOIN 성능 향상
+3. **FK ?�덱??*: JOIN ?�능 ?�상
    - `parent_dept_id`, `dept_id`, `role_id`, `permission_id`
 
-### 쿼리 최적화 팁
-1. **Materialized Path**: `LIKE '/parent/%'`로 하위 부서 빠르게 조회
-2. **복합 PK**: 매핑 테이블에서 중복 방지 및 빠른 조회
-3. **ON DELETE CASCADE**: 역할/권한 삭제 시 매핑 자동 정리
-4. **낙관적 잠금**: `version` 컬럼으로 동시성 제어
+### 쿼리 최적????
+1. **Materialized Path**: `LIKE '/parent/%'`�??�위 부??빠르�?조회
+2. **복합 PK**: 매핑 ?�이블에??중복 방�? �?빠른 조회
+3. **ON DELETE CASCADE**: ??��/권한 ??�� ??매핑 ?�동 ?�리
+4. **?��????�금**: `version` 컬럼?�로 ?�시???�어
 
 ---
 
-## 📝 마이그레이션 가이드
+## ?�� 마이그레?�션 가?�드
 
-### v2.x → v3.0.0 마이그레이션
+### v2.x ??v3.0.0 마이그레?�션
 
-**1. 테이블명 변경**:
+**1. ?�이블명 변�?*:
 ```sql
 ALTER TABLE departmentEntities RENAME TO org_departments;
 ALTER TABLE roles RENAME TO rbac_roles;
 ALTER TABLE permissions RENAME TO rbac_permissions;
 ALTER TABLE role_permissions RENAME TO rbac_role_permissions;
-ALTER TABLE agent_roles RENAME TO rbac_agent_roles;
+ALTER TABLE agent_roles RENAME TO user_agent_roles;
 ```
 
-**2. 부서 타입 및 상태 컬럼 추가**:
+**2. 부???�??�??�태 컬럼 추�?**:
 ```sql
 ALTER TABLE org_departments ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'TEAM';
 ALTER TABLE org_departments ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
@@ -608,7 +608,7 @@ ALTER TABLE org_departments ADD CONSTRAINT chk_dept_type
   CHECK (type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM'));
 ```
 
-**3. 역할 테이블에 data_scope 추가**:
+**3. ??�� ?�이블에 data_scope 추�?**:
 ```sql
 ALTER TABLE rbac_roles ADD COLUMN data_scope VARCHAR(20);
 UPDATE rbac_roles SET data_scope = 'ADMIN' WHERE type = 'POSITION' AND name = 'ADMIN';
@@ -618,69 +618,69 @@ UPDATE rbac_roles SET data_scope = 'MEMBER' WHERE type = 'POSITION' AND name IN 
 
 ---
 
-**최종 업데이트**: 2026-02-05  
+**최종 ?�데?�트**: 2026-02-05  
 **버전**: v3.0.0  
-**작성자**: Identity Modulith Development Team
-- PHONE_AGENT: 3개
-- CHAT_AGENT: 2개
-- EMAIL_AGENT: 1개
-- SUPERVISOR: 15개
+**?�성??*: Identity Modulith Development Team
+- PHONE_AGENT: 3�?
+- CHAT_AGENT: 2�?
+- EMAIL_AGENT: 1�?
+- SUPERVISOR: 15�?
 
 ---
 
-## 👥 6. agent_roles (사용자-역할 매핑)
+## ?�� 6. agent_roles (?�용????�� 매핑)
 
-**목적**: 사용자와 역할의 다대다 관계
+**목적**: ?�용?��? ??��???��???관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식/예시 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식/?�시 |
 |--------|------|------|------|----------------|
-| **id** | BIGSERIAL | ✖ | 매핑 ID (PK) | 1, 2, 3... |
-| agent_id | VARCHAR(36) | ✖ | 사용자 ID (FK) | UUID |
-| role_id | VARCHAR(36) | ✖ | 역할 ID (FK) | UUID |
-| assigned_at | TIMESTAMP | ✖ | 할당 일시 | `2026-01-21 10:00:00` |
+| **id** | BIGSERIAL | ??| 매핑 ID (PK) | 1, 2, 3... |
+| agent_id | VARCHAR(36) | ??| ?�용??ID (FK) | UUID |
+| role_id | VARCHAR(36) | ??| ??�� ID (FK) | UUID |
+| assigned_at | TIMESTAMP | ??| ?�당 ?�시 | `2026-01-21 10:00:00` |
 
-**인덱스**: `(agent_id, role_id)` UK, `agent_id`, `role_id`  
-**FK**: `agent_id` → `agents(agent_id)` ON DELETE CASCADE  
-**FK**: `role_id` → `roles(role_id)` ON DELETE CASCADE
+**?�덱??*: `(agent_id, role_id)` UK, `agent_id`, `role_id`  
+**FK**: `agent_id` ??`agents(agent_id)` ON DELETE CASCADE  
+**FK**: `role_id` ??`roles(role_id)` ON DELETE CASCADE
 
-**💡 사용자는 여러 역할을 동시에 가질 수 있습니다**:
-- 예: `TEAM_LEAD` + `INBOUND_AGENT` = 팀장이면서 인바운드 전화 상담도 가능
-- 예: `AGENT` + `INBOUND_AGENT` + `CHAT_AGENT` = 멀티 채널 상담사
+**?�� ?�용?�는 ?�러 ??��???�시??가�????�습?�다**:
+- ?? `TEAM_LEAD` + `INBOUND_AGENT` = ?�?�이면서 ?�바?�드 ?�화 ?�담??가??
+- ?? `AGENT` + `INBOUND_AGENT` + `CHAT_AGENT` = 멀??채널 ?�담??
 
 ---
 
-## 🔄 테이블 간 관계도
+## ?�� ?�이�?�?관계도
 
 ```
-org_departments (부서)
-    ↓ 1:N (parent_dept_id)
-org_departments (하위 부서)
-    ↓ 1:N (dept_id)
-agents (사용자)
-    ↓ M:N (rbac_agent_roles)
-rbac_roles (역할)
-    ↓ M:N (rbac_role_permissions)
+org_departments (부??
+    ??1:N (parent_dept_id)
+org_departments (?�위 부??
+    ??1:N (dept_id)
+user_agents (?�용??
+    ??M:N (user_agent_roles)
+rbac_roles (??��)
+    ??M:N (rbac_role_permissions)
 rbac_permissions (권한)
 ```
 
 ---
 
-## 🚀 초기화 방법
+## ?? 초기??방법
 
-### 1. 애플리케이션 실행 (권장)
+### 1. ?�플리�??�션 ?�행 (권장)
 ```bash
 ./gradlew bootRun
 ```
 
-Flyway가 자동으로 `V1_0_0__Complete_Init.sql` 실행 → 6개 테이블 + 표준 데이터 생성
+Flyway가 ?�동?�로 `V1_0_0__Complete_Init.sql` ?�행 ??6�??�이�?+ ?��? ?�이???�성
 
-### 2. 수동 초기화 (필요 시)
+### 2. ?�동 초기??(?�요 ??
 ```bash
-# PostgreSQL 클라이언트에서
+# PostgreSQL ?�라?�언?�에??
 psql -U your_user -d your_database -f src/main/resources/db/migration/V1_0_0__Complete_Init.sql
 ```
 
-### 3. 확인
+### 3. ?�인
 ```sql
 SELECT 'org_departments' as table_name, COUNT(*) FROM org_departments
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
@@ -690,316 +690,316 @@ UNION ALL SELECT 'role_permissions', COUNT(*) FROM role_permissions
 UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 ```
 
-**예상 결과**: 16부서, 16사용자, 8역할, 35권한, 77매핑, 22할당
+**?�상 결과**: 16부?? 16?�용?? 8??��, 35권한, 77매핑, 22?�당
 
 ---
 
 **문서 버전**: 2.0.0 CLEAN  
-**최종 업데이트**: 2026-01-21
+**최종 ?�데?�트**: 2026-01-21
 
 
-### 🎯 핵심 설계 원칙
+### ?�� ?�심 ?�계 ?�칙
 
-1. **UUID 기반 식별자**: 모든 엔티티는 UUID 문자열 (VARCHAR(36)) 사용
-2. **멀티테넌시**: 모든 테이블에 `tenant_id` 컬럼 포함
-3. **Soft Delete**: 역할(`roles`)은 `is_active` 플래그로 논리적 삭제
-4. **감사 추적**: 모든 권한 변경사항은 `audit_logs`에 기록
-5. **계층 구조**: 부서는 자기참조 + org_path로 트리 구현
+1. **UUID 기반 ?�별??*: 모든 ?�티?�는 UUID 문자??(VARCHAR(36)) ?�용
+2. **멀?�테?�시**: 모든 ?�이블에 `tenant_id` 컬럼 ?�함
+3. **Soft Delete**: ??��(`roles`)?� `is_active` ?�래그로 ?�리????��
+4. **감사 추적**: 모든 권한 변경사??? `audit_logs`??기록
+5. **계층 구조**: 부?�는 ?�기참조 + org_path�??�리 구현
 
 ---
 
-## 2. 테이블 상세 명세
+## 2. ?�이�??�세 명세
 
-### 🏢 2.1 departmentEntities (조직/부서)
+### ?�� 2.1 departmentEntities (조직/부??
 
-**목적**: 조직 계층 구조 관리 (트리 구조)
+**목적**: 조직 계층 구조 관�?(?�리 구조)
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **dept_id** | VARCHAR(36) | NOT NULL | 부서 ID (PK) | UUID 형식 (`550e8400-...`) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID | `tenant-001` ~ `tenant-999` |
-| parent_id | VARCHAR(36) | NULL | 상위 부서 ID (FK) | NULL = 최상위, UUID = 하위 부서 |
-| name | VARCHAR(100) | NOT NULL | 부서명 | 한글/영문, 2-100자 |
-| org_path | VARCHAR(500) | NOT NULL | 조직 경로 | `/루트ID/부서ID` 형식 |
-| depth | INTEGER | NOT NULL | 트리 깊이 | 0(최상위) ~ 10(최대) |
-| type | VARCHAR(50) | NULL | 부서 타입 | `본부`, `팀`, `파트`, `실` 등 |
-| created_at | TIMESTAMP | NOT NULL | 생성 일시 | `2026-01-20 10:30:00` |
+| **dept_id** | VARCHAR(36) | NOT NULL | 부??ID (PK) | UUID ?�식 (`550e8400-...`) |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID | `tenant-001` ~ `tenant-999` |
+| parent_id | VARCHAR(36) | NULL | ?�위 부??ID (FK) | NULL = 최상?? UUID = ?�위 부??|
+| name | VARCHAR(100) | NOT NULL | 부?�명 | ?��?/?�문, 2-100??|
+| org_path | VARCHAR(500) | NOT NULL | 조직 경로 | `/루트ID/부?�ID` ?�식 |
+| depth | INTEGER | NOT NULL | ?�리 깊이 | 0(최상?? ~ 10(최�?) |
+| type | VARCHAR(50) | NULL | 부???�??| `본�?`, `?�`, `?�트`, `?? ??|
+| created_at | TIMESTAMP | NOT NULL | ?�성 ?�시 | `2026-01-20 10:30:00` |
 
-**인덱스**:
-- UK: `(tenant_id, org_path)` - 경로 중복 방지
+**?�덱??*:
+- UK: `(tenant_id, org_path)` - 경로 중복 방�?
 - IDX: `tenant_id`, `parent_id`, `org_path`
 
 **FK**:
-- `parent_id` → `departmentEntities(dept_id)` ON DELETE RESTRICT
+- `parent_id` ??`departmentEntities(dept_id)` ON DELETE RESTRICT
 
-**데이터 예시**:
+**?�이???�시**:
 ```sql
--- 본부 (최상위)
+-- 본�? (최상??
 ('d0000000-0000-0000-0000-000000000001', 'tenant-001', NULL, 
- '경영지원본부', '/d0000000-0000-0000-0000-000000000001', 0, '본부', NOW())
+ '경영지?�본부', '/d0000000-0000-0000-0000-000000000001', 0, '본�?', NOW())
 
--- 팀 (하위)
+-- ?� (?�위)
 ('d0000000-0000-0000-0000-000000000011', 'tenant-001', 
- 'd0000000-0000-0000-0000-000000000001', '인사팀', 
+ 'd0000000-0000-0000-0000-000000000001', '?�사?�', 
  '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011', 
- 1, '팀', NOW())
+ 1, '?�', NOW())
 ```
 
 ---
 
-### 👤 2.2 agents (사용자/상담사)
+### ?�� 2.2 user_agents (?�용???�담??
 
-**목적**: 시스템 사용자 정보 관리
+**목적**: ?�스???�용???�보 관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **agent_id** | VARCHAR(36) | NOT NULL | 사용자 ID (PK) | UUID 형식 |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID | `tenant-001` |
-| login_id | VARCHAR(100) | NOT NULL | 로그인 ID (UK) | 영문+숫자, 4-20자 |
-| password | VARCHAR(255) | NOT NULL | 비밀번호 | BCrypt 해시 (`$2a$10$...`) |
-| name | VARCHAR(100) | NOT NULL | 사용자명 | 한글/영문, 2-50자 |
-| dept_id | VARCHAR(36) | NULL | 소속 부서 ID (FK) | UUID 또는 NULL |
-| status | VARCHAR(20) | NOT NULL | 상태 | `ACTIVE`, `RETIRED` |
-| password_must_change | BOOLEAN | NULL | 비밀번호 변경 필요 | `true`, `false` |
-| created_at | TIMESTAMP | NOT NULL | 생성 일시 | `2026-01-20 10:30:00` |
-| updated_at | TIMESTAMP | NULL | 수정 일시 | `2026-01-20 15:00:00` |
-| retired_at | TIMESTAMP | NULL | 퇴직 일시 | `2025-12-31 23:59:59` |
-| job_title | VARCHAR(100) | NULL | 직책 | `대리`, `과장`, `팀장` 등 |
-| sync_status | VARCHAR(20) | NULL | 동기화 상태 | `SYNCED`, `PENDING` (Keycloak 연동용) |
-| role_id | VARCHAR(50) | NULL | 역할 ID (레거시) | 사용 중단 예정 |
+| **agent_id** | VARCHAR(36) | NOT NULL | ?�용??ID (PK) | UUID ?�식 |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID | `tenant-001` |
+| login_id | VARCHAR(100) | NOT NULL | 로그??ID (UK) | ?�문+?�자, 4-20??|
+| password | VARCHAR(255) | NOT NULL | 비�?번호 | BCrypt ?�시 (`$2a$10$...`) |
+| name | VARCHAR(100) | NOT NULL | ?�용?�명 | ?��?/?�문, 2-50??|
+| dept_id | VARCHAR(36) | NULL | ?�속 부??ID (FK) | UUID ?�는 NULL |
+| status | VARCHAR(20) | NOT NULL | ?�태 | `ACTIVE`, `RETIRED` |
+| password_must_change | BOOLEAN | NULL | 비�?번호 변�??�요 | `true`, `false` |
+| created_at | TIMESTAMP | NOT NULL | ?�성 ?�시 | `2026-01-20 10:30:00` |
+| updated_at | TIMESTAMP | NULL | ?�정 ?�시 | `2026-01-20 15:00:00` |
+| retired_at | TIMESTAMP | NULL | ?�직 ?�시 | `2025-12-31 23:59:59` |
+| job_title | VARCHAR(100) | NULL | 직책 | `?��?, `과장`, `?�?? ??|
+| sync_status | VARCHAR(20) | NULL | ?�기???�태 | `SYNCED`, `PENDING` (Keycloak ?�동?? |
+| role_id | VARCHAR(50) | NULL | ??�� ID (?�거?? | ?�용 중단 ?�정 |
 
-**인덱스**:
+**?�덱??*:
 - UK: `login_id`
 - IDX: `tenant_id`, `dept_id`, `status`, `login_id`
 
 **FK**:
-- `dept_id` → `departmentEntities(dept_id)` ON DELETE SET NULL
+- `dept_id` ??`departmentEntities(dept_id)` ON DELETE SET NULL
 
-**데이터 표준**:
-- **login_id**: 소문자 + 숫자 조합 (`admin`, `hong123`, `kim_gd`)
-- **password**: BCrypt 해시만 저장 (평문 저장 금지)
-- **status**: `ACTIVE`(활성), `RETIRED`(퇴직) 만 사용
-- **name**: 실명 사용 권장
+**?�이???��?**:
+- **login_id**: ?�문??+ ?�자 조합 (`admin`, `hong123`, `kim_gd`)
+- **password**: BCrypt ?�시�??�??(?�문 ?�??금�?)
+- **status**: `ACTIVE`(?�성), `RETIRED`(?�직) �??�용
+- **name**: ?�명 ?�용 권장
 
 ---
 
-### 🎭 2.3 roles (역할)
+### ?�� 2.3 roles (??��)
 
-**목적**: RBAC 역할 정의
+**목적**: RBAC ??�� ?�의
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **role_id** | VARCHAR(36) | NOT NULL | 역할 ID (PK) | UUID 형식 |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(64) | NOT NULL | 역할명 (UK) | 대문자+언더스코어, 2-64자 |
-| type | VARCHAR(32) | NOT NULL | 역할 타입 | `POSITION`, `CHANNEL`, `SKILL` |
-| description | VARCHAR(255) | NULL | 역할 설명 | 목적 및 권한 범위 설명 |
-| is_active | BOOLEAN | NOT NULL | 활성화 상태 | `true`(활성), `false`(비활성) |
-| version | BIGINT | NOT NULL | 낙관적 잠금 버전 | 0부터 시작, 수정 시 +1 |
-| created_at | TIMESTAMP | NOT NULL | 생성 일시 | `2026-01-20 10:30:00` |
-| updated_at | TIMESTAMP | NOT NULL | 수정 일시 | `2026-01-20 15:00:00` |
+| **role_id** | VARCHAR(36) | NOT NULL | ??�� ID (PK) | UUID ?�식 |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID | `tenant-001` |
+| name | VARCHAR(64) | NOT NULL | ??���?(UK) | ?�문자+?�더?�코?? 2-64??|
+| type | VARCHAR(32) | NOT NULL | ??�� ?�??| `POSITION`, `CHANNEL`, `SKILL` |
+| description | VARCHAR(255) | NULL | ??�� ?�명 | 목적 �?권한 범위 ?�명 |
+| is_active | BOOLEAN | NOT NULL | ?�성???�태 | `true`(?�성), `false`(비활?? |
+| version | BIGINT | NOT NULL | ?��????�금 버전 | 0부???�작, ?�정 ??+1 |
+| created_at | TIMESTAMP | NOT NULL | ?�성 ?�시 | `2026-01-20 10:30:00` |
+| updated_at | TIMESTAMP | NOT NULL | ?�정 ?�시 | `2026-01-20 15:00:00` |
 
-**인덱스**:
+**?�덱??*:
 - UK: `(tenant_id, name)`
 - IDX: `tenant_id`, `is_active`
 
-**역할 타입 (type)**:
-- **POSITION**: 직급 기반 (예: `ADMIN`, `TEAM_LEADER`, `MEMBER`)
-- **CHANNEL**: 채널 기반 (예: `INBOUND`, `OUTBOUND`, `CHAT`)
-- **SKILL**: 스킬 기반 (예: `VIP_SUPPORT`, `TECHNICAL_SUPPORT`)
+**??�� ?�??(type)**:
+- **POSITION**: 직급 기반 (?? `ADMIN`, `TEAM_LEADER`, `MEMBER`)
+- **CHANNEL**: 채널 기반 (?? `INBOUND`, `OUTBOUND`, `CHAT`)
+- **SKILL**: ?�킬 기반 (?? `VIP_SUPPORT`, `TECHNICAL_SUPPORT`)
 
-**역할명 (name) 표준**:
+**??���?(name) ?��?**:
 ```
-- 전체 관리자: ADMIN
-- 팀장: TEAM_LEADER
-- 일반 상담사: AGENT
-- 인바운드 상담: INBOUND_AGENT
-- 아웃바운드 상담: OUTBOUND_AGENT
-- 채팅 상담: CHAT_AGENT
-- VIP 전담: VIP_AGENT
-- 기술 지원: TECH_SUPPORT
+- ?�체 관리자: ADMIN
+- ?�?? TEAM_LEADER
+- ?�반 ?�담?? AGENT
+- ?�바?�드 ?�담: INBOUND_AGENT
+- ?�웃바운???�담: OUTBOUND_AGENT
+- 채팅 ?�담: CHAT_AGENT
+- VIP ?�담: VIP_AGENT
+- 기술 지?? TECH_SUPPORT
 ```
 
 ---
 
-### 🔑 2.4 permissions (권한)
+### ?�� 2.4 permissions (권한)
 
-**목적**: RBAC 권한 정의
+**목적**: RBAC 권한 ?�의
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **permission_id** | VARCHAR(36) | NOT NULL | 권한 ID (PK) | UUID 형식 |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID | `tenant-001` |
-| code | VARCHAR(128) | NOT NULL | 권한 코드 (UK) | `domain:action` 형식 |
-| created_at | TIMESTAMP | NOT NULL | 생성 일시 | `2026-01-20 10:30:00` |
+| **permission_id** | VARCHAR(36) | NOT NULL | 권한 ID (PK) | UUID ?�식 |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID | `tenant-001` |
+| code | VARCHAR(128) | NOT NULL | 권한 코드 (UK) | `domain:action` ?�식 |
+| created_at | TIMESTAMP | NOT NULL | ?�성 ?�시 | `2026-01-20 10:30:00` |
 
-**인덱스**:
+**?�덱??*:
 - UK: `(tenant_id, code)`
 - IDX: `tenant_id`
 
-**권한 코드 (code) 표준**:
+**권한 코드 (code) ?��?**:
 
-형식: `{domain}:{action}`
+?�식: `{domain}:{action}`
 
-**도메인 (domain)**:
-- `user`: 사용자 관리
-- `org`: 조직 관리
-- `role`: 역할 관리
-- `permission`: 권한 관리
-- `agent_role`: 사용자-역할 할당 관리
+**?�메??(domain)**:
+- `user`: ?�용??관�?
+- `org`: 조직 관�?
+- `role`: ??�� 관�?
+- `permission`: 권한 관�?
+- `agent_role`: ?�용????�� ?�당 관�?
 - `audit`: 감사 로그 조회
 
-**액션 (action)**:
-- `create`: 생성
+**?�션 (action)**:
+- `create`: ?�성
 - `read`: 조회
-- `read:self`: 본인만 조회
-- `update`: 수정
-- `update:self`: 본인만 수정
-- `delete`: 삭제
-- `manage`: 전체 관리
-- `assign`: 할당
+- `read:self`: 본인�?조회
+- `update`: ?�정
+- `update:self`: 본인�??�정
+- `delete`: ??��
+- `manage`: ?�체 관�?
+- `assign`: ?�당
 - `view`: 보기
 
-**표준 권한 코드 예시**:
+**?��? 권한 코드 ?�시**:
 ```
-user:create          - 사용자 생성
-user:read            - 모든 사용자 조회
-user:read:self       - 본인 정보만 조회
-user:update          - 사용자 정보 수정
-user:delete          - 사용자 삭제
-user:manage          - 사용자 전체 관리
-user:assign:role     - 사용자에게 역할 할당
-org:view             - 조직도 보기
-org:create           - 부서 생성
-org:update           - 부서 정보 수정
-org:move             - 부서 이동
-org:delete           - 부서 삭제
-role:create          - 역할 생성
-role:read            - 역할 조회
-role:update          - 역할 수정
-role:delete          - 역할 삭제
-role:assign          - 역할에 권한 할당
-permission:create    - 권한 생성
+user:create          - ?�용???�성
+user:read            - 모든 ?�용??조회
+user:read:self       - 본인 ?�보�?조회
+user:update          - ?�용???�보 ?�정
+user:delete          - ?�용????��
+user:manage          - ?�용???�체 관�?
+user:assign:role     - ?�용?�에�???�� ?�당
+org:view             - 조직??보기
+org:create           - 부???�성
+org:update           - 부???�보 ?�정
+org:move             - 부???�동
+org:delete           - 부????��
+role:create          - ??�� ?�성
+role:read            - ??�� 조회
+role:update          - ??�� ?�정
+role:delete          - ??�� ??��
+role:assign          - ??��??권한 ?�당
+permission:create    - 권한 ?�성
 permission:read      - 권한 조회
 audit:view           - 감사 로그 조회
 ```
 
 ---
 
-### 🔗 2.5 role_permissions (역할-권한 매핑)
+### ?�� 2.5 role_permissions (??��-권한 매핑)
 
-**목적**: 역할과 권한의 다대다 관계
+**목적**: ??���?권한???��???관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **id** | BIGSERIAL | NOT NULL | 매핑 ID (PK) | 자동 증가 |
-| role_id | VARCHAR(36) | NOT NULL | 역할 ID (FK) | UUID 형식 |
-| permission_id | VARCHAR(36) | NOT NULL | 권한 ID (FK) | UUID 형식 |
-| assigned_at | TIMESTAMP | NOT NULL | 할당 일시 | `2026-01-20 10:30:00` |
+| **id** | BIGSERIAL | NOT NULL | 매핑 ID (PK) | ?�동 증�? |
+| role_id | VARCHAR(36) | NOT NULL | ??�� ID (FK) | UUID ?�식 |
+| permission_id | VARCHAR(36) | NOT NULL | 권한 ID (FK) | UUID ?�식 |
+| assigned_at | TIMESTAMP | NOT NULL | ?�당 ?�시 | `2026-01-20 10:30:00` |
 
-**인덱스**:
-- UK: `(role_id, permission_id)` - 중복 할당 방지
+**?�덱??*:
+- UK: `(role_id, permission_id)` - 중복 ?�당 방�?
 
 **FK**:
-- `role_id` → `roles(role_id)` ON DELETE CASCADE
-- `permission_id` → `permissions(permission_id)` ON DELETE CASCADE
+- `role_id` ??`roles(role_id)` ON DELETE CASCADE
+- `permission_id` ??`permissions(permission_id)` ON DELETE CASCADE
 
 ---
 
-### 👥 2.6 agent_roles (사용자-역할 매핑)
+### ?�� 2.6 agent_roles (?�용????�� 매핑)
 
-**목적**: 사용자와 역할의 다대다 관계
+**목적**: ?�용?��? ??��???��???관�?
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **id** | BIGSERIAL | NOT NULL | 매핑 ID (PK) | 자동 증가 |
-| agent_id | VARCHAR(36) | NOT NULL | 사용자 ID (FK) | UUID 형식 |
-| role_id | VARCHAR(36) | NOT NULL | 역할 ID (FK) | UUID 형식 |
-| assigned_at | TIMESTAMP | NOT NULL | 할당 일시 | `2026-01-20 10:30:00` |
+| **id** | BIGSERIAL | NOT NULL | 매핑 ID (PK) | ?�동 증�? |
+| agent_id | VARCHAR(36) | NOT NULL | ?�용??ID (FK) | UUID ?�식 |
+| role_id | VARCHAR(36) | NOT NULL | ??�� ID (FK) | UUID ?�식 |
+| assigned_at | TIMESTAMP | NOT NULL | ?�당 ?�시 | `2026-01-20 10:30:00` |
 
-**인덱스**:
-- UK: `(agent_id, role_id)` - 중복 할당 방지
+**?�덱??*:
+- UK: `(agent_id, role_id)` - 중복 ?�당 방�?
 - IDX: `agent_id`, `role_id`
 
 **FK**:
-- `agent_id` → `agents(agent_id)` ON DELETE CASCADE
-- `role_id` → `roles(role_id)` ON DELETE CASCADE
+- `agent_id` ??`agents(agent_id)` ON DELETE CASCADE
+- `role_id` ??`roles(role_id)` ON DELETE CASCADE
 
 ---
 
-### 📝 2.7 audit_logs (감사 로그)
+### ?�� 2.7 audit_logs (감사 로그)
 
-**목적**: 권한 관련 모든 변경사항 추적
+**목적**: 권한 관??모든 변경사??추적
 
-| 컬럼명 | 타입 | NULL | 설명 | 표준 형식 |
+| 컬럼�?| ?�??| NULL | ?�명 | ?��? ?�식 |
 |--------|------|------|------|-----------|
-| **audit_id** | VARCHAR(36) | NOT NULL | 감사 로그 ID (PK) | UUID 형식 |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID | `tenant-001` |
-| action | VARCHAR(32) | NOT NULL | 작업 유형 | `CREATE`, `UPDATE`, `DELETE`, `ASSIGN`, `REVOKE` |
-| resource_type | VARCHAR(64) | NOT NULL | 대상 리소스 타입 | `ROLE`, `PERMISSION`, `AGENT_ROLE` |
-| resource_id | VARCHAR(255) | NOT NULL | 대상 리소스 ID | UUID 또는 복합 ID |
-| operator_id | VARCHAR(255) | NOT NULL | 작업 수행자 ID | 사용자 UUID |
-| changes | TEXT | NULL | 변경 내용 | JSON 형식 |
-| timestamp | TIMESTAMP | NOT NULL | 작업 일시 | `2026-01-20 10:30:00.123` |
-| remarks | TEXT | NULL | 추가 정보 | 메모, 실패 원인 등 |
-| ip_address | VARCHAR(45) | NULL | 클라이언트 IP | `192.168.1.100`, IPv6 포함 |
+| **audit_id** | VARCHAR(36) | NOT NULL | 감사 로그 ID (PK) | UUID ?�식 |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID | `tenant-001` |
+| action | VARCHAR(32) | NOT NULL | ?�업 ?�형 | `CREATE`, `UPDATE`, `DELETE`, `ASSIGN`, `REVOKE` |
+| resource_type | VARCHAR(64) | NOT NULL | ?�??리소???�??| `ROLE`, `PERMISSION`, `AGENT_ROLE` |
+| resource_id | VARCHAR(255) | NOT NULL | ?�??리소??ID | UUID ?�는 복합 ID |
+| operator_id | VARCHAR(255) | NOT NULL | ?�업 ?�행??ID | ?�용??UUID |
+| changes | TEXT | NULL | 변�??�용 | JSON ?�식 |
+| timestamp | TIMESTAMP | NOT NULL | ?�업 ?�시 | `2026-01-20 10:30:00.123` |
+| remarks | TEXT | NULL | 추�? ?�보 | 메모, ?�패 ?�인 ??|
+| ip_address | VARCHAR(45) | NULL | ?�라?�언??IP | `192.168.1.100`, IPv6 ?�함 |
 
-**인덱스**:
+**?�덱??*:
 - IDX: `tenant_id`, `resource_type`, `operator_id`, `timestamp DESC`
 
-**작업 유형 (action) 표준**:
-- `CREATE`: 생성 (역할, 권한)
-- `UPDATE`: 수정
-- `DELETE`: 삭제
-- `ASSIGN`: 할당 (역할-권한, 사용자-역할)
-- `REVOKE`: 회수
+**?�업 ?�형 (action) ?��?**:
+- `CREATE`: ?�성 (??��, 권한)
+- `UPDATE`: ?�정
+- `DELETE`: ??��
+- `ASSIGN`: ?�당 (??��-권한, ?�용????��)
+- `REVOKE`: ?�수
 
-**리소스 타입 (resource_type) 표준**:
-- `ROLE`: 역할
+**리소???�??(resource_type) ?��?**:
+- `ROLE`: ??��
 - `PERMISSION`: 권한
-- `ROLE_PERMISSION`: 역할-권한 매핑
-- `AGENT_ROLE`: 사용자-역할 매핑
+- `ROLE_PERMISSION`: ??��-권한 매핑
+- `AGENT_ROLE`: ?�용????�� 매핑
 
-**변경 내용 (changes) JSON 형식**:
+**변�??�용 (changes) JSON ?�식**:
 ```json
-// 역할 생성
+// ??�� ?�성
 {"roleName": "TEAM_LEADER", "roleType": "POSITION"}
 
-// 역할 수정
+// ??�� ?�정
 {"old": {"isActive": true}, "new": {"isActive": false}}
 
-// 역할-권한 할당
+// ??��-권한 ?�당
 {"roleId": "uuid-role", "permissionId": "uuid-perm", "permissionCode": "user:create"}
 
-// 사용자-역할 할당
+// ?�용????�� ?�당
 {"agentId": "uuid-agent", "roleId": "uuid-role", "roleName": "ADMIN"}
 ```
 
 ---
 
-### 🗄️ 2.8 audit_logs_archive (감사 로그 아카이브)
+### ?���?2.8 audit_logs_archive (감사 로그 ?�카?�브)
 
-**목적**: 6개월 이상 오래된 감사 로그 보관
+**목적**: 6개월 ?�상 ?�래??감사 로그 보�?
 
-| 컬럼명 | 타입 | NULL | 설명 |
+| 컬럼�?| ?�??| NULL | ?�명 |
 |--------|------|------|------|
-| audit_id ~ ip_address | (audit_logs와 동일) | | |
-| archived_at | TIMESTAMP | NOT NULL | 아카이브 일시 |
+| audit_id ~ ip_address | (audit_logs?� ?�일) | | |
+| archived_at | TIMESTAMP | NOT NULL | ?�카?�브 ?�시 |
 
-**데이터 이동**:
-- 매월 1일 자정 자동 이동 (AuditLogArchivingBatchService)
-- 6개월 이전 데이터 대상
+**?�이???�동**:
+- 매월 1???�정 ?�동 ?�동 (AuditLogArchivingBatchService)
+- 6개월 ?�전 ?�이???�??
 
 ---
 
-## 3. 데이터 표준화 규칙
+## 3. ?�이???��???규칙
 
-### 🎯 3.1 UUID 생성 규칙
+### ?�� 3.1 UUID ?�성 규칙
 
-**형식**: `8-4-4-4-12` (총 36자, 하이픈 포함)
-**예시**: `550e8400-e29b-41d4-a716-446655440001`
+**?�식**: `8-4-4-4-12` (�?36?? ?�이???�함)
+**?�시**: `550e8400-e29b-41d4-a716-446655440001`
 
-**생성 방법**:
+**?�성 방법**:
 ```java
 // Java
 UUID.randomUUID().toString()
@@ -1008,198 +1008,198 @@ UUID.randomUUID().toString()
 gen_random_uuid()::text
 ```
 
-### 🏷️ 3.2 테넌트 ID 규칙
+### ?���?3.2 ?�넌??ID 규칙
 
-**형식**: `tenant-{숫자 3자리}`
-**예시**: `tenant-001`, `tenant-002`
+**?�식**: `tenant-{?�자 3?�리}`
+**?�시**: `tenant-001`, `tenant-002`
 **범위**: `tenant-001` ~ `tenant-999`
 
-### 👤 3.3 사용자 로그인 ID 규칙
+### ?�� 3.3 ?�용??로그??ID 규칙
 
-**형식**: 영문 소문자 + 숫자 + 언더스코어
-**길이**: 4-20자
-**예시**: `admin`, `hong123`, `kim_gd`, `team_leader`
-**금지**: 특수문자 (@, #, $ 등), 공백, 한글
+**?�식**: ?�문 ?�문??+ ?�자 + ?�더?�코??
+**길이**: 4-20??
+**?�시**: `admin`, `hong123`, `kim_gd`, `team_leader`
+**금�?**: ?�수문자 (@, #, $ ??, 공백, ?��?
 
-### 🔐 3.4 비밀번호 규칙
+### ?�� 3.4 비�?번호 규칙
 
-**저장**: BCrypt 해시만 저장
-**형식**: `$2a$10$...` (60자)
-**Java 생성**:
+**?�??*: BCrypt ?�시�??�??
+**?�식**: `$2a$10$...` (60??
+**Java ?�성**:
 ```java
 BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-String hashed = encoder.encode("원본비밀번호");
+String hashed = encoder.encode("?�본비�?번호");
 ```
 
-### 🎭 3.5 역할명 규칙
+### ?�� 3.5 ??���?규칙
 
-**형식**: 대문자 + 언더스코어
-**길이**: 2-64자
-**예시**: `ADMIN`, `TEAM_LEADER`, `INBOUND_AGENT`
-**금지**: 소문자, 공백, 특수문자
+**?�식**: ?�문자 + ?�더?�코??
+**길이**: 2-64??
+**?�시**: `ADMIN`, `TEAM_LEADER`, `INBOUND_AGENT`
+**금�?**: ?�문?? 공백, ?�수문자
 
-### 🔑 3.6 권한 코드 규칙
+### ?�� 3.6 권한 코드 규칙
 
-**형식**: `{domain}:{action}`
-**domain**: 소문자, 언더스코어 허용
-**action**: 소문자, 언더스코어 허용, 콜론(`:`) 다중 허용
-**예시**: `user:create`, `org:read:team`, `role:assign`
+**?�식**: `{domain}:{action}`
+**domain**: ?�문?? ?�더?�코???�용
+**action**: ?�문?? ?�더?�코???�용, 콜론(`:`) ?�중 ?�용
+**?�시**: `user:create`, `org:read:team`, `role:assign`
 
-### 📅 3.7 날짜/시간 규칙
+### ?�� 3.7 ?�짜/?�간 규칙
 
-**타입**: `TIMESTAMP WITHOUT TIME ZONE`
-**형식**: `YYYY-MM-DD HH:MI:SS`
-**예시**: `2026-01-20 10:30:00`
-**기본값**: `NOW()` 또는 `CURRENT_TIMESTAMP`
+**?�??*: `TIMESTAMP WITHOUT TIME ZONE`
+**?�식**: `YYYY-MM-DD HH:MI:SS`
+**?�시**: `2026-01-20 10:30:00`
+**기본�?*: `NOW()` ?�는 `CURRENT_TIMESTAMP`
 
 ---
 
-## 4. 테이블 간 관계도
+## 4. ?�이�?�?관계도
 
 ```
-┌─────────────────┐
-│  departmentEntities    │ ◄─────┐
-│  (조직 계층)     │       │ 자기참조 (parent_id)
-└────────┬────────┘       │
-         │                │
-         │ FK: dept_id    │
-         ▼                │
-┌─────────────────┐       │
-│     agents      │       │
-│   (사용자)       │       │
-└────────┬────────┘       │
-         │                │
-         │ FK: agent_id   │
-         ▼                │
-┌─────────────────┐       │
-│  agent_roles    │◄──────┘
-│  (다대다 매핑)   │
-└────────┬────────┘
-         │ FK: role_id
-         ▼
-┌─────────────────┐
-│     roles       │
-│   (역할)        │
-└────────┬────────┘
-         │ FK: role_id
-         ▼
-┌─────────────────┐
-│role_permissions │
-│  (다대다 매핑)   │
-└────────┬────────┘
-         │ FK: permission_id
-         ▼
-┌─────────────────┐
-│  permissions    │
-│   (권한)        │
-└─────────────────┘
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+?? departmentEntities    ???��??�?�?�?�??
+?? (조직 계층)     ??      ???�기참조 (parent_id)
+?��??�?�?�?�?�?�?�?��??�?�?�?�?�?�?�??      ??
+         ??               ??
+         ??FK: dept_id    ??
+         ??               ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??      ??
+??    agents      ??      ??
+??  (?�용??       ??      ??
+?��??�?�?�?�?�?�?�?��??�?�?�?�?�?�?�??      ??
+         ??               ??
+         ??FK: agent_id   ??
+         ??               ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??      ??
+?? agent_roles    ?�◄?�?�?�?�?�?�??
+?? (?��???매핑)   ??
+?��??�?�?�?�?�?�?�?��??�?�?�?�?�?�?�??
+         ??FK: role_id
+         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??    roles       ??
+??  (??��)        ??
+?��??�?�?�?�?�?�?�?��??�?�?�?�?�?�?�??
+         ??FK: role_id
+         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+?�role_permissions ??
+?? (?��???매핑)   ??
+?��??�?�?�?�?�?�?�?��??�?�?�?�?�?�?�??
+         ??FK: permission_id
+         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+?? permissions    ??
+??  (권한)        ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
 
-┌─────────────────┐
-│  audit_logs     │ ──6개월 후──► audit_logs_archive
-│  (감사 로그)     │               (아카이브)
-└─────────────────┘
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+?? audit_logs     ???�?�6개월 ?��??�??audit_logs_archive
+?? (감사 로그)     ??              (?�카?�브)
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
 ```
 
 **CASCADE 규칙**:
-- `role_permissions`: role 삭제 시 매핑도 삭제
-- `agent_roles`: agent 또는 role 삭제 시 매핑도 삭제
+- `role_permissions`: role ??�� ??매핑????��
+- `agent_roles`: agent ?�는 role ??�� ??매핑????��
 
 **SET NULL 규칙**:
-- `agents.dept_id`: departmentEntity 삭제 시 NULL로 변경
+- `agents.dept_id`: departmentEntity ??�� ??NULL�?변�?
 
 **RESTRICT 규칙**:
-- `departmentEntities.parent_id`: 하위 부서 존재 시 삭제 불가
+- `departmentEntities.parent_id`: ?�위 부??존재 ????�� 불�?
 
 ---
 
-## 5. 표준 데이터 예시
+## 5. ?��? ?�이???�시
 
-### 📦 5.1 초기 데이터셋 구성
+### ?�� 5.1 초기 ?�이?�셋 구성
 
-**마이그레이션 스크립트**: `V1_0_9__Insert_Standard_Data.sql`
+**마이그레?�션 ?�크립트**: `V1_0_9__Insert_Standard_Data.sql`
 
 ```
-✅ 조직 구조 (3단계 계층):
-   - 본부 3개
-   - 팀 9개  
-   - 파트 6개
-   - 총 18개 부서
+??조직 구조 (3?�계 계층):
+   - 본�? 3�?
+   - ?� 9�? 
+   - ?�트 6�?
+   - �?18�?부??
 
-✅ 사용자 (16명):
-   - 활성 사용자 15명
-   - 퇴직 사용자 1명
+???�용??(16�?:
+   - ?�성 ?�용??15�?
+   - ?�직 ?�용??1�?
 
-✅ 권한 (35개):
-   - user: 9개
-   - org: 5개
-   - role: 7개
-   - permission: 4개
-   - agent_role: 4개
-   - audit: 6개
+??권한 (35�?:
+   - user: 9�?
+   - org: 5�?
+   - role: 7�?
+   - permission: 4�?
+   - agent_role: 4�?
+   - audit: 6�?
 
-✅ 역할 (8개):
+????�� (8�?:
    - ADMIN (최고 관리자)
-   - TEAM_LEADER (팀장)
-   - AGENT (일반 상담사)
-   - INBOUND_AGENT (인바운드)
-   - OUTBOUND_AGENT (아웃바운드)
-   - CHAT_AGENT (채팅 상담)
-   - VIP_AGENT (VIP 전담)
-   - TECH_SUPPORT (기술 지원)
+   - TEAM_LEADER (?�??
+   - AGENT (?�반 ?�담??
+   - INBOUND_AGENT (?�바?�드)
+   - OUTBOUND_AGENT (?�웃바운??
+   - CHAT_AGENT (채팅 ?�담)
+   - VIP_AGENT (VIP ?�담)
+   - TECH_SUPPORT (기술 지??
 
-✅ 역할-권한 매핑 (77개)
-✅ 사용자-역할 매핑 (18개)
+????��-권한 매핑 (77�?
+???�용????�� 매핑 (18�?
 ```
 
-### 🏢 5.2 조직 구조 예시
+### ?�� 5.2 조직 구조 ?�시
 
 ```sql
--- 최상위 (본부)
+-- 최상??(본�?)
 ('d0000000-0000-0000-0000-000000000001', 'tenant-001', NULL,
- '경영지원본부', '/d0000000-0000-0000-0000-000000000001', 0, '본부', NOW())
+ '경영지?�본부', '/d0000000-0000-0000-0000-000000000001', 0, '본�?', NOW())
 
--- 2단계 (팀)
+-- 2?�계 (?�)
 ('d0000000-0000-0000-0000-000000000011', 'tenant-001',
  'd0000000-0000-0000-0000-000000000001',
- '인사팀', '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011',
- 1, '팀', NOW())
+ '?�사?�', '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011',
+ 1, '?�', NOW())
 
--- 3단계 (파트)
+-- 3?�계 (?�트)
 ('d0000000-0000-0000-0000-000000000111', 'tenant-001',
  'd0000000-0000-0000-0000-000000000011',
- '채용파트', '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011/d0000000-0000-0000-0000-000000000111',
- 2, '파트', NOW())
+ '채용?�트', '/d0000000-0000-0000-0000-000000000001/d0000000-0000-0000-0000-000000000011/d0000000-0000-0000-0000-000000000111',
+ 2, '?�트', NOW())
 ```
 
-### 👤 5.3 사용자 데이터 예시
+### ?�� 5.3 ?�용???�이???�시
 
 ```sql
 INSERT INTO agents VALUES
 -- 최고 관리자
 ('a0000000-0000-0000-0000-000000000001', 'tenant-001', 'admin',
  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- password: admin123
- '시스템 관리자', NULL, 'ACTIVE', false, NOW(), NULL, NULL, '시스템 관리자', NULL, NULL),
+ '?�스??관리자', NULL, 'ACTIVE', false, NOW(), NULL, NULL, '?�스??관리자', NULL, NULL),
 
--- 팀장
+-- ?�??
 ('a0000000-0000-0000-0000-000000000002', 'tenant-001', 'teamlead01',
- '$2a$10$...', '김팀장', 'd0000000-0000-0000-0000-000000000011',
- 'ACTIVE', false, NOW(), NULL, NULL, '팀장', NULL, NULL),
+ '$2a$10$...', '김?�??, 'd0000000-0000-0000-0000-000000000011',
+ 'ACTIVE', false, NOW(), NULL, NULL, '?�??, NULL, NULL),
 
--- 일반 상담사
+-- ?�반 ?�담??
 ('a0000000-0000-0000-0000-000000000003', 'tenant-001', 'agent01',
- '$2a$10$...', '이상담', 'd0000000-0000-0000-0000-000000000021',
- 'ACTIVE', false, NOW(), NULL, NULL, '대리', NULL, NULL);
+ '$2a$10$...', '?�상??, 'd0000000-0000-0000-0000-000000000021',
+ 'ACTIVE', false, NOW(), NULL, NULL, '?��?, NULL, NULL);
 ```
 
-### 🎭 5.4 역할-권한 매핑 예시
+### ?�� 5.4 ??��-권한 매핑 ?�시
 
 ```sql
--- ADMIN 역할에 모든 권한 할당
+-- ADMIN ??��??모든 권한 ?�당
 INSERT INTO role_permissions (role_id, permission_id, assigned_at)
 SELECT 'r0000000-0000-0000-0000-000000000001', permission_id, NOW()
 FROM permissions WHERE tenant_id = 'tenant-001';
 
--- TEAM_LEADER 역할에 팀 관리 권한 할당
+-- TEAM_LEADER ??��???� 관�?권한 ?�당
 INSERT INTO role_permissions (role_id, permission_id, assigned_at)
 SELECT 'r0000000-0000-0000-0000-000000000002', permission_id, NOW()
 FROM permissions 
@@ -1207,18 +1207,18 @@ WHERE tenant_id = 'tenant-001'
   AND code IN ('user:read', 'org:view', 'org:update');
 ```
 
-### 👥 5.5 사용자-역할 매핑 예시
+### ?�� 5.5 ?�용????�� 매핑 ?�시
 
 ```sql
--- admin 사용자에게 ADMIN 역할 할당
+-- admin ?�용?�에�?ADMIN ??�� ?�당
 INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
 ('a0000000-0000-0000-0000-000000000001', 'r0000000-0000-0000-0000-000000000001', NOW());
 
--- teamlead01 사용자에게 TEAM_LEADER 역할 할당
+-- teamlead01 ?�용?�에�?TEAM_LEADER ??�� ?�당
 INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
 ('a0000000-0000-0000-0000-000000000002', 'r0000000-0000-0000-0000-000000000002', NOW());
 
--- 다중 역할 할당 예시 (상담사 + VIP 전담)
+-- ?�중 ??�� ?�당 ?�시 (?�담??+ VIP ?�담)
 INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
 ('a0000000-0000-0000-0000-000000000003', 'r0000000-0000-0000-0000-000000000003', NOW()),
 ('a0000000-0000-0000-0000-000000000003', 'r0000000-0000-0000-0000-000000000007', NOW());
@@ -1226,9 +1226,9 @@ INSERT INTO agent_roles (agent_id, role_id, assigned_at) VALUES
 
 ---
 
-## 🔍 부록: 유용한 SQL 쿼리
+## ?�� 부�? ?�용??SQL 쿼리
 
-### A. 조직도 전체 조회 (계층 구조)
+### A. 조직???�체 조회 (계층 구조)
 ```sql
 WITH RECURSIVE org_tree AS (
   SELECT dept_id, name, parent_id, 0 AS level, name AS path
@@ -1245,7 +1245,7 @@ WITH RECURSIVE org_tree AS (
 SELECT * FROM org_tree ORDER BY path;
 ```
 
-### B. 사용자별 권한 조회
+### B. ?�용?�별 권한 조회
 ```sql
 SELECT a.login_id, a.name, r.name AS role_name, p.code AS permission_code
 FROM agents a
@@ -1258,7 +1258,7 @@ WHERE a.tenant_id = 'tenant-001'
 ORDER BY a.login_id, r.name, p.code;
 ```
 
-### C. 감사 로그 조회 (최근 7일)
+### C. 감사 로그 조회 (최근 7??
 ```sql
 SELECT audit_id, action, resource_type, operator_id, timestamp, changes
 FROM audit_logs
@@ -1268,7 +1268,7 @@ ORDER BY timestamp DESC
 LIMIT 100;
 ```
 
-### D. 부서별 인원 집계
+### D. 부?�별 ?�원 집계
 ```sql
 SELECT d.name AS dept_name, COUNT(a.agent_id) AS agent_count
 FROM departmentEntities d
@@ -1280,281 +1280,281 @@ ORDER BY d.org_path;
 
 ---
 
-## 📌 중요 참고사항
+## ?�� 중요 참고?�항
 
-### ⚠️ 주의사항
+### ?�️ 주의?�항
 
-1. **UUID 일관성**: 모든 엔티티 ID는 UUID (VARCHAR(36)) 사용
-2. **테넌트 격리**: 모든 쿼리에 `tenant_id` 조건 필수
-3. **Soft Delete**: 역할은 `is_active = false`로 논리적 삭제
-4. **CASCADE 주의**: 역할/권한 삭제 시 매핑 테이블 자동 삭제됨
-5. **감사 로그**: 모든 권한 변경은 자동으로 `audit_logs`에 기록
+1. **UUID ?��???*: 모든 ?�티??ID??UUID (VARCHAR(36)) ?�용
+2. **?�넌??격리**: 모든 쿼리??`tenant_id` 조건 ?�수
+3. **Soft Delete**: ??��?� `is_active = false`�??�리????��
+4. **CASCADE 주의**: ??��/권한 ??�� ??매핑 ?�이�??�동 ??��??
+5. **감사 로그**: 모든 권한 변경�? ?�동?�로 `audit_logs`??기록
 
-### 📋 체크리스트
+### ?�� 체크리스??
 
-프로덕션 배포 전 확인:
-- [ ] 모든 FK 제약조건 확인
-- [ ] 인덱스 성능 테스트
-- [ ] 테넌트 격리 검증
-- [ ] 감사 로그 아카이빙 스케줄 설정
-- [ ] 백업 정책 수립
+?�로?�션 배포 ???�인:
+- [ ] 모든 FK ?�약조건 ?�인
+- [ ] ?�덱???�능 ?�스??
+- [ ] ?�넌??격리 검�?
+- [ ] 감사 로그 ?�카?�빙 ?��?�??�정
+- [ ] 백업 ?�책 ?�립
 
 ---
 
-## 📚 관련 문서
+## ?�� 관??문서
 
-- [AUDIT_AND_CONSTANTS_ANALYSIS.md](./AUDIT_AND_CONSTANTS_ANALYSIS.md) - 감사 로그 & 상수 분석
-- [V1_0_0__Complete_Init.sql](./src/main/resources/db/migration/V1_0_0__Complete_Init.sql) - DB 초기화 스크립트
-- [V1_0_9__Insert_Standard_Data.sql](./src/main/resources/db/migration/V1_0_9__Insert_Standard_Data.sql) - 표준 데이터 삽입
+- [AUDIT_AND_CONSTANTS_ANALYSIS.md](./AUDIT_AND_CONSTANTS_ANALYSIS.md) - 감사 로그 & ?�수 분석
+- [V1_0_0__Complete_Init.sql](./src/main/resources/db/migration/V1_0_0__Complete_Init.sql) - DB 초기???�크립트
+- [V1_0_9__Insert_Standard_Data.sql](./src/main/resources/db/migration/V1_0_9__Insert_Standard_Data.sql) - ?��? ?�이???�입
 
 ---
 
 **문서 버전**: 2.0
 **최종 검증일**: 2026-01-20
-**작성자**: Identity Modulith Team
+**?�성??*: Identity Modulith Team
 
-> **목적**: 데이터베이스 설계, 테이블 구조, 표준 데이터를 한 곳에서 확인  
-> **대상**: 개발팀, 운영팀  
+> **목적**: ?�이?�베?�스 ?�계, ?�이�?구조, ?��? ?�이?��? ??곳에???�인  
+> **?�??*: 개발?�, ?�영?�  
 > **버전**: 2.0  
-> **최종 수정일**: 2026-01-16
+> **최종 ?�정??*: 2026-01-16
 
 ---
 
-## 📋 목차
-1. [데이터베이스 개요](#데이터베이스-개요)
-2. [테이블 구조](#테이블-구조)
-3. [테이블 상세 명세](#테이블-상세-명세)
-4. [테이블 간 연관관계](#테이블-간-연관관계)
-5. [컬럼 데이터 형식 표준](#컬럼-데이터-형식-표준)
-6. [표준 데이터 가이드](#표준-데이터-가이드)
-7. [권한 및 역할 표준](#권한-및-역할-표준)
+## ?�� 목차
+1. [?�이?�베?�스 개요](#?�이?�베?�스-개요)
+2. [?�이�?구조](#?�이�?구조)
+3. [?�이�??�세 명세](#?�이�??�세-명세)
+4. [?�이�?�??��?관�?(#?�이�?�??��?관�?
+5. [컬럼 ?�이???�식 ?��?](#컬럼-?�이???�식-?��?)
+6. [?��? ?�이??가?�드](#?��?-?�이??가?�드)
+7. [권한 �???�� ?��?](#권한-�???��-?��?)
 
 ---
 
-## 데이터베이스 개요
+## ?�이?�베?�스 개요
 
-### 설계 목표
-- **멀티테넌시(Multi-Tenancy)**: 각 테이블에 tenant_id로 데이터 격리
-- **UUID 통일**: 모든 엔티티 ID는 UUID (VARCHAR(36))로 통일
-- **조직 트리**: 자기참조를 이용한 부서 계층 구조
-- **RBAC**: 역할 기반 접근 제어 (Role-Based Access Control)
-- **감사 추적**: 모든 테이블에 created_at, 주요 작업은 audit_logs로 기록
+### ?�계 목표
+- **멀?�테?�시(Multi-Tenancy)**: �??�이블에 tenant_id�??�이??격리
+- **UUID ?�일**: 모든 ?�티??ID??UUID (VARCHAR(36))�??�일
+- **조직 ?�리**: ?�기참조�??�용??부??계층 구조
+- **RBAC**: ??�� 기반 ?�근 ?�어 (Role-Based Access Control)
+- **감사 추적**: 모든 ?�이블에 created_at, 주요 ?�업?� audit_logs�?기록
 
-### 핵심 원칙
+### ?�심 ?�칙
 ```
-✅ ID 타입: UUID (VARCHAR(36)) 통일
-✅ 다대다 관계: 중간 테이블로 명시적 관리
-✅ 자기참조: departments의 parent_id
-✅ Soft Delete: agents의 status와 retired_at
-✅ 데이터 격리: 모든 테이블에 tenant_id (NOT NULL)
+??ID ?�?? UUID (VARCHAR(36)) ?�일
+???��???관�? 중간 ?�이블로 명시??관�?
+???�기참조: departments??parent_id
+??Soft Delete: agents??status?� retired_at
+???�이??격리: 모든 ?�이블에 tenant_id (NOT NULL)
 ```
 
 ---
 
-## 테이블 구조
+## ?�이�?구조
 
-### 전체 테이블 목록 (6개 + 2개)
+### ?�체 ?�이�?목록 (6�?+ 2�?
 
-| 테이블 | 모듈 | 용도 | PK 타입 | 참고 |
+| ?�이�?| 모듈 | ?�도 | PK ?�??| 참고 |
 |--------|------|------|---------|------|
-| **departmentEntities** | Organization | 조직/부서 계층 | VARCHAR(36) | 자기참조 트리 |
-| **agents** | User | 사용자/직원 | VARCHAR(36) | Soft Delete |
-| **roles** | RBAC | 역할 정의 | VARCHAR(36) | 권한 묶음 |
-| **permissions** | RBAC | 권한 정의 | VARCHAR(36) | 최소 단위 권한 |
-| **role_permissions** | RBAC | 역할-권한 매핑 | BIGSERIAL | N:M 중간 테이블 |
-| **agent_roles** | RBAC | 사용자-역할 매핑 | BIGSERIAL | N:M 중간 테이블 |
-| **audit_logs** | Audit | 감사 로그 | BIGSERIAL | 변경 이력 추적 |
-| **audit_archive** | Audit | 감사 로그 아카이브 | BIGSERIAL | 90일 이상 로그 |
+| **departmentEntities** | Organization | 조직/부??계층 | VARCHAR(36) | ?�기참조 ?�리 |
+| **agents** | User | ?�용??직원 | VARCHAR(36) | Soft Delete |
+| **roles** | RBAC | ??�� ?�의 | VARCHAR(36) | 권한 묶음 |
+| **permissions** | RBAC | 권한 ?�의 | VARCHAR(36) | 최소 ?�위 권한 |
+| **role_permissions** | RBAC | ??��-권한 매핑 | BIGSERIAL | N:M 중간 ?�이�?|
+| **agent_roles** | RBAC | ?�용????�� 매핑 | BIGSERIAL | N:M 중간 ?�이�?|
+| **audit_logs** | Audit | 감사 로그 | BIGSERIAL | 변�??�력 추적 |
+| **audit_archive** | Audit | 감사 로그 ?�카?�브 | BIGSERIAL | 90???�상 로그 |
 
 ### ERD (Entity Relationship Diagram)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│               Identity Modulith Database ERD                 │
-└─────────────────────────────────────────────────────────────┘
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??              Identity Modulith Database ERD                 ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
 
-┌──────────────────┐
-│   departmentEntities    │ (자기참조)
-├──────────────────┤
-│ PK: dept_id (U)  │
-│     tenant_id    │
-│ FK: parent_id ───┼─────┐
-│     name         │     │
-│     org_path     │     │
-│     depth        │     │
-│     type         │     │
-│     created_at   │     │
-└──────────────────┘     │
-         ▲               │
-         │ 1:N (자기참조)|
-         └───────────────┘
-         │
-         │ 1:N (소속)
-         ▼
-┌──────────────────┐
-│     agents       │
-├──────────────────┤
-│ PK: agent_id (U) │
-│     tenant_id    │
-│     login_id (U) │
-│     password     │
-│     name         │
-│ FK: dept_id ─────┘
-│     status       │
-│     ...etc       │
-└──────────────────┘
-         │
-         │ N:M (역할 할당)
-         ▼
-┌──────────────────┐       ┌──────────────────┐
-│   agent_roles    │       │      roles       │
-├──────────────────┤       ├──────────────────┤
-│ PK: id           │       │ PK: role_id (U)  │
-│ FK: agent_id ────┼──────→│     tenant_id    │
-│ FK: role_id ─────┼──────→│     name (U)     │
-│     assigned_at  │       │     type         │
-└──────────────────┘       │     created_at   │
-                           └──────────────────┘
-                                   │
-                                   │ N:M
-                                   ▼
-                           ┌──────────────────┐
-                           │ role_permissions │
-                           ├──────────────────┤
-                           │ PK: id           │
-                           │ FK: role_id ─────┘
-                           │ FK: permission_id┐
-                           │     assigned_at  │
-                           └──────────────────┘
-                                   │
-                                   ▼
-                           ┌──────────────────┐
-                           │   permissions    │
-                           ├──────────────────┤
-                           │ PK: permission_id│
-                           │     tenant_id    │
-                           │     code (U)     │
-                           │     created_at   │
-                           └──────────────────┘
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??  departmentEntities    ??(?�기참조)
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??PK: dept_id (U)  ??
+??    tenant_id    ??
+??FK: parent_id ?�?�?�?��??�?�?�?�??
+??    name         ??    ??
+??    org_path     ??    ??
+??    depth        ??    ??
+??    type         ??    ??
+??    created_at   ??    ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??    ??
+         ??              ??
+         ??1:N (?�기참조)|
+         ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+         ??
+         ??1:N (?�속)
+         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??    agents       ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??PK: agent_id (U) ??
+??    tenant_id    ??
+??    login_id (U) ??
+??    password     ??
+??    name         ??
+??FK: dept_id ?�?�?�?�?�??
+??    status       ??
+??    ...etc       ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+         ??
+         ??N:M (??�� ?�당)
+         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??      ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??  agent_roles    ??      ??     roles       ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??      ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+??PK: id           ??      ??PK: role_id (U)  ??
+??FK: agent_id ?�?�?�?�?��??�?�?�?�?�?�│     tenant_id    ??
+??FK: role_id ?�?�?�?�?�?��??�?�?�?�?�?�│     name (U)     ??
+??    assigned_at  ??      ??    type         ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??      ??    created_at   ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                                   ??
+                                   ??N:M
+                                   ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                           ??role_permissions ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                           ??PK: id           ??
+                           ??FK: role_id ?�?�?�?�?�??
+                           ??FK: permission_id??
+                           ??    assigned_at  ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                                   ??
+                                   ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                           ??  permissions    ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
+                           ??PK: permission_id??
+                           ??    tenant_id    ??
+                           ??    code (U)     ??
+                           ??    created_at   ??
+                           ?��??�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�??
 
-범례: PK=Primary Key, FK=Foreign Key, U=UUID, N:M=다대다
+범�?: PK=Primary Key, FK=Foreign Key, U=UUID, N:M=?��???
 ```
 
 ---
 
-## 테이블 상세 명세
+## ?�이�??�세 명세
 
-### 1. departmentEntities (조직/부서 테이블)
+### 1. departmentEntities (조직/부???�이�?
 
-**목적**: 회사 조직 계층 구조 관리 (트리 구조)
+**목적**: ?�사 조직 계층 구조 관�?(?�리 구조)
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| dept_id | VARCHAR(36) | PK | 부서 ID (UUID) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID (멀티테넌시) |
-| parent_id | VARCHAR(36) | FK (자기참조) | 상위 부서 ID (NULL이면 최상위) |
-| name | VARCHAR(100) | NOT NULL | 부서명 |
-| org_path | VARCHAR(500) | NOT NULL, UNIQUE | 조직 경로 (예: /dept1/dept2/dept3) |
-| depth | INTEGER | NOT NULL | 트리 깊이 (0부터 시작) |
-| type | VARCHAR(50) | | 부서 타입 (HEADQUARTERS, DIVISION, TEAM) |
-| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 일시 |
+| dept_id | VARCHAR(36) | PK | 부??ID (UUID) |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID (멀?�테?�시) |
+| parent_id | VARCHAR(36) | FK (?�기참조) | ?�위 부??ID (NULL?�면 최상?? |
+| name | VARCHAR(100) | NOT NULL | 부?�명 |
+| org_path | VARCHAR(500) | NOT NULL, UNIQUE | 조직 경로 (?? /dept1/dept2/dept3) |
+| depth | INTEGER | NOT NULL | ?�리 깊이 (0부???�작) |
+| type | VARCHAR(50) | | 부???�??(HEADQUARTERS, DIVISION, TEAM) |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�성 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: dept_id
 - UK: (tenant_id, org_path)
-- FK: parent_id → dept_id (자기참조, ON DELETE RESTRICT)
+- FK: parent_id ??dept_id (?�기참조, ON DELETE RESTRICT)
 - IDX: (tenant_id), (parent_id), (org_path)
 
-**특징**:
-- **자기참조 (Self-Join)**: parent_id로 상하 관계 표현
-- **Closure Table 대안**: org_path로 계층 탐색 최적화
-- **삭제 제약**: RESTRICT로 하위 부서 있으면 삭제 불가
+**?�징**:
+- **?�기참조 (Self-Join)**: parent_id�??�하 관�??�현
+- **Closure Table ?�??*: org_path�?계층 ?�색 최적??
+- **??�� ?�약**: RESTRICT�??�위 부???�으�???�� 불�?
 
-**예시 데이터**:
+**?�시 ?�이??*:
 ```sql
 dept_id              | name        | parent_id | org_path          | depth | type
 ---------------------|-------------|-----------|-------------------|-------|-------------
-d50e8400-e29b-...001 | 넥스프론본부 | NULL      | /d50e...001       | 0     | HEADQUARTERS
-d50e8400-e29b-...002 | 고객지원사부 | ...001    | /d50e...001/002   | 1     | DIVISION
-d50e8400-e29b-...005 | 전화상담팀  | ...002    | /d50e...001/002/005 | 2   | TEAM
+d50e8400-e29b-...001 | ?�스?�론본�? | NULL      | /d50e...001       | 0     | HEADQUARTERS
+d50e8400-e29b-...002 | 고객지?�사부 | ...001    | /d50e...001/002   | 1     | DIVISION
+d50e8400-e29b-...005 | ?�화?�담?�  | ...002    | /d50e...001/002/005 | 2   | TEAM
 ```
 
 ---
 
-### 2. agents (사용자/직원 테이블)
+### 2. user_agents (?�용??직원 ?�이�?
 
-**목적**: 시스템 사용자 정보 관리
+**목적**: ?�스???�용???�보 관�?
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| agent_id | VARCHAR(36) | PK | 사용자 ID (UUID) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID |
-| login_id | VARCHAR(100) | NOT NULL, UNIQUE | 로그인 ID |
-| password | VARCHAR(255) | NOT NULL | 비밀번호 (BCrypt 해시) |
-| name | VARCHAR(100) | NOT NULL | 사용자명 |
-| dept_id | VARCHAR(36) | FK | 소속 부서 ID (NULL 가능) |
-| status | VARCHAR(20) | NOT NULL, DEFAULT 'ACTIVE' | 상태 (ACTIVE, RETIRED) |
-| password_must_change | BOOLEAN | DEFAULT false | 비밀번호 변경 필요 여부 |
-| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 일시 |
-| updated_at | TIMESTAMP | | 수정 일시 |
-| retired_at | TIMESTAMP | | 퇴직 일시 |
+| agent_id | VARCHAR(36) | PK | ?�용??ID (UUID) |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID |
+| login_id | VARCHAR(100) | NOT NULL, UNIQUE | 로그??ID |
+| password | VARCHAR(255) | NOT NULL | 비�?번호 (BCrypt ?�시) |
+| name | VARCHAR(100) | NOT NULL | ?�용?�명 |
+| dept_id | VARCHAR(36) | FK | ?�속 부??ID (NULL 가?? |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'ACTIVE' | ?�태 (ACTIVE, RETIRED) |
+| password_must_change | BOOLEAN | DEFAULT false | 비�?번호 변�??�요 ?��? |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�성 ?�시 |
+| updated_at | TIMESTAMP | | ?�정 ?�시 |
+| retired_at | TIMESTAMP | | ?�직 ?�시 |
 | job_title | VARCHAR(100) | | 직책 |
-| sync_status | VARCHAR(20) | | 동기 상태 |
+| sync_status | VARCHAR(20) | | ?�기 ?�태 |
 
-**인덱스**:
+**?�덱??*:
 - PK: agent_id
 - UK: login_id
-- FK: dept_id → departmentEntities.dept_id (ON DELETE SET NULL)
+- FK: dept_id ??departmentEntities.dept_id (ON DELETE SET NULL)
 - IDX: (tenant_id), (dept_id), (status), (login_id)
 
-**특징**:
-- **Soft Delete**: status='RETIRED'로 논리적 삭제 (물리적 삭제 X)
-- **다중 역할**: agent_roles 테이블로 여러 역할 할당 가능
-- **부서 연결**: dept_id로 조직 구조와 연결
+**?�징**:
+- **Soft Delete**: status='RETIRED'�??�리????�� (물리????�� X)
+- **?�중 ??��**: agent_roles ?�이블로 ?�러 ??�� ?�당 가??
+- **부???�결**: dept_id�?조직 구조?� ?�결
 
-**예시 데이터**:
+**?�시 ?�이??*:
 ```sql
 agent_id             | login_id    | name      | dept_id      | status
 ---------------------|-------------|-----------|--------------|--------
-550e8400-e29b-...101 | admin       | 시스템관리자 | d50e...001  | ACTIVE
-550e8400-e29b-...104 | phone_ag01 | 박상담     | d50e...005  | ACTIVE
-550e8400-e29b-...199 | retired_usr | 퇴직자    | d50e...005  | RETIRED
+550e8400-e29b-...101 | admin       | ?�스?��?리자 | d50e...001  | ACTIVE
+550e8400-e29b-...104 | phone_ag01 | 박상??    | d50e...005  | ACTIVE
+550e8400-e29b-...199 | retired_usr | ?�직??   | d50e...005  | RETIRED
 ```
 
 ---
 
-### 3. roles (역할 테이블)
+### 3. roles (??�� ?�이�?
 
-**목적**: RBAC 역할 정의 (권한 묶음)
+**목적**: RBAC ??�� ?�의 (권한 묶음)
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| role_id | VARCHAR(36) | PK | 역할 ID (UUID) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID |
-| name | VARCHAR(64) | NOT NULL, UNIQUE | 역할명 (ADMIN, MANAGER 등) |
-| type | VARCHAR(32) | NOT NULL | 역할 타입 (POSITION, CHANNEL, SKILL) |
-| description | VARCHAR(255) | | 역할 설명 |
-| is_active | BOOLEAN | DEFAULT true | 활성화 여부 |
-| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 일시 |
+| role_id | VARCHAR(36) | PK | ??�� ID (UUID) |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID |
+| name | VARCHAR(64) | NOT NULL, UNIQUE | ??���?(ADMIN, MANAGER ?? |
+| type | VARCHAR(32) | NOT NULL | ??�� ?�??(POSITION, CHANNEL, SKILL) |
+| description | VARCHAR(255) | | ??�� ?�명 |
+| is_active | BOOLEAN | DEFAULT true | ?�성???��? |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�성 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: role_id
 - UK: (tenant_id, name)
 - IDX: (tenant_id)
 
-**역할 분류**:
+**??�� 분류**:
 
-| 타입 | 설명 | 예시 |
+| ?�??| ?�명 | ?�시 |
 |------|------|------|
 | POSITION | 직급 기반 (직책) | ADMIN, MANAGER, TEAM_LEAD, MEMBER |
-| CHANNEL | 채널 기반 (업무 채널) | PHONE_AGENT, CHAT_AGENT, EMAIL_AGENT, SUPERVISOR |
-| SKILL | 역량 기반 | (확장 가능) |
+| CHANNEL | 채널 기반 (?�무 채널) | PHONE_AGENT, CHAT_AGENT, EMAIL_AGENT, SUPERVISOR |
+| SKILL | ??�� 기반 | (?�장 가?? |
 
-**특징**:
-- **다중 역할 조합**: 사용자는 POSITION + CHANNEL 조합 가능
-- 예: 박상담 = MEMBER (직급) + PHONE_AGENT (채널)
+**?�징**:
+- **?�중 ??�� 조합**: ?�용?�는 POSITION + CHANNEL 조합 가??
+- ?? 박상??= MEMBER (직급) + PHONE_AGENT (채널)
 
-**예시 데이터**:
+**?�시 ?�이??*:
 ```sql
 role_id              | name         | type      | is_active
 ---------------------|--------------|-----------|----------
@@ -1564,116 +1564,116 @@ role_id              | name         | type      | is_active
 
 ---
 
-### 4. permissions (권한 테이블)
+### 4. permissions (권한 ?�이�?
 
-**목적**: 시스템 권한 정의 (최소 단위 권한)
+**목적**: ?�스??권한 ?�의 (최소 ?�위 권한)
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
 | permission_id | VARCHAR(36) | PK | 권한 ID (UUID) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID |
-| code | VARCHAR(128) | NOT NULL, UNIQUE | 권한 코드 (domain:action 형식) |
-| description | VARCHAR(255) | | 권한 설명 |
-| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 일시 |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID |
+| code | VARCHAR(128) | NOT NULL, UNIQUE | 권한 코드 (domain:action ?�식) |
+| description | VARCHAR(255) | | 권한 ?�명 |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�성 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: permission_id
 - UK: (tenant_id, code)
 - IDX: (tenant_id)
 
-**권한 코드 형식**:
+**권한 코드 ?�식**:
 ```
 {domain}:{action}[:{resource}]
 
-도메인 (8개):
-├─ user:      사용자 관리 (9개)
-├─ org:       조직 관리 (6개)
-├─ rbac:      RBAC 관리 (9개)
-├─ report:    보고서 (4개)
-├─ phone:     전화 채널 (3개)
-├─ chat:      채팅 채널 (2개)
-├─ email:     이메일 채널 (1개)
-└─ queue:     큐 관리 (1개)
+?�메??(8�?:
+?��? user:      ?�용??관�?(9�?
+?��? org:       조직 관�?(6�?
+?��? rbac:      RBAC 관�?(9�?
+?��? report:    보고??(4�?
+?��? phone:     ?�화 채널 (3�?
+?��? chat:      채팅 채널 (2�?
+?��? email:     ?�메??채널 (1�?
+?��? queue:     ??관�?(1�?
 
-총 35개 권한
+�?35�?권한
 ```
 
-**예시 데이터**:
+**?�시 ?�이??*:
 ```sql
 permission_id        | code                | description
 ---------------------|---------------------|------------------
-550e8400-e29b-...001 | user:create         | 사용자 생성
-550e8400-e29b-...029 | phone:accept        | 전화 수락
-550e8400-e29b-...032 | chat:send           | 채팅 전송
+550e8400-e29b-...001 | user:create         | ?�용???�성
+550e8400-e29b-...029 | phone:accept        | ?�화 ?�락
+550e8400-e29b-...032 | chat:send           | 채팅 ?�송
 ```
 
 ---
 
-### 5. role_permissions (역할-권한 매핑 테이블)
+### 5. role_permissions (??��-권한 매핑 ?�이�?
 
-**목적**: 역할에 권한 할당 (N:M 관계)
+**목적**: ??��??권한 ?�당 (N:M 관�?
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| id | BIGSERIAL | PK | 매핑 ID (자동 증가) |
-| role_id | VARCHAR(36) | FK, NOT NULL | 역할 ID |
+| id | BIGSERIAL | PK | 매핑 ID (?�동 증�?) |
+| role_id | VARCHAR(36) | FK, NOT NULL | ??�� ID |
 | permission_id | VARCHAR(36) | FK, NOT NULL | 권한 ID |
-| assigned_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 할당 일시 |
+| assigned_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�당 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: id
 - UK: (role_id, permission_id)
-- FK: role_id → roles.role_id (ON DELETE CASCADE)
-- FK: permission_id → permissions.permission_id (ON DELETE CASCADE)
+- FK: role_id ??roles.role_id (ON DELETE CASCADE)
+- FK: permission_id ??permissions.permission_id (ON DELETE CASCADE)
 
-**특징**:
-- **다대다 관계**: 한 역할에 여러 권한 할당 가능
-- **동적 권한 관리**: 역할 변경 시 자동 반영
-- **CASCADE 삭제**: 역할/권한 삭제 시 매핑도 자동 삭제
+**?�징**:
+- **?��???관�?*: ????��???�러 권한 ?�당 가??
+- **?�적 권한 관�?*: ??�� 변�????�동 반영
+- **CASCADE ??��**: ??��/권한 ??�� ??매핑???�동 ??��
 
-**권한 배분 예시**:
+**권한 배분 ?�시**:
 ```sql
-ADMIN:     35개 (전체)
-MANAGER:   12개 (사용자, 조직, 보고서)
-TEAM_LEAD:  5개 (읽기, 조직 뷰, 보고서)
-MEMBER:     4개 (본인 읽기, 조직 뷰, 보고서)
+ADMIN:     35�?(?�체)
+MANAGER:   12�?(?�용?? 조직, 보고??
+TEAM_LEAD:  5�?(?�기, 조직 �? 보고??
+MEMBER:     4�?(본인 ?�기, 조직 �? 보고??
 
-PHONE_AGENT:  3개 (전화 관련)
-CHAT_AGENT:   2개 (채팅 관련)
-EMAIL_AGENT:  1개 (이메일 관련)
-SUPERVISOR:   7개 (모든 채널 + 큐)
+PHONE_AGENT:  3�?(?�화 관??
+CHAT_AGENT:   2�?(채팅 관??
+EMAIL_AGENT:  1�?(?�메??관??
+SUPERVISOR:   7�?(모든 채널 + ??
 
-총 77개 매핑
+�?77�?매핑
 ```
 
 ---
 
-### 6. agent_roles (사용자-역할 매핑 테이블)
+### 6. agent_roles (?�용????�� 매핑 ?�이�?
 
-**목적**: 사용자에게 역할 할당 (N:M 관계)
+**목적**: ?�용?�에�???�� ?�당 (N:M 관�?
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| id | BIGSERIAL | PK | 매핑 ID (자동 증가) |
-| agent_id | VARCHAR(36) | FK, NOT NULL | 사용자 ID |
-| role_id | VARCHAR(36) | FK, NOT NULL | 역할 ID |
-| assigned_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 할당 일시 |
+| id | BIGSERIAL | PK | 매핑 ID (?�동 증�?) |
+| agent_id | VARCHAR(36) | FK, NOT NULL | ?�용??ID |
+| role_id | VARCHAR(36) | FK, NOT NULL | ??�� ID |
+| assigned_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�당 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: id
-- UK: (agent_id, role_id) - 중복 방지
-- FK: agent_id → agents.agent_id (ON DELETE CASCADE)
-- FK: role_id → roles.role_id (ON DELETE CASCADE)
+- UK: (agent_id, role_id) - 중복 방�?
+- FK: agent_id ??agents.agent_id (ON DELETE CASCADE)
+- FK: role_id ??roles.role_id (ON DELETE CASCADE)
 - IDX: (agent_id), (role_id)
 
-**특징**:
-- **다중 역할**: 사용자는 여러 역할 보유 가능 (예: MEMBER + PHONE_AGENT + SUPERVISOR)
-- **동적 할당**: 역할 추가/제거 시 자동 반영
-- **권한 계산**: 모든 역할의 권한 합집합 = 사용자의 최종 권한
+**?�징**:
+- **?�중 ??��**: ?�용?�는 ?�러 ??�� 보유 가??(?? MEMBER + PHONE_AGENT + SUPERVISOR)
+- **?�적 ?�당**: ??�� 추�?/?�거 ???�동 반영
+- **권한 계산**: 모든 ??��??권한 ?�집??= ?�용?�의 최종 권한
 
-**예시 데이터**:
+**?�시 ?�이??*:
 ```sql
-agent_id (박상담)    | role_id (역할)
+agent_id (박상??    | role_id (??��)
 ---------------------|----------------------
 550e8400-e29b-...104 | 660e8400-e29b-...004 (MEMBER)
 550e8400-e29b-...104 | 660e8400-e29b-...005 (PHONE_AGENT)
@@ -1681,181 +1681,181 @@ agent_id (박상담)    | role_id (역할)
 
 ---
 
-### 7. audit_logs (감사 로그 테이블)
+### 7. audit_logs (감사 로그 ?�이�?
 
-**목적**: 시스템 주요 작업 이력 추적
+**목적**: ?�스??주요 ?�업 ?�력 추적
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| id | BIGSERIAL | PK | 로그 ID (자동 증가) |
-| tenant_id | VARCHAR(50) | NOT NULL | 테넌트 ID |
-| action | VARCHAR(100) | NOT NULL | 작업 (ROLE_ASSIGNED, PERMISSION_CREATED 등) |
-| target_type | VARCHAR(50) | NOT NULL | 대상 타입 (ROLE, PERMISSION, USER 등) |
-| target_id | VARCHAR(100) | NOT NULL | 대상 ID |
-| actor_id | VARCHAR(36) | NOT NULL | 작업자 ID |
-| details | TEXT | | 상세 정보 (JSON 형식) |
-| ip_address | VARCHAR(45) | | 작업자 IP |
-| timestamp | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 발생 일시 |
+| id | BIGSERIAL | PK | 로그 ID (?�동 증�?) |
+| tenant_id | VARCHAR(50) | NOT NULL | ?�넌??ID |
+| action | VARCHAR(100) | NOT NULL | ?�업 (ROLE_ASSIGNED, PERMISSION_CREATED ?? |
+| target_type | VARCHAR(50) | NOT NULL | ?�???�??(ROLE, PERMISSION, USER ?? |
+| target_id | VARCHAR(100) | NOT NULL | ?�??ID |
+| actor_id | VARCHAR(36) | NOT NULL | ?�업??ID |
+| details | TEXT | | ?�세 ?�보 (JSON ?�식) |
+| ip_address | VARCHAR(45) | | ?�업??IP |
+| timestamp | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 발생 ?�시 |
 
-**인덱스**:
+**?�덱??*:
 - PK: id
 - IDX: (tenant_id, timestamp), (actor_id), (target_type, target_id)
 
-**특징**:
-- **불변 로그**: 생성 후 수정/삭제 불가
-- **90일 자동 아카이빙**: audit_archive로 이동
-- **JSON 상세 정보**: 변경 전후 값 저장
+**?�징**:
+- **불�? 로그**: ?�성 ???�정/??�� 불�?
+- **90???�동 ?�카?�빙**: audit_archive�??�동
+- **JSON ?�세 ?�보**: 변�??�후 �??�??
 
 ---
 
-### 8. audit_archive (감사 로그 아카이브 테이블)
+### 8. audit_archive (감사 로그 ?�카?�브 ?�이�?
 
-**목적**: 90일 이상 오래된 감사 로그 보관
+**목적**: 90???�상 ?�래??감사 로그 보�?
 
-| 컬럼명 | 타입 | 제약 | 설명 |
+| 컬럼�?| ?�??| ?�약 | ?�명 |
 |--------|------|------|------|
-| (audit_logs와 동일) | | | |
-| archived_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 아카이빙 일시 |
+| (audit_logs?� ?�일) | | | |
+| archived_at | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | ?�카?�빙 ?�시 |
 
-**특징**:
-- **자동 아카이빙**: 배치 작업으로 90일 초과 로그 이동
-- **장기 보관**: 법적 요구사항 대응
-- **검색 최적화**: 최근 로그는 audit_logs에서만 검색
-
----
-
-## 테이블 간 연관관계
-
-### 1. 일대다 (One-to-Many) 관계
-
-#### departmentEntities (1) → departmentEntities (N) - 자기참조
-```
-상위 부서 (parent) → 하위 부서들 (자식)
-
-관계: 부모-자식
-FK: parent_id → dept_id
-특징: 자기참조, 트리 구조
-삭제 정책: ON DELETE RESTRICT (하위 부서 있으면 삭제 불가)
-
-예시:
-넥스프론 본부 (root)
-├─ 고객지원사업부
-│  ├─ 전화상담팀
-│  └─ 채팅상담팀
-└─ 기술개발본부
-   └─ Backend개발팀
-```
-
-#### departmentEntities (1) → agents (N)
-```
-부서 (departmentEntity) → 소속 직원들 (employees)
-
-관계: 조직 포함 관계
-FK: agents.dept_id → departmentEntities.dept_id
-특징: 하나의 부서에 여러 직원
-삭제 정책: ON DELETE SET NULL (부서 삭제 시 직원의 dept_id = NULL)
-
-예시:
-전화상담팀 (1개)
-├─ 이팀장 (1명)
-├─ 박상담 (1명)
-└─ 최상담 (1명)
-```
+**?�징**:
+- **?�동 ?�카?�빙**: 배치 ?�업?�로 90??초과 로그 ?�동
+- **?�기 보�?**: 법적 ?�구?�항 ?�??
+- **검??최적??*: 최근 로그??audit_logs?�서�?검??
 
 ---
 
-### 2. 다대다 (Many-to-Many) 관계
+## ?�이�?�??��?관�?
 
-#### agents (N) ↔ roles (M) via agent_roles
+### 1. ?��???(One-to-Many) 관�?
+
+#### departmentEntities (1) ??departmentEntities (N) - ?�기참조
 ```
-사용자 ←→ 역할
+?�위 부??(parent) ???�위 부?�들 (?�식)
+
+관�? 부�??�식
+FK: parent_id ??dept_id
+?�징: ?�기참조, ?�리 구조
+??�� ?�책: ON DELETE RESTRICT (?�위 부???�으�???�� 불�?)
+
+?�시:
+?�스?�론 본�? (root)
+?��? 고객지?�사?��?
+?? ?��? ?�화?�담?�
+?? ?��? 채팅?�담?�
+?��? 기술개발본�?
+   ?��? Backend개발?�
+```
+
+#### departmentEntities (1) ??user_agents (N)
+```
+부??(departmentEntity) ???�속 직원??(employees)
+
+관�? 조직 ?�함 관�?
+FK: agents.dept_id ??departmentEntities.dept_id
+?�징: ?�나??부?�에 ?�러 직원
+??�� ?�책: ON DELETE SET NULL (부????�� ??직원??dept_id = NULL)
+
+?�시:
+?�화?�담?� (1�?
+?��? ?��???(1�?
+?��? 박상??(1�?
+?��? 최상??(1�?
+```
+
+---
+
+### 2. ?��???(Many-to-Many) 관�?
+
+#### user_agents (N) ??roles (M) via agent_roles
+```
+?�용???�→ ??��
 
 구조:
-agents → agent_roles → roles
+agents ??agent_roles ??roles
 
-특징:
-- 한 사용자가 여러 역할 보유
-- 한 역할이 여러 사용자에게 할당
-- 중간 테이블: agent_roles
+?�징:
+- ???�용?��? ?�러 ??�� 보유
+- ????��???�러 ?�용?�에�??�당
+- 중간 ?�이�? agent_roles
 
-예시:
-박상담 (1명)
-├─ MEMBER (직급)
-└─ PHONE_AGENT (채널)
+?�시:
+박상??(1�?
+?��? MEMBER (직급)
+?��? PHONE_AGENT (채널)
 
-MEMBER 역할
-├─ 박상담
-├─ 정상담
-├─ 강상담
-└─ ... (7명)
+MEMBER ??��
+?��? 박상??
+?��? ?�상??
+?��? 강상??
+?��? ... (7�?
 
-삭제 정책: ON DELETE CASCADE (양쪽 모두)
+??�� ?�책: ON DELETE CASCADE (?�쪽 모두)
 ```
 
-#### roles (N) ↔ permissions (M) via role_permissions
+#### roles (N) ??permissions (M) via role_permissions
 ```
-역할 ←→ 권한
+??�� ?�→ 권한
 
 구조:
-roles → role_permissions → permissions
+roles ??role_permissions ??permissions
 
-특징:
-- 한 역할에 여러 권한 포함
-- 한 권한이 여러 역할에 할당 가능
-- 중간 테이블: role_permissions
+?�징:
+- ????��???�러 권한 ?�함
+- ??권한???�러 ??��???�당 가??
+- 중간 ?�이�? role_permissions
 
-예시:
-ADMIN 역할 (1개) → 35개 권한 (모두)
-MEMBER 역할 (1개) → 4개 권한 (최소)
+?�시:
+ADMIN ??�� (1�? ??35�?권한 (모두)
+MEMBER ??�� (1�? ??4�?권한 (최소)
 
-삭제 정책: ON DELETE CASCADE (양쪽 모두)
+??�� ?�책: ON DELETE CASCADE (?�쪽 모두)
 ```
 
 ---
 
-### 3. 권한 체크 흐름
+### 3. 권한 체크 ?�름
 
-**사용자의 최종 권한 계산**:
+**?�용?�의 최종 권한 계산**:
 
 ```
-1단계: 사용자 조회
-┌──────────────┐
-│ agents       │ (agent_id로 조회)
-│ agent_id=... │
-└──────────────┘
-        ↓
+1?�계: ?�용??조회
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+??agents       ??(agent_id�?조회)
+??agent_id=... ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+        ??
 
-2단계: 사용자의 모든 역할 조회
-┌──────────────┐
-│ agent_roles  │ (WHERE agent_id = ?)
-│ role_id=... │
-│ role_id=... │ (다중 역할)
-└──────────────┘
-        ↓
+2?�계: ?�용?�의 모든 ??�� 조회
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+??agent_roles  ??(WHERE agent_id = ?)
+??role_id=... ??
+??role_id=... ??(?�중 ??��)
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+        ??
 
-3단계: 각 역할의 모든 권한 조회
-┌──────────────┐
-│ role_permissions │ (WHERE role_id IN (...))
-│ permission_id=... │
-│ permission_id=... │
-└──────────────┘
-        ↓
+3?�계: �???��??모든 권한 조회
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+??role_permissions ??(WHERE role_id IN (...))
+??permission_id=... ??
+??permission_id=... ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+        ??
 
-4단계: 모든 권한 코드 조회
-┌──────────────┐
-│ permissions  │
-│ code='user:create' │
-│ code='phone:accept' │
-└──────────────┘
-        ↓
+4?�계: 모든 권한 코드 조회
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+??permissions  ??
+??code='user:create' ??
+??code='phone:accept' ??
+?��??�?�?�?�?�?�?�?�?�?�?�?�?�??
+        ??
 
-5단계: 권한 확인
-최종 권한 = 모든 역할의 권한 합집합 (Union)
+5?�계: 권한 ?�인
+최종 권한 = 모든 ??��??권한 ?�집??(Union)
 ```
 
-**SQL 예시**:
+**SQL ?�시**:
 ```sql
--- 특정 사용자의 모든 권한 조회
+-- ?�정 ?�용?�의 모든 권한 조회
 SELECT DISTINCT p.code
 FROM agents a
 JOIN agent_roles ar ON a.agent_id = ar.agent_id
@@ -1868,268 +1868,268 @@ WHERE a.agent_id = ?
 
 ---
 
-## 컬럼 데이터 형식 표준
+## 컬럼 ?�이???�식 ?��?
 
-### 1. ID 컬럼 (모두 UUID로 통일)
+### 1. ID 컬럼 (모두 UUID�??�일)
 
-| 컬럼명 | 타입 | 크기 | 형식 | 예시 |
+| 컬럼�?| ?�??| ?�기 | ?�식 | ?�시 |
 |--------|------|------|------|------|
 | dept_id | VARCHAR | 36 | UUID | d50e8400-e29b-41d4-a716-446655440001 |
 | agent_id | VARCHAR | 36 | UUID | 550e8400-e29b-41d4-a716-446655440101 |
 | role_id | VARCHAR | 36 | UUID | 660e8400-e29b-41d4-a716-446655440001 |
 | permission_id | VARCHAR | 36 | UUID | 550e8400-e29b-41d4-a716-446655440001 |
 
-**UUID 형식**:
+**UUID ?�식**:
 ```
 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-  8자   - 4자 - 4자 - 4자 -    12자
-  총 36자 (하이픈 포함)
+  8??  - 4??- 4??- 4??-    12??
+  �?36??(?�이???�함)
 ```
 
 ---
 
-### 2. 문자열 컬럼 표준
+### 2. 문자??컬럼 ?��?
 
-| 컬럼명 | 최대길이 | 설명 | 예시 |
+| 컬럼�?| 최�?길이 | ?�명 | ?�시 |
 |--------|---------|------|------|
-| tenant_id | 50 | 테넌트 ID (고정) | tenant-001 |
-| login_id | 100 | 로그인 ID (영숫자, -, _) | phone_agent01 |
-| password | 255 | BCrypt 해시 | $2a$10$N9qo8... |
-| name | 100 | 사용자/부서명 | 박상담, 전화상담팀 |
+| tenant_id | 50 | ?�넌??ID (고정) | tenant-001 |
+| login_id | 100 | 로그??ID (?�숫?? -, _) | phone_agent01 |
+| password | 255 | BCrypt ?�시 | $2a$10$N9qo8... |
+| name | 100 | ?�용??부?�명 | 박상?? ?�화?�담?� |
 | org_path | 500 | 조직 경로 (UUID 기반) | /d50e8400.../d50e8400.../... |
-| job_title | 100 | 직책 | 팀장, 과장 |
-| type (departmentEntities) | 50 | 부서 타입 | HEADQUARTERS, DIVISION, TEAM |
-| type (roles) | 32 | 역할 타입 | POSITION, CHANNEL, SKILL |
-| status (agents) | 20 | 상태 | ACTIVE, RETIRED |
-| name (roles) | 64 | 역할명 (대문자, _) | ADMIN, TEAM_LEAD, PHONE_AGENT |
-| code (permissions) | 128 | 권한 코드 (도메인:액션) | user:create, phone:accept |
+| job_title | 100 | 직책 | ?�?? 과장 |
+| type (departmentEntities) | 50 | 부???�??| HEADQUARTERS, DIVISION, TEAM |
+| type (roles) | 32 | ??�� ?�??| POSITION, CHANNEL, SKILL |
+| status (agents) | 20 | ?�태 | ACTIVE, RETIRED |
+| name (roles) | 64 | ??���?(?�문자, _) | ADMIN, TEAM_LEAD, PHONE_AGENT |
+| code (permissions) | 128 | 권한 코드 (?�메???�션) | user:create, phone:accept |
 
 ---
 
-### 3. 시간 컬럼 표준
+### 3. ?�간 컬럼 ?��?
 
-| 컬럼명 | 타입 | 형식 | 설명 | 예시 |
+| 컬럼�?| ?�??| ?�식 | ?�명 | ?�시 |
 |--------|------|------|------|------|
-| created_at | TIMESTAMP | ISO 8601 | 생성 일시 (자동) | 2026-01-16 10:00:00 |
-| updated_at | TIMESTAMP | ISO 8601 | 수정 일시 (자동) | 2026-01-16 10:05:00 |
-| assigned_at | TIMESTAMP | ISO 8601 | 할당 일시 | 2026-01-16 10:00:00 |
-| retired_at | TIMESTAMP | ISO 8601 | 퇴직 일시 (NULL 가능) | 2025-12-14 17:00:00 |
-| timestamp | TIMESTAMP | ISO 8601 | 감사 로그 발생 일시 | 2026-01-16 10:00:00 |
+| created_at | TIMESTAMP | ISO 8601 | ?�성 ?�시 (?�동) | 2026-01-16 10:00:00 |
+| updated_at | TIMESTAMP | ISO 8601 | ?�정 ?�시 (?�동) | 2026-01-16 10:05:00 |
+| assigned_at | TIMESTAMP | ISO 8601 | ?�당 ?�시 | 2026-01-16 10:00:00 |
+| retired_at | TIMESTAMP | ISO 8601 | ?�직 ?�시 (NULL 가?? | 2025-12-14 17:00:00 |
+| timestamp | TIMESTAMP | ISO 8601 | 감사 로그 발생 ?�시 | 2026-01-16 10:00:00 |
 
 ---
 
-### 4. NULL 정책
+### 4. NULL ?�책
 
-| 컬럼명 | 테이블 | NULL 허용 | 이유 | 비고 |
+| 컬럼�?| ?�이�?| NULL ?�용 | ?�유 | 비고 |
 |--------|--------|----------|------|------|
-| parent_id | departmentEntities | YES | 최상위 부서일 수 있음 | 루트는 NULL |
-| dept_id | agents | YES | 부서 미정 직원 가능 | ON DELETE SET NULL |
-| updated_at | agents | YES | 생성 후 수정 없을 수 있음 | 선택사항 |
-| retired_at | agents | YES | 활성 직원은 NULL | Soft Delete |
-| job_title | agents | YES | 직책 미정 가능 | 선택사항 |
-| description | roles, permissions | YES | 설명 선택사항 | |
-| ip_address | audit_logs | YES | IP 추적 불가능할 수 있음 | |
+| parent_id | departmentEntities | YES | 최상??부?�일 ???�음 | 루트??NULL |
+| dept_id | agents | YES | 부??미정 직원 가??| ON DELETE SET NULL |
+| updated_at | agents | YES | ?�성 ???�정 ?�을 ???�음 | ?�택?�항 |
+| retired_at | agents | YES | ?�성 직원?� NULL | Soft Delete |
+| job_title | agents | YES | 직책 미정 가??| ?�택?�항 |
+| description | roles, permissions | YES | ?�명 ?�택?�항 | |
+| ip_address | audit_logs | YES | IP 추적 불�??�할 ???�음 | |
 
 ---
 
-## 표준 데이터 가이드
+## ?��? ?�이??가?�드
 
-### 표준 데이터셋
+### ?��? ?�이?�셋
 
-| 항목 | 수량 | 설명 |
+| ??�� | ?�량 | ?�명 |
 |------|------|------|
-| **Departments** | 13개 | 본부(1) + 사업부(3) + 팀(9) |
-| **Agents** | 16명 | 활성(15) + 퇴직(1) |
-| **Roles** | 8개 | POSITION(4) + CHANNEL(4) |
-| **Permissions** | 35개 | 8개 도메인 |
-| **Role-Permissions** | 77개 | 역할별 권한 매핑 |
-| **Agent-Roles** | ~30개 | 사용자별 다중 역할 |
+| **Departments** | 13�?| 본�?(1) + ?�업부(3) + ?�(9) |
+| **Agents** | 16�?| ?�성(15) + ?�직(1) |
+| **Roles** | 8�?| POSITION(4) + CHANNEL(4) |
+| **Permissions** | 35�?| 8�??�메??|
+| **Role-Permissions** | 77�?| ??���?권한 매핑 |
+| **Agent-Roles** | ~30�?| ?�용?�별 ?�중 ??�� |
 
-### 조직 구조 예시
+### 조직 구조 ?�시
 
 ```
-넥스프론 본부 (HEADQUARTERS)
-├─ 고객지원사업부 (DIVISION)
-│  ├─ 전화상담팀 (TEAM)
-│  │  ├─ 이팀장 (TEAM_LEAD + SUPERVISOR)
-│  │  ├─ 박상담 (MEMBER + PHONE_AGENT)
-│  │  └─ 최상담 (MEMBER + PHONE_AGENT)
-│  ├─ 채팅상담팀 (TEAM)
-│  └─ VIP고객지원팀 (TEAM)
-├─ 영업사업부 (DIVISION)
-└─ 기술개발본부 (DIVISION)
-   ├─ Backend개발팀 (TEAM)
-   ├─ Frontend개발팀 (TEAM)
-   └─ DevOps팀 (TEAM)
+?�스?�론 본�? (HEADQUARTERS)
+?��? 고객지?�사?��? (DIVISION)
+?? ?��? ?�화?�담?� (TEAM)
+?? ?? ?��? ?��???(TEAM_LEAD + SUPERVISOR)
+?? ?? ?��? 박상??(MEMBER + PHONE_AGENT)
+?? ?? ?��? 최상??(MEMBER + PHONE_AGENT)
+?? ?��? 채팅?�담?� (TEAM)
+?? ?��? VIP고객지?��? (TEAM)
+?��? ?�업?�업부 (DIVISION)
+?��? 기술개발본�? (DIVISION)
+   ?��? Backend개발?� (TEAM)
+   ?��? Frontend개발?� (TEAM)
+   ?��? DevOps?� (TEAM)
 ```
 
 ---
 
-## 권한 및 역할 표준
+## 권한 �???�� ?��?
 
 ### 권한(Permission) 코드 규칙
 
-**형식**: `{domain}:{action}[:{resource}]`
+**?�식**: `{domain}:{action}[:{resource}]`
 
-### 도메인별 권한 목록 (총 35개)
+### ?�메?�별 권한 목록 (�?35�?
 
-#### 1. 사용자 관리 (user, agent) - 9개
+#### 1. ?�용??관�?(user, agent) - 9�?
 ```
-- user:create          사용자 생성
-- user:read            사용자 조회
-- user:update          사용자 수정
-- user:delete          사용자 삭제
-- user:read:self       본인 정보 조회
-- user:update:self     본인 정보 수정
-- user:assign:role     역할 할당
-- user:reset:password  비밀번호 재설정
-- agent:manage         에이전트 전체 관리
+- user:create          ?�용???�성
+- user:read            ?�용??조회
+- user:update          ?�용???�정
+- user:delete          ?�용????��
+- user:read:self       본인 ?�보 조회
+- user:update:self     본인 ?�보 ?�정
+- user:assign:role     ??�� ?�당
+- user:reset:password  비�?번호 ?�설??
+- agent:manage         ?�이?�트 ?�체 관�?
 ```
 
-#### 2. 조직 관리 (org, departmentEntity) - 6개
+#### 2. 조직 관�?(org, departmentEntity) - 6�?
 ```
 - org:view             조직 조회
-- org:create           조직 생성
-- org:update           조직 수정
-- org:move             조직 이동
-- org:delete           조직 삭제
-- org:manage           조직 전체 관리
+- org:create           조직 ?�성
+- org:update           조직 ?�정
+- org:move             조직 ?�동
+- org:delete           조직 ??��
+- org:manage           조직 ?�체 관�?
 ```
 
-#### 3. RBAC 관리 (rbac, role, permission) - 9개
+#### 3. RBAC 관�?(rbac, role, permission) - 9�?
 ```
 - rbac:view            RBAC 조회
-- rbac:create:role     역할 생성
-- rbac:update:role     역할 수정
-- rbac:delete:role     역할 삭제
-- rbac:create:permission 권한 생성
-- rbac:update:permission 권한 수정
-- rbac:delete:permission 권한 삭제
-- rbac:assign:permission 권한 할당
-- rbac:configure       RBAC 전체 설정
+- rbac:create:role     ??�� ?�성
+- rbac:update:role     ??�� ?�정
+- rbac:delete:role     ??�� ??��
+- rbac:create:permission 권한 ?�성
+- rbac:update:permission 권한 ?�정
+- rbac:delete:permission 권한 ??��
+- rbac:assign:permission 권한 ?�당
+- rbac:configure       RBAC ?�체 ?�정
 ```
 
-#### 4. 보고서 및 감시 (report, audit, cdr) - 7개
+#### 4. 보고??�?감시 (report, audit, cdr) - 7�?
 ```
-- report:view          보고서 조회
-- report:read          보고서 읽기
-- report:export        보고서 내보내기
-- report:manage        보고서 관리
+- report:view          보고??조회
+- report:read          보고???�기
+- report:export        보고???�보?�기
+- report:manage        보고??관�?
 - audit:view           감사 로그 조회
-- audit:export         감사 로그 내보내기
+- audit:export         감사 로그 ?�보?�기
 - cdr:view             CDR 조회
 ```
 
-#### 5. 채널 관리 (phone, chat, email, queue) - 7개
+#### 5. 채널 관�?(phone, chat, email, queue) - 7�?
 ```
-- phone:accept         전화 수락
-- phone:hold           전화 보류
-- phone:transfer       전화 전환
-- chat:send            채팅 전송
-- chat:receive         채팅 수신
-- email:send           이메일 전송
-- queue:manage         큐 관리
+- phone:accept         ?�화 ?�락
+- phone:hold           ?�화 보류
+- phone:transfer       ?�화 ?�환
+- chat:send            채팅 ?�송
+- chat:receive         채팅 ?�신
+- email:send           ?�메???�송
+- queue:manage         ??관�?
 ```
 
-#### 6. 기타 (dashboard, quality) - 2개
+#### 6. 기�? (dashboard, quality) - 2�?
 ```
-- dashboard:view       대시보드 조회
-- quality:manage       품질 관리
+- dashboard:view       ?�?�보??조회
+- quality:manage       ?�질 관�?
 ```
 
 ---
 
-### 역할(Role) 정의
+### ??��(Role) ?�의
 
-#### 역할 타입
-- **POSITION**: 조직상 직위 (ADMIN, MANAGER, TEAM_LEAD, MEMBER)
-- **CHANNEL**: 상담 채널 (PHONE_AGENT, CHAT_AGENT, EMAIL_AGENT, SUPERVISOR)
-- **SKILL**: 기술/스킬 (향후 확장용)
+#### ??�� ?�??
+- **POSITION**: 조직??직위 (ADMIN, MANAGER, TEAM_LEAD, MEMBER)
+- **CHANNEL**: ?�담 채널 (PHONE_AGENT, CHAT_AGENT, EMAIL_AGENT, SUPERVISOR)
+- **SKILL**: 기술/?�킬 (?�후 ?�장??
 
-#### 기본 역할 및 권한 할당
+#### 기본 ??�� �?권한 ?�당
 
-| 역할 | 타입 | 권한 수 | 주요 권한 |
+| ??�� | ?�??| 권한 ??| 주요 권한 |
 |------|------|---------|-----------|
-| **ADMIN** | POSITION | 35개 (전체) | user:*, org:*, rbac:*, report:*, audit:*, 모든 채널 |
-| **MANAGER** | POSITION | 12개 | user 생성/수정, org 생성/수정/이동, report 전체 |
-| **TEAM_LEAD** | POSITION | 5개 | user:read, org:view, report:view/read/export |
-| **MEMBER** | POSITION | 4개 | user:read:self, user:update:self, org:view, report:view |
-| **PHONE_AGENT** | CHANNEL | 3개 | phone:accept, phone:hold, phone:transfer |
-| **CHAT_AGENT** | CHANNEL | 2개 | chat:send, chat:receive |
-| **EMAIL_AGENT** | CHANNEL | 1개 | email:send |
-| **SUPERVISOR** | CHANNEL | 7개 | 모든 채널 + queue:manage |
+| **ADMIN** | POSITION | 35�?(?�체) | user:*, org:*, rbac:*, report:*, audit:*, 모든 채널 |
+| **MANAGER** | POSITION | 12�?| user ?�성/?�정, org ?�성/?�정/?�동, report ?�체 |
+| **TEAM_LEAD** | POSITION | 5�?| user:read, org:view, report:view/read/export |
+| **MEMBER** | POSITION | 4�?| user:read:self, user:update:self, org:view, report:view |
+| **PHONE_AGENT** | CHANNEL | 3�?| phone:accept, phone:hold, phone:transfer |
+| **CHAT_AGENT** | CHANNEL | 2�?| chat:send, chat:receive |
+| **EMAIL_AGENT** | CHANNEL | 1�?| email:send |
+| **SUPERVISOR** | CHANNEL | 7�?| 모든 채널 + queue:manage |
 
 ---
 
-### 권한 계층 예시
+### 권한 계층 ?�시
 
 ```
-ADMIN (35개 권한 - 전체)
-├─ user:* (9개)
-├─ org:* (6개)
-├─ rbac:* (9개)
-├─ report:* (4개)
-├─ audit:* (2개)
-├─ 채널 전체 (7개)
-└─ dashboard, quality (2개)
+ADMIN (35�?권한 - ?�체)
+?��? user:* (9�?
+?��? org:* (6�?
+?��? rbac:* (9�?
+?��? report:* (4�?
+?��? audit:* (2�?
+?��? 채널 ?�체 (7�?
+?��? dashboard, quality (2�?
 
-MANAGER (12개 권한)
-├─ user: create, read, update, assign:role, reset:password
-├─ org: view, create, update, move
-└─ report: view, read, export
+MANAGER (12�?권한)
+?��? user: create, read, update, assign:role, reset:password
+?��? org: view, create, update, move
+?��? report: view, read, export
 
-MEMBER (4개 권한 - 최소)
-├─ user:read:self
-├─ user:update:self
-├─ org:view
-└─ report:view
+MEMBER (4�?권한 - 최소)
+?��? user:read:self
+?��? user:update:self
+?��? org:view
+?��? report:view
 
-PHONE_AGENT (3개 권한)
-├─ phone:accept
-├─ phone:hold
-└─ phone:transfer
+PHONE_AGENT (3�?권한)
+?��? phone:accept
+?��? phone:hold
+?��? phone:transfer
 ```
 
 ---
 
-## 설계 원칙 및 이유
+## ?�계 ?�칙 �??�유
 
-### 1. UUID로 통일한 이유
-- ✅ 분산 환경 지원 (ID 충돌 없음)
-- ✅ 멀티테넌시 안전성 (테넌트 간 ID 충돌 불가)
-- ✅ 보안 (순차 ID 노출 방지)
-- ✅ 일관성 (모든 엔티티 동일한 형식)
+### 1. UUID�??�일???�유
+- ??분산 ?�경 지??(ID 충돌 ?�음)
+- ??멀?�테?�시 ?�전??(?�넌??�?ID 충돌 불�?)
+- ??보안 (?�차 ID ?�출 방�?)
+- ???��???(모든 ?�티???�일???�식)
 
-### 2. 자기참조 FK 사용 이유
-- ✅ 계층 구조 표현 최적화
-- ✅ org_path로 경로 탐색 빠름
-- ✅ depth로 레벨 쉽게 파악
-- ✅ 유연한 부서 추가/제거
+### 2. ?�기참조 FK ?�용 ?�유
+- ??계층 구조 ?�현 최적??
+- ??org_path�?경로 ?�색 빠름
+- ??depth�??�벨 ?�게 ?�악
+- ???�연??부??추�?/?�거
 
-### 3. 중간 테이블 사용 이유
-- ✅ N:M 관계를 명시적으로 관리
-- ✅ 할당 일시 등 메타데이터 저장 가능
-- ✅ 감사 추적 용이
-- ✅ 성능 최적화 (조인 명확화)
+### 3. 중간 ?�이�??�용 ?�유
+- ??N:M 관계�? 명시?�으�?관�?
+- ???�당 ?�시 ??메�??�이???�??가??
+- ??감사 추적 ?�이
+- ???�능 최적??(조인 명확??
 
-### 4. Soft Delete 사용 이유
-- ✅ 히스토리 유지
-- ✅ 감사 추적 (언제 퇴직했는지)
-- ✅ 데이터 복구 가능
-- ✅ 참조 무결성 유지
+### 4. Soft Delete ?�용 ?�유
+- ???�스?�리 ?��?
+- ??감사 추적 (?�제 ?�직?�는지)
+- ???�이??복구 가??
+- ??참조 무결???��?
 
-### 5. 멀티테넌시 구현 이유
-- ✅ 데이터 격리 (tenant_id 필수)
-- ✅ SaaS 확장성
-- ✅ 보안 (테넌트 간 데이터 접근 불가)
+### 5. 멀?�테?�시 구현 ?�유
+- ???�이??격리 (tenant_id ?�수)
+- ??SaaS ?�장??
+- ??보안 (?�넌??�??�이???�근 불�?)
 
 ---
 
-## 부록: 빠른 참조
+## 부�? 빠른 참조
 
-### 주요 쿼리 패턴
+### 주요 쿼리 ?�턴
 
-#### 1. 사용자의 모든 권한 조회
+#### 1. ?�용?�의 모든 권한 조회
 ```sql
 SELECT DISTINCT p.code
 FROM agents a
@@ -2141,7 +2141,7 @@ WHERE a.agent_id = :agentId
   AND a.tenant_id = :tenantId;
 ```
 
-#### 2. 부서의 전체 하위 부서 조회 (트리)
+#### 2. 부?�의 ?�체 ?�위 부??조회 (?�리)
 ```sql
 SELECT *
 FROM departmentEntities
@@ -2150,7 +2150,7 @@ WHERE org_path LIKE CONCAT(:targetOrgPath, '%')
 ORDER BY depth, name;
 ```
 
-#### 3. 역할에 할당된 모든 권한 조회
+#### 3. ??��???�당??모든 권한 조회
 ```sql
 SELECT p.code, p.description
 FROM role_permissions rp
@@ -2159,7 +2159,7 @@ WHERE rp.role_id = :roleId
   AND p.tenant_id = :tenantId;
 ```
 
-#### 4. 사용자가 특정 권한을 보유했는지 확인
+#### 4. ?�용?��? ?�정 권한??보유?�는지 ?�인
 ```sql
 SELECT EXISTS (
     SELECT 1
@@ -2176,43 +2176,43 @@ SELECT EXISTS (
 
 ---
 
-## 6. 데이터베이스 초기화 방법
+## 6. ?�이?�베?�스 초기??방법
 
-### 📌 완전 초기화 (권장)
+### ?�� ?�전 초기??(권장)
 
-**⚠️ 주의**: 모든 데이터가 삭제됩니다!
+**?�️ 주의**: 모든 ?�이?��? ??��?�니??
 
-#### 방법 1: SQL 스크립트 직접 실행
+#### 방법 1: SQL ?�크립트 직접 ?�행
 ```bash
-# 1. PostgreSQL 클라이언트에서 실행
+# 1. PostgreSQL ?�라?�언?�에???�행
 psql -U nexfron -d nexfron -f reset_database_clean.sql
 
-# 2. 애플리케이션 재시작 (Flyway 자동 마이그레이션)
+# 2. ?�플리�??�션 ?�시??(Flyway ?�동 마이그레?�션)
 ./gradlew bootRun
 ```
 
-#### 방법 2: DBeaver/DataGrip 등 GUI 도구
-1. `reset_database_clean.sql` 파일 열기
-2. 전체 선택 후 실행 (Ctrl+Enter)
-3. 결과 확인: `✅ 데이터베이스 완전 초기화 완료!`
-4. 애플리케이션 재시작
+#### 방법 2: DBeaver/DataGrip ??GUI ?�구
+1. `reset_database_clean.sql` ?�일 ?�기
+2. ?�체 ?�택 ???�행 (Ctrl+Enter)
+3. 결과 ?�인: `???�이?�베?�스 ?�전 초기???�료!`
+4. ?�플리�??�션 ?�시??
 
-### 🔄 Flyway 마이그레이션
+### ?�� Flyway 마이그레?�션
 
-애플리케이션 시작 시 자동으로:
-1. `V1_0_0__Complete_Init.sql` 스키마 생성
-2. 표준 데이터 자동 삽입 (35권한 + 8역할 + 16사용자)
+?�플리�??�션 ?�작 ???�동?�로:
+1. `V1_0_0__Complete_Init.sql` ?�키�??�성
+2. ?��? ?�이???�동 ?�입 (35권한 + 8??�� + 16?�용??
 
-### 📊 초기화 후 확인
+### ?�� 초기?????�인
 
 ```sql
--- 테이블 목록 확인
+-- ?�이�?목록 ?�인
 SELECT table_name 
 FROM information_schema.tables 
 WHERE table_schema = 'public' 
 ORDER BY table_name;
 
--- 데이터 건수 확인
+-- ?�이??건수 ?�인
 SELECT 'departmentEntities' as table_name, COUNT(*) as count FROM departmentEntities
 UNION ALL SELECT 'agents', COUNT(*) FROM agents
 UNION ALL SELECT 'roles', COUNT(*) FROM roles
@@ -2221,25 +2221,25 @@ UNION ALL SELECT 'role_permissions', COUNT(*) FROM role_permissions
 UNION ALL SELECT 'agent_roles', COUNT(*) FROM agent_roles;
 ```
 
-**예상 결과**:
-- departmentEntities: 16개
-- agents: 16개 (admin 포함)
-- roles: 8개
-- permissions: 35개
-- role_permissions: 77개
-- agent_roles: 22개
+**?�상 결과**:
+- departmentEntities: 16�?
+- agents: 16�?(admin ?�함)
+- roles: 8�?
+- permissions: 35�?
+- role_permissions: 77�?
+- agent_roles: 22�?
 
 ---
 
-**문서 작성일**: 2026-01-21  
-**작성자**: Identity System Team  
+**문서 ?�성??*: 2026-01-21  
+**?�성??*: Identity System Team  
 **버전**: 2.0.0 CLEAN  
-**상태**: 최종 승인 ✅
+**?�태**: 최종 ?�인 ??
 ---
 
-> ⚠️ **주의사항**  
-> - 모든 테이블은 tenant_id로 격리되어야 합니다  
-> - ID는 반드시 UUID (VARCHAR(36)) 형식을 사용해야 합니다  
-> - 삭제 정책(ON DELETE)은 반드시 문서대로 설정해야 합니다  
-> - 권한 코드는 `domain:action` 형식을 엄격히 준수해야 합니다
+> ?�️ **주의?�항**  
+> - 모든 ?�이블�? tenant_id�?격리?�어???�니?? 
+> - ID??반드??UUID (VARCHAR(36)) ?�식???�용?�야 ?�니?? 
+> - ??�� ?�책(ON DELETE)?� 반드??문서?��??�정?�야 ?�니?? 
+> - 권한 코드??`domain:action` ?�식???�격??준?�해???�니??
 

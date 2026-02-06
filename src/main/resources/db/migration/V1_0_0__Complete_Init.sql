@@ -122,7 +122,7 @@ COMMENT ON TABLE rbac_role_permissions IS '역할-권한 매핑 테이블 (M:N)'
 -- =============================================================================
 
 -- 상담사(Agent) 테이블
-CREATE TABLE IF NOT EXISTS agents (
+CREATE TABLE IF NOT EXISTS user_agents (
     agent_id            VARCHAR(50)     PRIMARY KEY,
     tenant_id           VARCHAR(50)     NOT NULL,
     login_id            VARCHAR(50)     NOT NULL,
@@ -151,19 +151,19 @@ CREATE TABLE IF NOT EXISTS agents (
         REFERENCES org_departments(dept_id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_tenant ON agents(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_agent_login ON agents(login_id);
-CREATE INDEX IF NOT EXISTS idx_agent_dept ON agents(dept_id);
-CREATE INDEX IF NOT EXISTS idx_agent_status ON agents(status);
-CREATE INDEX IF NOT EXISTS idx_agent_scheduled_delete ON agents(scheduled_delete_at)
+CREATE INDEX IF NOT EXISTS idx_agent_tenant ON user_agents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_agent_login ON user_agents(login_id);
+CREATE INDEX IF NOT EXISTS idx_agent_dept ON user_agents(dept_id);
+CREATE INDEX IF NOT EXISTS idx_agent_status ON user_agents(status);
+CREATE INDEX IF NOT EXISTS idx_agent_scheduled_delete ON user_agents(scheduled_delete_at)
     WHERE scheduled_delete_at IS NOT NULL;
 
-COMMENT ON TABLE agents IS '상담사(Agent) 테이블';
-COMMENT ON COLUMN agents.status IS 'ACTIVE: 활성, SUSPENDED: 정지, RETIRED: 퇴사';
-COMMENT ON COLUMN agents.version IS 'Optimistic Locking용 버전';
+COMMENT ON TABLE user_agents IS '상담사(Agent) 테이블';
+COMMENT ON COLUMN user_agents.status IS 'ACTIVE: 활성, SUSPENDED: 정지, RETIRED: 퇴사';
+COMMENT ON COLUMN user_agents.version IS 'Optimistic Locking용 버전';
 
 -- 상담사-역할 매핑 테이블
-CREATE TABLE IF NOT EXISTS rbac_agent_roles (
+CREATE TABLE IF NOT EXISTS user_agent_roles (
     agent_id            VARCHAR(50)     NOT NULL,
     role_id             VARCHAR(50)     NOT NULL,
     assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -171,15 +171,15 @@ CREATE TABLE IF NOT EXISTS rbac_agent_roles (
 
     PRIMARY KEY (agent_id, role_id),
     CONSTRAINT fk_ar_agent FOREIGN KEY (agent_id)
-        REFERENCES agents(agent_id) ON DELETE CASCADE,
+        REFERENCES user_agents(agent_id) ON DELETE CASCADE,
     CONSTRAINT fk_ar_role FOREIGN KEY (role_id)
         REFERENCES rbac_roles(role_id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_ar_agent ON rbac_agent_roles(agent_id);
-CREATE INDEX IF NOT EXISTS idx_ar_role ON rbac_agent_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_ar_agent ON user_agent_roles(agent_id);
+CREATE INDEX IF NOT EXISTS idx_ar_role ON user_agent_roles(role_id);
 
-COMMENT ON TABLE rbac_agent_roles IS '상담사-역할 매핑 테이블 (M:N)';
+COMMENT ON TABLE user_agent_roles IS '상담사-역할 매핑 테이블 (M:N)';
 
 -- =============================================================================
 -- 4. 초기 데이터 - 기본 역할(Role)
@@ -325,7 +325,7 @@ VALUES
 ON CONFLICT (dept_id) DO NOTHING;
 
 -- 샘플 상담사 생성 (비밀번호: password123, BCrypt 인코딩)
-INSERT INTO agents (agent_id, tenant_id, login_id, password, name, employee_id, email, phone, dept_id, status, password_must_change)
+INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, phone, dept_id, status, password_must_change)
 VALUES
     ('agent-admin-001', 'tenant-001', 'admin', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '관리자', 'EMP001', 'admin@nexfron.com', '010-1234-5678', 'dept-root-001', 'ACTIVE', FALSE),
     ('agent-lead-001', 'tenant-001', 'teamlead01', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '김팀장', 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 'dept-div-001', 'ACTIVE', FALSE),
@@ -333,7 +333,7 @@ VALUES
 ON CONFLICT (tenant_id, login_id) DO NOTHING;
 
 -- 샘플 상담사 역할 할당
-INSERT INTO rbac_agent_roles (agent_id, role_id, assigned_at)
+INSERT INTO user_agent_roles (agent_id, role_id, assigned_at)
 VALUES
     ('agent-admin-001', 'role-admin-001', CURRENT_TIMESTAMP),
     ('agent-lead-001', 'role-teamlead-001', CURRENT_TIMESTAMP),

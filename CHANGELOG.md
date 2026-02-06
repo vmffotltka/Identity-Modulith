@@ -85,14 +85,14 @@
 - ✅ **핵심 테이블 6개 유지**
   ```
   1. org_departments        (조직 관리)
-  2. agents                 (사용자 관리)
+  2. user_agents            (사용자 관리)
   3. rbac_roles             (역할 관리)
   4. rbac_permissions       (권한 관리)
   5. rbac_role_permissions  (역할-권한 매핑)
-  6. rbac_agent_roles       (사용자-역할 매핑)
+  6. user_agent_roles       (사용자-역할 매핑)
   ```
 - ✅ **표준 데이터 자동 삽입**
-  - 35개 권한 (RBAC 관리, 조직 관리, 채널별)
+  - 31개 권한 (AGENT:9, DEPARTMENT:6, RBAC:6, CHANNEL:10)
   - 8개 역할 (ADMIN, TEAM_LEAD, AGENT, 채널별 역할 등)
   - 3개 샘플 사용자 (admin, teamlead01, agent01)
   - 4개 샘플 부서 (넥스프론, 고객서비스본부, 인바운드팀, 아웃바운드팀)

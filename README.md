@@ -71,14 +71,14 @@ http://localhost:8080/swagger-ui/index.html
 
 ### 핵심 테이블 (5개)
 
-| 테이블명 | 모듈 | 설명 |
-|---------|------|------|
-| **org_departments** | Organization | 조직 계층 구조 (트리) |
-| **agents** | User | 사용자(상담사) 정보 |
-| **rbac_roles** | RBAC | 역할 정의 (POSITION, CHANNEL) |
+| **테이블** | **모듈** | **설명** |
+|-----------|---------|---------|
+| **org_departments** | Organization | 조직/부서 (트리 구조, Materialized Path) |
+| **user_agents** | User | 사용자/상담사 |
+| **rbac_roles** | RBAC | 역할 정의 |
 | **rbac_permissions** | RBAC | 권한 정의 |
 | **rbac_role_permissions** | RBAC | 역할-권한 매핑 (M:N) |
-| **rbac_agent_roles** | RBAC | 사용자-역할 매핑 (M:N) |
+| **user_agent_roles** | RBAC | 사용자-역할 매핑 (M:N) |
 
 ### 초기 데이터 (자동 생성)
 
@@ -86,11 +86,11 @@ http://localhost:8080/swagger-ui/index.html
 - POSITION: `ADMIN`, `TEAM_LEAD`, `AGENT` (직급 기반)
 - CHANNEL: `INBOUND_AGENT`, `OUTBOUND_AGENT`, `CHAT_AGENT`, `EMAIL_AGENT`, `MULTI_CHANNEL_AGENT` (채널 기반)
 
-**권한 (35개)**:
+**권한 (31개)**:
 - AGENT: 상담사 생성, 조회, 수정, 삭제, 정지, 활성화, 이동, 역할할당, 비밀번호초기화 (9개)
 - DEPARTMENT: 부서 생성, 조회, 수정, 삭제, 이동, 비활성화 (6개)
 - RBAC: 역할 생성, 조회, 수정, 삭제, 권한 조회, 권한 할당 (6개)
-- CHANNEL: 인바운드, 아웃바운드, 채팅, 이메일 채널별 권한 (14개)
+- CHANNEL: 인바운드(3개), 아웃바운드(2개), 채팅(3개), 이메일(2개) 채널별 권한 (10개)
 
 **샘플 데이터**:
 - 부서 4개: 넥스프론(본사) → 고객서비스본부 → 인바운드팀, 아웃바운드팀
@@ -830,6 +830,9 @@ if (!hasPermission(userId, "user:delete")) {
 ### 핵심 문서
 - **[CHANGELOG.md](./CHANGELOG.md)**: 버전별 변경 이력 및 주요 개선 사항
 - **[DB_COMPREHENSIVE_GUIDE.md](./DB_COMPREHENSIVE_GUIDE.md)**: 데이터베이스 스키마, 테이블 구조, 컬럼 설명, 표준 데이터 형식
+- **[DB_INITIALIZATION_GUIDE.md](./DB_INITIALIZATION_GUIDE.md)**: 데이터베이스 초기화 및 재구축 가이드 ⭐
+- **[V1_0_0_MIGRATION_SPEC.md](./V1_0_0_MIGRATION_SPEC.md)**: V1_0_0 마이그레이션 실행 결과 명세서
+- **[DB_SCHEMA_VALIDATION_REPORT.md](./DB_SCHEMA_VALIDATION_REPORT.md)**: 스키마 검증 보고서
 
 ### API 문서
 - **[API_SPECIFICATION_V2.md](./Docs/API_SPECIFICATION_V2.md)**: 전체 API 명세서 (User, Organization, RBAC)
