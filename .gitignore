@@ -1,0 +1,70 @@
+HELP.md
+.gradle
+.claude
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Gradle 개인 설정 ###
+# 개인 Java 경로가 포함된 설정 파일은 커밋하지 않음
+# gradle.properties는 팀 공통 설정만 포함
+gradle.properties
+gradle.properties.local
+gradle.properties.*
+
+### 애플리케이션 로그 ###
+*.log
+app.log
+nohup.out
+
+### 임시 파일 ###
+/tmp/
+*.tmp
+*.bak
+
+### SQL 임시 스크립트 ###
+*_temp.sql
+*_local.sql
+CHECK_CURRENT_DB_STRUCTURE.sql
+reset_database_clean.sql
+reset_flyway.sql
+
+### 테스트 출력 파일 ###
+test-output.txt
+test_output.txt
+
+### 프로젝트 임시 문서 ###
+PROJECT_COMPLETION_SUMMARY.md
+

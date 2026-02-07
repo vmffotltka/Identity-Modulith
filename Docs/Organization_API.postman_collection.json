@@ -1,0 +1,423 @@
+{
+  "info": {
+    "name": "Identity Modulith - Organization API",
+    "description": "조직(부서) 관리 API 테스트 컬렉션",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "tenant-001",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user-001",
+      "type": "string"
+    },
+    {
+      "key": "companyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "divisionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teamId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Phase 1 - 부서 생성",
+      "item": [
+        {
+          "name": "1. 본사 생성 (COMPANY)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has deptId', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('deptId');",
+                  "    pm.collectionVariables.set('companyId', jsonData.deptId);",
+                  "});",
+                  "",
+                  "pm.test('Depth is 0', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.depth).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"넥스프론\",\n  \"type\": \"COMPANY\",\n  \"parentId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments"]
+            }
+          }
+        },
+        {
+          "name": "2. 개발본부 생성 (DIVISION)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has deptId', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('divisionId', jsonData.deptId);",
+                  "});",
+                  "",
+                  "pm.test('Depth is 1', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.depth).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"개발본부\",\n  \"type\": \"DIVISION\",\n  \"parentId\": \"{{companyId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments"]
+            }
+          }
+        },
+        {
+          "name": "3. 백엔드팀 생성 (TEAM)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Depth is 2', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.depth).to.eql(2);",
+                  "    pm.collectionVariables.set('teamId', jsonData.deptId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"백엔드팀\",\n  \"type\": \"TEAM\",\n  \"parentId\": \"{{divisionId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - 부서 조회",
+      "item": [
+        {
+          "name": "1. 전체 조직도 조회",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function() {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments"]
+            }
+          }
+        },
+        {
+          "name": "2. 키워드 검색",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/search?keyword=개발",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "search"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "개발"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. 하위 부서 트리 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{divisionId}}/subtree",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{divisionId}}", "subtree"]
+            }
+          }
+        },
+        {
+          "name": "4. 깊이별 조회 (depth=1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/by-depth?depth=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "by-depth"],
+              "query": [
+                {
+                  "key": "depth",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5. 타입별 조회 (TEAM)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/by-type?type=TEAM",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "by-type"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "TEAM"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "6. 부서 통계 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{divisionId}}/statistics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{divisionId}}", "statistics"]
+            }
+          }
+        },
+        {
+          "name": "7. 부서별 사용자 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{divisionId}}/members?includeSubDepartments=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{divisionId}}", "members"],
+              "query": [
+                {
+                  "key": "includeSubDepartments",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - 부서 수정 및 이동",
+      "item": [
+        {
+          "name": "1. 부서 정보 수정",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"백엔드개발팀\",\n  \"type\": \"TEAM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{teamId}}"]
+            }
+          }
+        },
+        {
+          "name": "2. 부서 이동",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newParentId\": \"{{companyId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{teamId}}/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{teamId}}", "move"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 4 - 상태 관리",
+      "item": [
+        {
+          "name": "1. 부서 비활성화",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{teamId}}/deactivate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{teamId}}", "deactivate"]
+            }
+          }
+        },
+        {
+          "name": "2. 부서 활성화",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{teamId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{teamId}}", "activate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 5 - 부서 삭제",
+      "item": [
+        {
+          "name": "1. 부서 삭제",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/org/departments/{{teamId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "org", "departments", "{{teamId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
