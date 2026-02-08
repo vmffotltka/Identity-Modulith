@@ -1,12 +1,22 @@
 -- =============================================================================
--- Identity Modulith - 완전한 데이터베이스 스키마 및 초기 데이터
--- 버전: V1.0.0
--- 설명: 엔티티 구조를 정확히 반영한 통합 스크립트
--- 작성일: 2026-02-06
+-- Identity Modulith - 데이터베이스 완전 초기화 스크립트
+-- 버전: RESET
+-- 목적: 모든 테이블 삭제 후 처음부터 재생성 (데이터 완전 삭제!)
+-- 작성일: 2026-02-07
+-- =============================================================================
+--
+-- 실행 방법:
+-- psql -U postgres -d your_database_name -f reset_database.sql
+--
+-- 주의: 이 스크립트는 모든 데이터를 삭제합니다!
 -- =============================================================================
 
--- 기존 테이블 삭제 (역순으로)
+-- Flyway 히스토리 테이블 삭제 (마이그레이션 기록 초기화)
+DROP TABLE IF EXISTS flyway_schema_history CASCADE;
+
+-- 기존 테이블 모두 삭제 (역순으로)
 DROP TABLE IF EXISTS rbac_agent_roles CASCADE;
+DROP TABLE IF EXISTS user_agent_roles CASCADE;  -- 혹시 남아있을 수 있는 구 테이블
 DROP TABLE IF EXISTS rbac_role_permissions CASCADE;
 DROP TABLE IF EXISTS rbac_permissions CASCADE;
 DROP TABLE IF EXISTS rbac_roles CASCADE;
@@ -62,10 +72,6 @@ CREATE INDEX idx_dept_status ON org_departments(status);
 CREATE INDEX idx_dept_type ON org_departments(type);
 
 COMMENT ON TABLE org_departments IS '조직 부서 테이블';
-COMMENT ON COLUMN org_departments.dept_id IS '부서 ID (UUID)';
-COMMENT ON COLUMN org_departments.org_path IS 'Materialized Path 방식 경로';
-COMMENT ON COLUMN org_departments.code IS '사용자 친화적 부서 코드';
-COMMENT ON COLUMN org_departments.custom_type_name IS 'CUSTOM 타입일 때 사용자 정의 타입명';
 
 -- =============================================================================
 -- 2. User 모듈 - 상담사(Agent) 테이블
@@ -123,10 +129,6 @@ CREATE INDEX idx_agent_scheduled_delete ON user_agents(scheduled_delete_at)
     WHERE scheduled_delete_at IS NOT NULL;
 
 COMMENT ON TABLE user_agents IS '상담사/사용자 테이블';
-COMMENT ON COLUMN user_agents.agent_id IS '상담사 ID (UUID)';
-COMMENT ON COLUMN user_agents.login_id IS '로그인 ID (고유)';
-COMMENT ON COLUMN user_agents.employee_id IS '사번';
-COMMENT ON COLUMN user_agents.status IS '상태: ACTIVE, INACTIVE, SUSPENDED, RETIRED';
 
 -- =============================================================================
 -- 3. RBAC 모듈 - 역할(Role) 테이블
@@ -141,6 +143,8 @@ CREATE TABLE rbac_roles (
     name                VARCHAR(100)    NOT NULL,
     type                VARCHAR(20)     NOT NULL,
     data_scope_level    VARCHAR(20),
+    description         VARCHAR(255),
+    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
 
     -- 감사 추적
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -162,9 +166,6 @@ CREATE INDEX idx_role_tenant ON rbac_roles(tenant_id);
 CREATE INDEX idx_role_type ON rbac_roles(type);
 
 COMMENT ON TABLE rbac_roles IS 'RBAC 역할 테이블';
-COMMENT ON COLUMN rbac_roles.role_id IS '역할 ID (UUID)';
-COMMENT ON COLUMN rbac_roles.type IS '역할 타입: POSITION(직책), CHANNEL(채널), SKILL(능력)';
-COMMENT ON COLUMN rbac_roles.data_scope_level IS '데이터 범위: SELF, DEPARTMENT, ALL';
 
 -- =============================================================================
 -- 4. RBAC 모듈 - 권한(Permission) 테이블
@@ -200,8 +201,6 @@ CREATE INDEX idx_perm_code ON rbac_permissions(code);
 CREATE INDEX idx_perm_resource ON rbac_permissions(resource);
 
 COMMENT ON TABLE rbac_permissions IS 'RBAC 권한 테이블';
-COMMENT ON COLUMN rbac_permissions.permission_id IS '권한 ID (UUID)';
-COMMENT ON COLUMN rbac_permissions.code IS '권한 코드 (예: user:create)';
 
 -- =============================================================================
 -- 5. RBAC 모듈 - 역할-권한 매핑 테이블
@@ -269,34 +268,35 @@ CREATE INDEX idx_agent_roles_agent ON rbac_agent_roles(agent_id);
 CREATE INDEX idx_agent_roles_role ON rbac_agent_roles(role_id);
 CREATE INDEX idx_agent_roles_assigned_at ON rbac_agent_roles(assigned_at);
 
-COMMENT ON TABLE rbac_agent_roles IS 'RBAC 사용자-역할 매핑 테이블';
+COMMENT ON TABLE rbac_agent_roles IS 'RBAC 사용자-역할 매핑 테이블 (Agent-Role Junction)';
 
 -- =============================================================================
--- 표준 데이터 삽입
+-- 초기 데이터 삽입
 -- =============================================================================
 
 DO $$
 DECLARE
     std_tenant VARCHAR(50) := 'default-tenant';
+    now_time TIMESTAMP := NOW();
 
-    -- 부서 ID (UUID 형식: 36자)
+    -- 부서 ID
     company_id VARCHAR(36) := '00000000-0000-0000-0000-000000000001';
     dev_div_id VARCHAR(36) := '00000000-0000-0000-0000-000000000002';
     sales_div_id VARCHAR(36) := '00000000-0000-0000-0000-000000000003';
     backend_team_id VARCHAR(36) := '00000000-0000-0000-0000-000000000004';
     frontend_team_id VARCHAR(36) := '00000000-0000-0000-0000-000000000005';
 
-    -- 사용자 ID (UUID 형식: 36자)
+    -- 사용자 ID
     admin_id VARCHAR(36) := '10000000-0000-0000-0000-000000000001';
     dev_lead_id VARCHAR(36) := '10000000-0000-0000-0000-000000000002';
     dev_member_id VARCHAR(36) := '10000000-0000-0000-0000-000000000003';
 
-    -- 역할 ID (UUID 형식: 36자)
+    -- 역할 ID
     admin_role_id VARCHAR(36) := '20000000-0000-0000-0000-000000000001';
     team_lead_role_id VARCHAR(36) := '20000000-0000-0000-0000-000000000002';
     member_role_id VARCHAR(36) := '20000000-0000-0000-0000-000000000003';
 
-    -- 권한 ID (UUID 형식: 36자)
+    -- 권한 ID
     perm_user_create VARCHAR(36) := '30000000-0000-0000-0000-000000000001';
     perm_user_read VARCHAR(36) := '30000000-0000-0000-0000-000000000002';
     perm_user_update VARCHAR(36) := '30000000-0000-0000-0000-000000000003';
@@ -309,117 +309,69 @@ DECLARE
     perm_report_export VARCHAR(36) := '30000000-0000-0000-0000-000000000010';
 
 BEGIN
-    -- =========================================================================
-    -- 1. 조직(부서) 데이터
-    -- =========================================================================
-
-    -- 최상위: 넥스프론 (회사)
+    -- 부서 생성
     INSERT INTO org_departments (dept_id, tenant_id, parent_id, name, type, code, org_path, depth, status, created_at, updated_at)
-    VALUES (company_id, std_tenant, NULL, '넥스프론', 'COMPANY', 'NEXFRON', '/' || company_id, 0, 'ACTIVE', NOW(), NOW());
-
-    -- 1단계: 개발본부
-    INSERT INTO org_departments (dept_id, tenant_id, parent_id, name, type, code, org_path, depth, status, created_at, updated_at)
-    VALUES (dev_div_id, std_tenant, company_id, '개발본부', 'DIVISION', 'DEV-DIV',
-            '/' || company_id || '/' || dev_div_id, 1, 'ACTIVE', NOW(), NOW());
-
-    -- 1단계: 영업본부
-    INSERT INTO org_departments (dept_id, tenant_id, parent_id, name, type, code, org_path, depth, status, created_at, updated_at)
-    VALUES (sales_div_id, std_tenant, company_id, '영업본부', 'DIVISION', 'SALES-DIV',
-            '/' || company_id || '/' || sales_div_id, 1, 'ACTIVE', NOW(), NOW());
-
-    -- 2단계: 백엔드팀
-    INSERT INTO org_departments (dept_id, tenant_id, parent_id, name, type, code, org_path, depth, status, created_at, updated_at)
-    VALUES (backend_team_id, std_tenant, dev_div_id, '백엔드팀', 'TEAM', 'DEV-BE',
-            '/' || company_id || '/' || dev_div_id || '/' || backend_team_id, 2, 'ACTIVE', NOW(), NOW());
-
-    -- 2단계: 프론트엔드팀
-    INSERT INTO org_departments (dept_id, tenant_id, parent_id, name, type, code, org_path, depth, status, created_at, updated_at)
-    VALUES (frontend_team_id, std_tenant, dev_div_id, '프론트엔드팀', 'TEAM', 'DEV-FE',
-            '/' || company_id || '/' || dev_div_id || '/' || frontend_team_id, 2, 'ACTIVE', NOW(), NOW());
-
-    -- =========================================================================
-    -- 2. 사용자(Agent) 데이터
-    -- =========================================================================
-
-    -- 시스템 관리자
-    INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, dept_id, status, created_at, updated_at)
-    VALUES (admin_id, std_tenant, 'admin',
-            'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=',
-            '시스템관리자', 'EMP-0001', 'admin@nexfron.com', NULL, 'ACTIVE', NOW(), NOW());
-
-    -- 개발 팀장
-    INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, dept_id, status, created_at, updated_at)
-    VALUES (dev_lead_id, std_tenant, 'dev.lead',
-            'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=',
-            '김팀장', 'EMP-0002', 'dev.lead@nexfron.com', backend_team_id, 'ACTIVE', NOW(), NOW());
-
-    -- 개발자
-    INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, dept_id, status, created_at, updated_at)
-    VALUES (dev_member_id, std_tenant, 'dev.member',
-            'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=',
-            '이개발', 'EMP-0003', 'dev.member@nexfron.com', backend_team_id, 'ACTIVE', NOW(), NOW());
-
-    -- =========================================================================
-    -- 3. 역할(Role) 데이터
-    -- =========================================================================
-
-    INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope_level, created_at, updated_at)
     VALUES
-        (admin_role_id, std_tenant, 'ADMIN', 'POSITION', 'ADMIN', NOW(), NOW()),
-        (team_lead_role_id, std_tenant, 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', NOW(), NOW()),
-        (member_role_id, std_tenant, 'MEMBER', 'POSITION', 'MEMBER', NOW(), NOW());
+        (company_id, std_tenant, NULL, '넥스프론', 'COMPANY', 'NEXFRON', '/' || company_id, 0, 'ACTIVE', now_time, now_time),
+        (dev_div_id, std_tenant, company_id, '개발본부', 'DIVISION', 'DEV-DIV', '/' || company_id || '/' || dev_div_id, 1, 'ACTIVE', now_time, now_time),
+        (sales_div_id, std_tenant, company_id, '영업본부', 'DIVISION', 'SALES-DIV', '/' || company_id || '/' || sales_div_id, 1, 'ACTIVE', now_time, now_time),
+        (backend_team_id, std_tenant, dev_div_id, '백엔드팀', 'TEAM', 'DEV-BE', '/' || company_id || '/' || dev_div_id || '/' || backend_team_id, 2, 'ACTIVE', now_time, now_time),
+        (frontend_team_id, std_tenant, dev_div_id, '프론트엔드팀', 'TEAM', 'DEV-FE', '/' || company_id || '/' || dev_div_id || '/' || frontend_team_id, 2, 'ACTIVE', now_time, now_time);
 
-    -- =========================================================================
-    -- 4. 권한(Permission) 데이터
-    -- =========================================================================
+    -- 사용자 생성 (비밀번호: admin123)
+    INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, dept_id, status, created_at, updated_at)
+    VALUES
+        (admin_id, std_tenant, 'admin', '$2a$10$dummyhash', '시스템관리자', 'EMP-0001', 'admin@nexfron.com', company_id, 'ACTIVE', now_time, now_time),
+        (dev_lead_id, std_tenant, 'dev.lead', '$2a$10$dummyhash', '김팀장', 'EMP-0002', 'dev.lead@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time),
+        (dev_member_id, std_tenant, 'dev.member', '$2a$10$dummyhash', '이개발', 'EMP-0003', 'dev.member@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time);
 
+    -- 역할 생성
+    INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope_level, is_active, created_at, updated_at)
+    VALUES
+        (admin_role_id, std_tenant, 'ADMIN', 'POSITION', 'ADMIN', TRUE, now_time, now_time),
+        (team_lead_role_id, std_tenant, 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', TRUE, now_time, now_time),
+        (member_role_id, std_tenant, 'MEMBER', 'POSITION', 'MEMBER', TRUE, now_time, now_time);
+
+    -- 권한 생성
     INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, resource, action, created_at, updated_at)
     VALUES
-        (perm_user_create, std_tenant, 'user:create', '사용자 생성', 'user', 'create', NOW(), NOW()),
-        (perm_user_read, std_tenant, 'user:read', '사용자 조회', 'user', 'read', NOW(), NOW()),
-        (perm_user_update, std_tenant, 'user:update', '사용자 수정', 'user', 'update', NOW(), NOW()),
-        (perm_user_delete, std_tenant, 'user:delete', '사용자 삭제', 'user', 'delete', NOW(), NOW()),
-        (perm_org_create, std_tenant, 'org:create', '조직 생성', 'organization', 'create', NOW(), NOW()),
-        (perm_org_read, std_tenant, 'org:read', '조직 조회', 'organization', 'read', NOW(), NOW()),
-        (perm_org_update, std_tenant, 'org:update', '조직 수정', 'organization', 'update', NOW(), NOW()),
-        (perm_rbac_manage, std_tenant, 'rbac:manage', 'RBAC 관리', 'rbac', 'manage', NOW(), NOW()),
-        (perm_report_view, std_tenant, 'report:view', '보고서 조회', 'report', 'view', NOW(), NOW()),
-        (perm_report_export, std_tenant, 'report:export', '보고서 내보내기', 'report', 'export', NOW(), NOW());
+        (perm_user_create, std_tenant, 'user:create', '사용자 생성', 'user', 'create', now_time, now_time),
+        (perm_user_read, std_tenant, 'user:read', '사용자 조회', 'user', 'read', now_time, now_time),
+        (perm_user_update, std_tenant, 'user:update', '사용자 수정', 'user', 'update', now_time, now_time),
+        (perm_user_delete, std_tenant, 'user:delete', '사용자 삭제', 'user', 'delete', now_time, now_time),
+        (perm_org_create, std_tenant, 'org:create', '조직 생성', 'organization', 'create', now_time, now_time),
+        (perm_org_read, std_tenant, 'org:read', '조직 조회', 'organization', 'read', now_time, now_time),
+        (perm_org_update, std_tenant, 'org:update', '조직 수정', 'organization', 'update', now_time, now_time),
+        (perm_rbac_manage, std_tenant, 'rbac:manage', 'RBAC 관리', 'rbac', 'manage', now_time, now_time),
+        (perm_report_view, std_tenant, 'report:view', '보고서 조회', 'report', 'view', now_time, now_time),
+        (perm_report_export, std_tenant, 'report:export', '보고서 내보내기', 'report', 'export', now_time, now_time);
 
-    -- =========================================================================
-    -- 5. 역할-권한 매핑
-    -- =========================================================================
-
-    -- ADMIN: 모든 권한
+    -- 역할-권한 매핑 (ADMIN: 모든 권한)
     INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
-    SELECT admin_role_id, permission_id, NOW(), NOW()
-    FROM rbac_permissions
-    WHERE tenant_id = std_tenant;
+    SELECT admin_role_id, permission_id, now_time, now_time
+    FROM rbac_permissions WHERE tenant_id = std_tenant;
 
-    -- TEAM_LEAD: 팀 관리 권한 (조회만 가능, 수정/생성 불가)
+    -- TEAM_LEAD 권한 (조회만 가능, 수정/생성 불가)
     INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
     VALUES
-        (team_lead_role_id, perm_user_read, NOW(), NOW()),
-        (team_lead_role_id, perm_org_read, NOW(), NOW()),
-        (team_lead_role_id, perm_report_view, NOW(), NOW()),
-        (team_lead_role_id, perm_report_export, NOW(), NOW());
+        (team_lead_role_id, perm_user_read, now_time, now_time),
+        (team_lead_role_id, perm_org_read, now_time, now_time),
+        (team_lead_role_id, perm_report_view, now_time, now_time),
+        (team_lead_role_id, perm_report_export, now_time, now_time);
 
-    -- MEMBER: 기본 권한
+    -- MEMBER 권한
     INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
     VALUES
-        (member_role_id, perm_user_read, NOW(), NOW()),
-        (member_role_id, perm_org_read, NOW(), NOW()),
-        (member_role_id, perm_report_view, NOW(), NOW());
+        (member_role_id, perm_user_read, now_time, now_time),
+        (member_role_id, perm_org_read, now_time, now_time),
+        (member_role_id, perm_report_view, now_time, now_time);
 
-    -- =========================================================================
-    -- 6. 사용자-역할 매핑
-    -- =========================================================================
-
+    -- 사용자-역할 매핑
     INSERT INTO rbac_agent_roles (agent_id, role_id, assigned_at, created_at)
     VALUES
-        (admin_id, admin_role_id, NOW(), NOW()),
-        (dev_lead_id, team_lead_role_id, NOW(), NOW()),
-        (dev_member_id, member_role_id, NOW(), NOW());
+        (admin_id, admin_role_id, now_time, now_time),
+        (dev_lead_id, team_lead_role_id, now_time, now_time),
+        (dev_member_id, member_role_id, now_time, now_time);
 
 END $$;
 
@@ -430,22 +382,20 @@ END $$;
 DO $$
 BEGIN
     RAISE NOTICE '=============================================================================';
-    RAISE NOTICE 'Identity Modulith Database Initialized Successfully!';
+    RAISE NOTICE 'Identity Modulith Database Reset Complete!';
     RAISE NOTICE '=============================================================================';
-    RAISE NOTICE '';
-    RAISE NOTICE 'Created Tables:';
-    RAISE NOTICE '  - org_departments: 5 departments';
-    RAISE NOTICE '  - user_agents: 3 users';
-    RAISE NOTICE '  - rbac_roles: 3 roles';
-    RAISE NOTICE '  - rbac_permissions: 10 permissions';
-    RAISE NOTICE '  - rbac_role_permissions: 18 mappings';
-    RAISE NOTICE '  - rbac_agent_roles: 3 mappings';
-    RAISE NOTICE '';
+    RAISE NOTICE 'Tables Created:';
+    RAISE NOTICE '  1. org_departments';
+    RAISE NOTICE '  2. user_agents';
+    RAISE NOTICE '  3. rbac_roles';
+    RAISE NOTICE '  4. rbac_permissions';
+    RAISE NOTICE '  5. rbac_role_permissions';
+    RAISE NOTICE '  6. rbac_agent_roles';
+    RAISE NOTICE '=============================================================================';
     RAISE NOTICE 'Test Accounts:';
-    RAISE NOTICE '  - admin / admin123 (password)';
-    RAISE NOTICE '  - dev.lead / admin123';
-    RAISE NOTICE '  - dev.member / admin123';
-    RAISE NOTICE '';
+    RAISE NOTICE '  - admin / admin123 (시스템관리자)';
+    RAISE NOTICE '  - dev.lead / admin123 (김팀장)';
+    RAISE NOTICE '  - dev.member / admin123 (이개발)';
     RAISE NOTICE '=============================================================================';
 END $$;
 

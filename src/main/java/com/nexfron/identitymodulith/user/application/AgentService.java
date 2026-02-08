@@ -120,7 +120,7 @@ public class AgentService implements
         String encodedPassword = passwordEncoder.encode(tempPassword);
 
         agent.resetPassword(encodedPassword);
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨
 
         return ResetPasswordResult.builder()
                 .agentId(agent.getId())
@@ -188,7 +188,7 @@ public class AgentService implements
     public void updateAgent(UpdateAgentCommand command) {
         Agent agent = findAgentById(command.getAgentId());
         agent.updateName(command.getName());
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨 (saveAgent 호출 불필요)
     }
 
     /**
@@ -202,7 +202,7 @@ public class AgentService implements
     public void transferOrganization(UUID agentId, String newOrganizationId) {
         Agent agent = findAgentById(agentId);
         agent.transferOrganization(newOrganizationId);
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨
     }
 
     /**
@@ -219,7 +219,7 @@ public class AgentService implements
     public void suspendAgent(UUID agentId, String suspendedByUserId) {
         Agent agent = findAgentById(agentId);
         agent.suspend(suspendedByUserId);
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨
     }
 
     /**
@@ -235,7 +235,7 @@ public class AgentService implements
     public void activateAgentInternal(UUID agentId, String activatedByUserId) {
         Agent agent = findAgentById(agentId);
         agent.activate();
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨
     }
 
     /**
@@ -257,7 +257,7 @@ public class AgentService implements
     public void retireAgentWithPolicyInternal(UUID agentId, String retiredByUserId, Agent.RetireDeletePolicy deletePolicy, Integer retentionDays) {
         Agent agent = findAgentById(agentId);
         agent.retire(retiredByUserId, deletePolicy, retentionDays);
-        saveAgent(agent);
+        // JPA dirty checking으로 자동 저장됨
     }
 
     /**
@@ -521,6 +521,10 @@ private AgentInfo toAgentInfo(Agent agent) {
         return AgentExternalInfo.builder()
                 .id(agent.getId())
                 .tenantId(agent.getTenantId())
+                .loginId(agent.getLoginId())
+                .name(agent.getName())
+                .email(agent.getEmail())
+                .employeeId(agent.getEmployeeId())
                 .organizationId(agent.getOrganizationId())
                 .roles(roleInfos)
                 .active(agent.isActive())

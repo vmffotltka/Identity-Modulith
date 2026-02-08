@@ -21,6 +21,10 @@ public class AgentExternalInfo {
 
     private final UUID id;
     private final String tenantId;
+    private final String loginId;
+    private final String name;
+    private final String email;
+    private final String employeeId;
     private final String organizationId;
     private final Set<RoleInfo> roles;
     private final boolean active;

@@ -174,10 +174,10 @@ public class AgentOrgUserAdapter implements OrgUserPort {
         return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).stream()
                 .map(agent -> new com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto.MemberInfo(
                         agent.getId().toString(),
-                        "user_" + agent.getId().toString().substring(0, 8),  // loginId (임시)
-                        "User " + agent.getId().toString().substring(0, 8),  // name (임시)
+                        agent.getLoginId(),
+                        agent.getName(),
                         agent.getOrganizationId(),
-                        "",  // jobTitle (User 모듈에서 제공 필요)
+                        agent.getEmployeeId() != null ? agent.getEmployeeId() : "",  // jobTitle 대신 employeeId 사용
                         agent.isActive() ? "ACTIVE" : "RETIRED"
                 ))
                 .collect(java.util.stream.Collectors.toList());
@@ -223,6 +223,10 @@ public class AgentOrgUserAdapter implements OrgUserPort {
         return OrgUserView.builder()
                 .userId(info.getId())
                 .tenantId(info.getTenantId())
+                .loginId(info.getLoginId())
+                .name(info.getName())
+                .email(info.getEmail())
+                .employeeId(info.getEmployeeId())
                 .deptId(deptId)
                 .deptOrgPath(null)
                 .departmentName(departmentName)

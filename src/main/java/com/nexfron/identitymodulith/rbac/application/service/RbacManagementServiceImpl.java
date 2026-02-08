@@ -39,6 +39,7 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
     private final PermissionJpaRepository permissionRepository;
     private final RolePermissionJpaRepository rolePermissionRepository;
     private final AgentRoleJpaRepository agentRoleRepository;
+    private final RbacQueryService rbacQueryService;
 
     /**
      * 현재 요청의 tenantId 추출
@@ -960,5 +961,13 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
         log.debug("[RBAC] 사용자 역할 조회 완료 - agentId={}, roleCount={}", agentId, roleInfos.size());
         return roleInfos;
+    }
+
+    @Override
+    public Set<String> getPermissionsByAgentId(String tenantId, String agentId) {
+        UUID agentUuid = UUID.fromString(agentId);
+        Set<String> permissions = rbacQueryService.permissionsOf(tenantId, agentUuid);
+        log.debug("[RBAC] 사용자 권한 조회 - agentId={}, permissionCount={}", agentId, permissions.size());
+        return permissions;
     }
 }

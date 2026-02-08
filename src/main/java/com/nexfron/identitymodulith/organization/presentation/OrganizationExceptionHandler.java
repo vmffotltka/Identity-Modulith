@@ -2,9 +2,12 @@ package com.nexfron.identitymodulith.organization.presentation;
 
 import com.nexfron.identitymodulith.organization.application.exception.OrganizationException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -40,6 +43,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 @RequiredArgsConstructor
+@Slf4j
 public class OrganizationExceptionHandler {
 
     /**
@@ -132,6 +136,115 @@ public class OrganizationExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    /**
+     * Bean Validation 실패 처리 (Request Body 검증 실패)
+     *
+     * <h3>발생 시나리오:</h3>
+     * <ul>
+     *   <li>@NotNull, @NotBlank, @NotEmpty 등의 검증 실패</li>
+     *   <li>@Valid 어노테이션이 붙은 Request Body의 필드 검증 실패</li>
+     *   <li>예: roles가 null이거나 빈 배열인 경우</li>
+     * </ul>
+     *
+     * <h3>처리 흐름:</h3>
+     * <ol>
+     *   <li>BindingResult에서 첫 번째 필드 에러 추출</li>
+     *   <li>필드명과 기본 메시지로 ErrorResponse 생성</li>
+     *   <li>400 Bad Request 반환</li>
+     * </ol>
+     *
+     * <h3>예시:</h3>
+     * <pre>
+     * Request Body:
+     * {
+     *   "tenantId": "default-tenant",
+     *   "loginId": "test.user",
+     *   "name": "테스트",
+     *   "organizationId": "00000000-0000-0000-0000-000000000004"
+     *   // roles 누락
+     * }
+     *
+     * 응답 (400 Bad Request):
+     * {
+     *   "code": "INVALID_INPUT_VALUE",
+     *   "message": "역할은 최소 1개 이상이어야 합니다"
+     * }
+     * </pre>
+     *
+     * @param e MethodArgumentNotValidException 객체
+     * @return HTTP 400 Bad Request + 에러 응답 본문
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(
+            MethodArgumentNotValidException e) {
+
+        // 첫 번째 필드 에러 추출
+        FieldError fieldError = e.getBindingResult().getFieldError();
+        String message = fieldError != null ? fieldError.getDefaultMessage() : "입력값이 올바르지 않습니다";
+
+        ErrorResponse response = ErrorResponse.builder()
+                .code("INVALID_INPUT_VALUE")
+                .message(message)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    /**
+     * User 모듈의 BusinessException 처리 (RuntimeException으로 처리)
+     *
+     * <h3>발생 시나리오:</h3>
+     * <ul>
+     *   <li>DUPLICATE_USERNAME: 중복 로그인 아이디 (409 Conflict)</li>
+     *   <li>AGENT_NOT_FOUND: 상담사를 찾을 수 없음 (404 Not Found)</li>
+     *   <li>AGENT_ALREADY_RETIRED: 이미 퇴사 처리된 상담사 (400 Bad Request)</li>
+     *   <li>INVALID_STATUS_TRANSITION: 잘못된 상태 전이 (400 Bad Request)</li>
+     * </ul>
+     *
+     * <h3>처리 흐름:</h3>
+     * <ol>
+     *   <li>RuntimeException에서 클래스명 확인</li>
+     *   <li>BusinessException인 경우 Reflection으로 ErrorCode 추출</li>
+     *   <li>ErrorCode의 HTTP 상태 코드와 메시지로 응답</li>
+     * </ol>
+     *
+     * @param e RuntimeException 객체
+     * @return HTTP 상태 코드 + 에러 응답 본문 또는 null (다른 핸들러로 위임)
+     */
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException e) {
+        // BusinessException 처리 (user 모듈)
+        if ("com.nexfron.identitymodulith.user.domain.exception.BusinessException".equals(e.getClass().getName())) {
+            try {
+                // Reflection으로 ErrorCode 추출
+                java.lang.reflect.Method getErrorCodeMethod = e.getClass().getMethod("getErrorCode");
+                Object errorCode = getErrorCodeMethod.invoke(e);
+
+                // ErrorCode의 status와 message 추출
+                java.lang.reflect.Method getStatusMethod = errorCode.getClass().getMethod("getStatus");
+                java.lang.reflect.Method getCodeMethod = errorCode.getClass().getMethod("getCode");
+                java.lang.reflect.Method getMessageMethod = errorCode.getClass().getMethod("getMessage");
+
+                HttpStatus status = (HttpStatus) getStatusMethod.invoke(errorCode);
+                String code = (String) getCodeMethod.invoke(errorCode);
+                String message = (String) getMessageMethod.invoke(errorCode);
+
+                ErrorResponse response = ErrorResponse.builder()
+                        .code(code)
+                        .message(message)
+                        .build();
+
+                return ResponseEntity.status(status).body(response);
+            } catch (Exception reflectionException) {
+                log.error("[ORG] BusinessException 처리 실패: {}", reflectionException.getMessage(), reflectionException);
+                // Fallback: 기본 500 에러 처리로 위임
+            }
+        }
+
+        // 다른 RuntimeException은 Exception 핸들러로 위임
+        return null;
+    }
+
 
     /**
      * 예기치 않은 일반 예외 처리
@@ -153,6 +266,9 @@ public class OrganizationExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception e) {
+        // 🔴 실제 오류 로깅 추가
+        log.error("[ORG] 예상치 못한 오류 발생: {}", e.getMessage(), e);
+
         // 클라이언트에는 상세 정보 미노출
         ErrorResponse response = ErrorResponse.builder()
                 .code("INTERNAL_ERROR")

@@ -23,6 +23,15 @@ public interface RbacModuleApi {
     Set<RoleInfo> getRolesByAgentId(String agentId);
 
     /**
+     * 특정 테넌트의 사용자가 가진 모든 권한 코드를 조회합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param agentId 사용자 ID (UUID 문자열)
+     * @return 권한 코드 집합 (예: {"user:read", "org:update"})
+     */
+    Set<String> getPermissionsByAgentId(String tenantId, String agentId);
+
+    /**
      * 역할 정보 DTO
      */
     @Getter

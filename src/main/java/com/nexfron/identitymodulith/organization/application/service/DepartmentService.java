@@ -35,11 +35,18 @@ public interface DepartmentService {
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
      * @param code 부서 코드 (필수, 테넌트 내 고유)
      * @param customTypeName 커스텀 타입명 (type=CUSTOM일 때 필수)
+     * @param tenantId 테넌트 ID
+     * @param actorUserId 생성 요청한 사용자 ID (권한 검증용)
+     * @param name 부서명
+     * @param type 부서 타입
+     * @param code 부서 코드
+     * @param customTypeName 커스텀 타입명 (type=CUSTOM일 때 필수)
      * @param parentId 상위 부서 ID (null이면 루트 부서)
      * @return 생성된 부서 정보
      */
     DepartmentDto.Response createDepartment(
             String tenantId,
+            UUID actorUserId,
             String name,
             DepartmentType type,
             String code,
@@ -50,6 +57,7 @@ public interface DepartmentService {
      * 부서 정보 수정 (name, type만 수정 가능)
      *
      * @param tenantId 테넌트 ID
+     * @param actorUserId 수정 요청한 사용자 ID (권한 검증용)
      * @param deptId 부서 ID
      * @param name 새 부서명 (null이면 변경 안 함)
      * @param type 새 부서 타입 (null이면 변경 안 함)
@@ -57,6 +65,7 @@ public interface DepartmentService {
      */
     DepartmentDto.Response updateDepartment(
             String tenantId,
+            UUID actorUserId,
             String deptId,
             String name,
             DepartmentType type);

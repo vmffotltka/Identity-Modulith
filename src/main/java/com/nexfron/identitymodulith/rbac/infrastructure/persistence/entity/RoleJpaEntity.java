@@ -130,7 +130,7 @@ public class RoleJpaEntity {
      * 선택 사항 (CHANNEL 역할은 NULL)
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "data_scope", length = 32)
+    @Column(name = "data_scope_level", length = 32)
     private DataScopeLevel dataScope;
 
     /**
