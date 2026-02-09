@@ -24,6 +24,10 @@ public class OrgUserView {
 
     private UUID userId;           // Users.id (UUID)
     private String tenantId;       // 테넌트 ID
+    private String loginId;        // 로그인 ID
+    private String name;           // 사용자 이름
+    private String email;          // 이메일
+    private String employeeId;     // 사원번호
 
     private String deptId;         // 소속 부서 ID (UUID 문자열, FK: departments.dept_id)
     private String deptOrgPath;    // 소속 부서 orgPath (없으면 Dept에서 계산 가능)

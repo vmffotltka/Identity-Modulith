@@ -3,10 +3,13 @@ package com.nexfron.identitymodulith.user.presentation.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+
+import java.util.Set;
 
 /**
  * 상담사 생성 요청 DTO
@@ -16,7 +19,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "상담사 생성 요청")
 public class CreateAgentRequest {
 
-    @Schema(description = "테넌트 ID", example = "tenant-001", required = true)
+    @Schema(description = "테넌트 ID", example = "default-tenant", required = true)
     @NotBlank(message = "테넌트 ID는 필수입니다")
     private String tenantId;
 
@@ -33,6 +36,10 @@ public class CreateAgentRequest {
     @Schema(description = "소속 조직 ID (UUID)", example = "550e8400-e29b-41d4-a716-446655440000", required = true)
     @NotBlank(message = "조직 ID는 필수입니다")
     private String organizationId;
+
+    @Schema(description = "역할 목록 (최소 1개 필수)", example = "[\"MEMBER\"]", required = true)
+    @NotEmpty(message = "역할은 최소 1개 이상이어야 합니다")
+    private Set<String> roles;
 
     // 선택 필드
     @Schema(description = "이메일", example = "hong@example.com")

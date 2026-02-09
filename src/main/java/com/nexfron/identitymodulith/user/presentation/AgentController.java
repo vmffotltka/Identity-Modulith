@@ -7,6 +7,7 @@ import com.nexfron.identitymodulith.user.application.GetAgentUseCase.AgentSearch
 import com.nexfron.identitymodulith.user.application.ResetPasswordUseCase.ResetPasswordResult;
 import com.nexfron.identitymodulith.user.application.UpdateAgentUseCase.UpdateAgentCommand;
 import com.nexfron.identitymodulith.user.application.port.RbacPort;
+import com.nexfron.identitymodulith.user.domain.model.Agent;
 import com.nexfron.identitymodulith.user.presentation.dto.request.*;
 import com.nexfron.identitymodulith.user.presentation.dto.response.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -84,11 +86,21 @@ public class AgentController {
             description = "상담사 생성 요청",
             required = true
         ) CreateAgentRequest request) {
+
+        // roles 문자열을 Agent.Role 객체로 변환
+        Set<Agent.Role> roles = request.getRoles().stream()
+                .map(roleName -> new Agent.Role(roleName, Agent.Role.RoleType.POSITION))
+                .collect(java.util.stream.Collectors.toSet());
+
         CreateAgentCommand command = CreateAgentCommand.builder()
                 .tenantId(request.getTenantId())
                 .loginId(request.getLoginId())
                 .name(request.getName())
                 .organizationId(request.getOrganizationId())
+                .roles(roles)
+                .email(request.getEmail())
+                .phone(request.getPhone())
+                .employeeId(request.getEmployeeId())
                 .build();
 
         CreateAgentResult result = createAgentUseCase.createAgent(command);

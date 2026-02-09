@@ -89,16 +89,20 @@ public class DepartmentController {
             @ApiResponse(responseCode = "201", description = "부서 생성 성공"),
             @ApiResponse(responseCode = "400", description = "잘못된 요청 (상위 부서 없음 등)"),
             @ApiResponse(responseCode = "401", description = "인증 필요"),
-            @ApiResponse(responseCode = "403", description = "권한 없음")
+            @ApiResponse(responseCode = "403", description = "권한 없음 (org:create 필요)")
     })
     @PostMapping
     public ResponseEntity<DepartmentDto.Response> createDepartment(
+            @Parameter(description = "사용자 ID (UUID)", required = true)
+            @RequestHeader(value = "X-User-Id") String userIdStr,
             @Valid @RequestBody DepartmentDto.CreateRequest request) {
         // TenantContextHolder에서 자동 추출
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        UUID userId = UUID.fromString(userIdStr);
 
         DepartmentDto.Response response = departmentServiceImpl.createDepartment(
                 tenantId,
+                userId,
                 request.getName(),
                 request.getType(),
                 request.getCode(),
@@ -126,17 +130,22 @@ public class DepartmentController {
     @Operation(summary = "부서 정보 수정", description = "부서의 이름이나 타입을 수정합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "부서 수정 성공"),
+            @ApiResponse(responseCode = "403", description = "권한 없음 (org:update 필요)"),
             @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
     })
     @PatchMapping("/{deptId}")
     public ResponseEntity<DepartmentDto.Response> updateDepartment(
+            @Parameter(description = "사용자 ID (UUID)", required = true)
+            @RequestHeader(value = "X-User-Id") String userIdStr,
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId,
             @Valid @RequestBody DepartmentDto.UpdateRequest request) {
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+        UUID userId = UUID.fromString(userIdStr);
 
         DepartmentDto.Response response = departmentServiceImpl.updateDepartment(
                 tenantId,
+                userId,
                 deptId,
                 request.getName(),
                 request.getType()

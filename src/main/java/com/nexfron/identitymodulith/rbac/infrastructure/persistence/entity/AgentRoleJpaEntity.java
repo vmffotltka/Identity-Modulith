@@ -44,7 +44,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(
-        name = "user_agent_roles",  // V1_0_20: 표준 명명 규칙 적용 (agent_roles → user_agent_roles)
+        name = "rbac_agent_roles",  // RBAC 모듈의 테이블이므로 rbac_ 접두사 사용 (일관성)
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_agent_roles",
                 columnNames = {"agent_id", "role_id"}

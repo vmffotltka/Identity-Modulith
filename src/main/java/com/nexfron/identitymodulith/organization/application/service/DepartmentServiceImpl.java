@@ -10,6 +10,7 @@ import com.nexfron.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.nexfron.identitymodulith.organization.infrastructure.persistence.repository.JpaDepartmentRepository;
 import com.nexfron.identitymodulith.organization.application.port.OrgUserPort;
 import com.nexfron.identitymodulith.organization.OrganizationModuleApi;
+import com.nexfron.identitymodulith.rbac.RbacModuleApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,12 +42,14 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
 
     private final JpaDepartmentRepository departmentRepository;
     private final OrgUserPort orgUserPort;
+    private final RbacModuleApi rbacModuleApi;
 
     /**
      * 부서 생성
      * - parentId 검증 → 도메인 엔티티 생성 → DB 저장
      *
      * @param tenantId 테넌트 ID
+     * @param actorUserId 생성 요청한 사용자 ID (권한 검증용)
      * @param name 부서명 (필수)
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
      * @param code 부서 코드 (필수, 테넌트 내 고유)
@@ -58,6 +61,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
     @Transactional
     public DepartmentDto.Response createDepartment(
             String tenantId,
+            UUID actorUserId,
             String name,
             DepartmentType type,
             String code,
@@ -65,6 +69,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             String parentId) {
 
         Objects.requireNonNull(tenantId, "tenantId는 null일 수 없습니다");
+        Objects.requireNonNull(actorUserId, "actorUserId는 null일 수 없습니다");
         Objects.requireNonNull(name, "name은 null일 수 없습니다");
         Objects.requireNonNull(code, "code는 null일 수 없습니다");
 
@@ -75,8 +80,17 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             throw new IllegalArgumentException("code는 빈 문자열일 수 없습니다");
         }
 
-        log.info("[ORG] 부서 생성 - tenantId={}, name={}, type={}, code={}, parentId={}",
-                 tenantId, name, type, code, parentId);
+        // RBAC 권한 검증: org:create 권한 필요
+        Set<String> permissions = rbacModuleApi.getPermissionsByAgentId(tenantId, actorUserId.toString());
+        if (!permissions.contains("org:create")) {
+            log.warn("[ORG] org:create 권한 없음 - userId={}, permissions={}", actorUserId, permissions);
+            throw new OrganizationException(
+                    OrganizationErrorCode.INSUFFICIENT_PERMISSION
+            );
+        }
+
+        log.info("[ORG] 부서 생성 - tenantId={}, userId={}, name={}, type={}, code={}, parentId={}",
+                 tenantId, actorUserId, name, type, code, parentId);
 
         // CD-002: 루트 부서 중복 생성 방지 (테스트 환경에서는 주석 처리)
         // 운영 환경에서는 테넌트당 하나의 루트 부서만 허용하려면 활성화
@@ -136,6 +150,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * - name, type 필드만 수정 가능
      *
      * @param tenantId 테넌트 ID
+     * @param actorUserId 수정 요청한 사용자 ID (권한 검증용)
      * @param deptId 부서 ID
      * @param name 새 부서명 (null이면 변경 안 함)
      * @param type 새 부서 타입 (null이면 변경 안 함)
@@ -145,13 +160,31 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
     @Transactional
     public DepartmentDto.Response updateDepartment(
             String tenantId,
+            UUID actorUserId,
             String deptId,
             String name,
             DepartmentType type) {
 
+        Objects.requireNonNull(tenantId, "tenantId는 null일 수 없습니다");
+        Objects.requireNonNull(actorUserId, "actorUserId는 null일 수 없습니다");
+        Objects.requireNonNull(deptId, "deptId는 null일 수 없습니다");
+
+        // RBAC 권한 검증: org:update 권한 필요
+        Set<String> permissions = rbacModuleApi.getPermissionsByAgentId(tenantId, actorUserId.toString());
+        if (!permissions.contains("org:update")) {
+            log.warn("[ORG] org:update 권한 없음 - userId={}, permissions={}", actorUserId, permissions);
+            throw new OrganizationException(
+                    OrganizationErrorCode.INSUFFICIENT_PERMISSION
+            );
+        }
+
+        log.info("[ORG] 부서 수정 - tenantId={}, userId={}, deptId={}, name={}, type={}",
+                 tenantId, actorUserId, deptId, name, type);
+
+        // 부서 조회
         DepartmentEntity departmentEntity = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
-                        OrganizationException.OrganizationErrorCode.DEPARTMENT_NOT_FOUND));
+                        OrganizationErrorCode.DEPARTMENT_NOT_FOUND));
 
         // UD-002: type 변경 시 검증 (CUSTOM 타입 관련)
         if (type != null && type != departmentEntity.getType()) {
@@ -214,7 +247,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * - 권한 검증, 순환 참조 체크
      */
     @Transactional(readOnly = true)
-    private void validateMoveDepartment(
+    protected void validateMoveDepartment(
             String tenantId,
             UUID actorUserId,
             String deptId,
@@ -233,13 +266,22 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             );
         }
 
-        // 권한 검증
+        // RBAC 권한 검증: org:update 권한 필요
+        Set<String> permissions = rbacModuleApi.getPermissionsByAgentId(tenantId, actorUserId.toString());
+        if (!permissions.contains("org:update")) {
+            log.warn("[ORG] org:update 권한 없음 - userId={}, permissions={}", actorUserId, permissions);
+            throw new OrganizationException(
+                    OrganizationErrorCode.INSUFFICIENT_PERMISSION
+            );
+        }
+
+        // DataScope 권한 검증: 접근 가능한 부서인지
         Set<String> accessibleDeptIds = getAccessibleDepartmentIds(
                 tenantId,
                 actorUserId
         );
         if (!accessibleDeptIds.contains(deptId)) {
-            log.warn("[ORG] 부서 이동 권한 없음 - userId={}, deptId={}", actorUserId, deptId);
+            log.warn("[ORG] 부서 접근 권한 없음 - userId={}, deptId={}", actorUserId, deptId);
             throw new OrganizationException(
                     OrganizationErrorCode.INSUFFICIENT_PERMISSION
             );
@@ -276,7 +318,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * - 부서 상위 변경, 하위 부서 경로 일괄 업데이트
      */
     @Transactional
-    private void executeMoveDepartment(
+    protected void executeMoveDepartment(
             String tenantId,
             String deptId,
             String newParentId) {

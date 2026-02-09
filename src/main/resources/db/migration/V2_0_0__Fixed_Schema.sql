@@ -107,7 +107,7 @@ CREATE TABLE rbac_roles (
 
     CONSTRAINT uk_roles_tenant_name UNIQUE (tenant_id, name),
     CONSTRAINT chk_role_type CHECK (type IN ('POSITION', 'CHANNEL', 'SKILL', 'CUSTOM')),
-    CONSTRAINT chk_data_scope CHECK (data_scope_level IN ('SELF', 'DEPARTMENT', 'ALL', 'CUSTOM'))
+    CONSTRAINT chk_data_scope CHECK (data_scope_level IN ('ADMIN', 'TEAM_LEAD', 'MEMBER', 'CUSTOM'))
 );
 
 CREATE INDEX idx_role_tenant ON rbac_roles(tenant_id);
@@ -122,15 +122,15 @@ COMMENT ON TABLE rbac_roles IS 'RBAC 역할 테이블';
 CREATE TABLE rbac_permissions (
     permission_id       VARCHAR(36)     PRIMARY KEY,
     tenant_id           VARCHAR(50)     NOT NULL,
-    code                VARCHAR(100)    NOT NULL,
+    code                VARCHAR(128)    NOT NULL,
     name                VARCHAR(100)    NOT NULL,
+    description         VARCHAR(500),
+    category            VARCHAR(64),
     resource            VARCHAR(100),
     action              VARCHAR(50),
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by          VARCHAR(36),
-    updated_by          VARCHAR(36),
-    version             INTEGER         DEFAULT 0,
+    version             BIGINT          DEFAULT 0,
 
     CONSTRAINT uk_perm_tenant_code UNIQUE (tenant_id, code)
 );
@@ -148,6 +148,7 @@ CREATE TABLE rbac_role_permissions (
     id                  BIGSERIAL       PRIMARY KEY,
     role_id             VARCHAR(36)     NOT NULL,
     permission_id       VARCHAR(36)     NOT NULL,
+    assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by          VARCHAR(36),
 
@@ -160,6 +161,7 @@ CREATE TABLE rbac_role_permissions (
 
 CREATE INDEX idx_rp_role ON rbac_role_permissions(role_id);
 CREATE INDEX idx_rp_permission ON rbac_role_permissions(permission_id);
+CREATE INDEX idx_rp_assigned_at ON rbac_role_permissions(assigned_at);
 
 -- =============================================================================
 -- 6. RBAC - 사용자-역할 매핑 테이블
@@ -169,18 +171,22 @@ CREATE TABLE rbac_agent_roles (
     id                  BIGSERIAL       PRIMARY KEY,
     agent_id            VARCHAR(36)     NOT NULL,
     role_id             VARCHAR(36)     NOT NULL,
+    assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by          VARCHAR(36),
 
-    CONSTRAINT fk_ar_agent FOREIGN KEY (agent_id)
+    CONSTRAINT fk_agent_roles_agent FOREIGN KEY (agent_id)
         REFERENCES user_agents(agent_id) ON DELETE CASCADE,
-    CONSTRAINT fk_ar_role FOREIGN KEY (role_id)
+    CONSTRAINT fk_agent_roles_role FOREIGN KEY (role_id)
         REFERENCES rbac_roles(role_id) ON DELETE CASCADE,
-    CONSTRAINT uk_agent_role UNIQUE (agent_id, role_id)
+    CONSTRAINT uk_agent_roles UNIQUE (agent_id, role_id)
 );
 
-CREATE INDEX idx_ar_agent ON rbac_agent_roles(agent_id);
-CREATE INDEX idx_ar_role ON rbac_agent_roles(role_id);
+CREATE INDEX idx_agent_roles_agent ON rbac_agent_roles(agent_id);
+CREATE INDEX idx_agent_roles_role ON rbac_agent_roles(role_id);
+CREATE INDEX idx_agent_roles_assigned_at ON rbac_agent_roles(assigned_at);
+
+COMMENT ON TABLE rbac_agent_roles IS 'RBAC 사용자-역할 매핑 테이블';
 
 -- =============================================================================
 -- 표준 데이터 삽입
@@ -240,9 +246,9 @@ BEGIN
     -- 역할 생성
     INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope_level, is_active, created_at, updated_at)
     VALUES
-        (admin_role_id, std_tenant, 'ADMIN', 'POSITION', 'ALL', TRUE, now_time, now_time),
-        (team_lead_role_id, std_tenant, 'TEAM_LEAD', 'POSITION', 'DEPARTMENT', TRUE, now_time, now_time),
-        (member_role_id, std_tenant, 'MEMBER', 'POSITION', 'SELF', TRUE, now_time, now_time);
+        (admin_role_id, std_tenant, 'ADMIN', 'POSITION', 'ADMIN', TRUE, now_time, now_time),
+        (team_lead_role_id, std_tenant, 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', TRUE, now_time, now_time),
+        (member_role_id, std_tenant, 'MEMBER', 'POSITION', 'MEMBER', TRUE, now_time, now_time);
 
     -- 권한 생성
     INSERT INTO rbac_permissions (permission_id, tenant_id, code, name, resource, action, created_at, updated_at)
@@ -259,32 +265,31 @@ BEGIN
         (perm_report_export, std_tenant, 'report:export', '보고서 내보내기', 'report', 'export', now_time, now_time);
 
     -- 역할-권한 매핑 (ADMIN: 모든 권한)
-    INSERT INTO rbac_role_permissions (role_id, permission_id, created_at)
-    SELECT admin_role_id, permission_id, now_time
+    INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
+    SELECT admin_role_id, permission_id, now_time, now_time
     FROM rbac_permissions WHERE tenant_id = std_tenant;
 
-    -- TEAM_LEAD 권한
-    INSERT INTO rbac_role_permissions (role_id, permission_id, created_at)
+    -- TEAM_LEAD 권한 (조회만 가능, 수정/생성 불가)
+    INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
     VALUES
-        (team_lead_role_id, perm_user_read, now_time),
-        (team_lead_role_id, perm_user_update, now_time),
-        (team_lead_role_id, perm_org_read, now_time),
-        (team_lead_role_id, perm_report_view, now_time),
-        (team_lead_role_id, perm_report_export, now_time);
+        (team_lead_role_id, perm_user_read, now_time, now_time),
+        (team_lead_role_id, perm_org_read, now_time, now_time),
+        (team_lead_role_id, perm_report_view, now_time, now_time),
+        (team_lead_role_id, perm_report_export, now_time, now_time);
 
     -- MEMBER 권한
-    INSERT INTO rbac_role_permissions (role_id, permission_id, created_at)
+    INSERT INTO rbac_role_permissions (role_id, permission_id, assigned_at, created_at)
     VALUES
-        (member_role_id, perm_user_read, now_time),
-        (member_role_id, perm_org_read, now_time),
-        (member_role_id, perm_report_view, now_time);
+        (member_role_id, perm_user_read, now_time, now_time),
+        (member_role_id, perm_org_read, now_time, now_time),
+        (member_role_id, perm_report_view, now_time, now_time);
 
     -- 사용자-역할 매핑
-    INSERT INTO rbac_agent_roles (agent_id, role_id, created_at)
+    INSERT INTO rbac_agent_roles (agent_id, role_id, assigned_at, created_at)
     VALUES
-        (admin_id, admin_role_id, now_time),
-        (dev_lead_id, team_lead_role_id, now_time),
-        (dev_member_id, member_role_id, now_time);
+        (admin_id, admin_role_id, now_time, now_time),
+        (dev_lead_id, team_lead_role_id, now_time, now_time),
+        (dev_member_id, member_role_id, now_time, now_time);
 
 END $$;
 
