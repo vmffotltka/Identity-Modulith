@@ -21,6 +21,12 @@ public enum ErrorCode {
     AGENT_ALREADY_RETIRED(HttpStatus.BAD_REQUEST, "A003", "이미 퇴사 처리된 상담사입니다."),
     INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "A004", "잘못된 상태 전이입니다."),
     BUSINESS_RULE_VIOLATION(HttpStatus.BAD_REQUEST, "A005", "비즈니스 규칙을 위반했습니다."),
+    ORGANIZATION_NOT_FOUND(HttpStatus.NOT_FOUND, "A006", "부서를 찾을 수 없습니다."),
+
+    // Password Errors (P)
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "P001", "현재 비밀번호가 일치하지 않습니다."),
+    PASSWORD_CONFIRMATION_MISMATCH(HttpStatus.BAD_REQUEST, "P002", "새 비밀번호와 확인 비밀번호가 일치하지 않습니다."),
+    SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "P003", "새 비밀번호는 현재 비밀번호와 달라야 합니다."),
 
     // Authentication Errors (AUTH)
     PASSWORD_ENCODING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AUTH001", "비밀번호 처리 중 오류가 발생했습니다.");

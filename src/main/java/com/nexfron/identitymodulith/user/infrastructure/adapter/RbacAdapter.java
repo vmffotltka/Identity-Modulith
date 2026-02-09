@@ -47,4 +47,16 @@ public class RbacAdapter implements RbacPort {
             return false;
         }
     }
+
+    @Override
+    public boolean hasRole(String agentId, String roleName) {
+        log.debug("[User->RBAC] 역할 보유 확인 - agentId={}, roleName={}", agentId, roleName);
+        try {
+            return rbacManagementService.hasRole(agentId, roleName);
+        } catch (Exception e) {
+            log.warn("[User->RBAC] 역할 확인 실패 - agentId={}, roleName={}, error={}",
+                    agentId, roleName, e.getMessage());
+            return false;
+        }
+    }
 }

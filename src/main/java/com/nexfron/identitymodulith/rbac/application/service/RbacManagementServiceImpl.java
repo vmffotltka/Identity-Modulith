@@ -545,6 +545,15 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional(readOnly = true)
+    public boolean hasRole(String agentId, String roleName) {
+        Set<String> roles = getRolesByAgent(agentId);
+        boolean result = roles.contains(roleName);
+        log.debug("[RBAC] 역할 확인 - agentId={}, roleName={}, hasRole={}", agentId, roleName, result);
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public int getAgentCountByRole(String roleName) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
 

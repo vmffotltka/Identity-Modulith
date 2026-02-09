@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public interface ResetPasswordUseCase {
 
-    ResetPasswordResult resetPassword(UUID agentId);
+    ResetPasswordResult resetPassword(String tenantId, UUID agentId, UUID actorId);
 
     @Getter
     @Builder

@@ -39,4 +39,13 @@ public interface RbacPort {
      * @return 존재 여부
      */
     boolean roleExists(String roleName);
+
+    /**
+     * 사용자가 특정 역할을 가지고 있는지 확인
+     *
+     * @param agentId 사용자 ID
+     * @param roleName 역할명 (예: "ADMIN")
+     * @return 역할 보유 여부
+     */
+    boolean hasRole(String agentId, String roleName);
 }

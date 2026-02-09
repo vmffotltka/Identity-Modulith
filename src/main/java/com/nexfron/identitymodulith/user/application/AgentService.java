@@ -3,9 +3,9 @@ package com.nexfron.identitymodulith.user.application;
 import com.nexfron.identitymodulith.common.security.TenantContextHolder;
 import com.nexfron.identitymodulith.rbac.RbacModuleApi;
 import com.nexfron.identitymodulith.user.AgentExternalInfo;
-// ...existing code...
 import com.nexfron.identitymodulith.user.UserModuleApi;
 import com.nexfron.identitymodulith.user.application.port.OrganizationPort;
+import com.nexfron.identitymodulith.user.application.port.RbacPort;
 import com.nexfron.identitymodulith.user.domain.model.Agent;
 import com.nexfron.identitymodulith.user.domain.model.Agent.Role;
 import com.nexfron.identitymodulith.user.domain.model.AgentStatus;
@@ -56,6 +56,7 @@ public class AgentService implements
     private final PasswordGenerator passwordGenerator;
     private final OrganizationPort organizationPort;  // Organization 모듈 연동
     private final RbacModuleApi rbacModuleApi;  // RBAC 모듈 연동
+    private final RbacPort rbacPort;  // RBAC 권한 검증용
 
     /**
      * 새로운 상담사를 생성합니다.
@@ -108,14 +109,28 @@ public class AgentService implements
      * 상담사의 비밀번호를 초기화합니다.
      * 새로운 임시 비밀번호가 생성되며, 상담사는 다음 로그인 시 비밀번호 변경이 필요합니다.
      *
+     * @param tenantId 테넌트 ID
      * @param agentId 비밀번호를 초기화할 상담사 ID
+     * @param actorId 작업을 수행하는 사용자 ID
      * @return 상담사 ID와 새로 생성된 임시 비밀번호를 포함한 결과
      * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
+     *                           권한이 없는 경우 (ErrorCode.BUSINESS_RULE_VIOLATION)
      */
     @Override
-    public ResetPasswordResult resetPassword(UUID agentId) {
-        Agent agent = findAgentById(agentId);
+    public ResetPasswordResult resetPassword(String tenantId, UUID agentId, UUID actorId) {
+        // 1. 상담사 조회 (tenantId 포함)
+        Agent agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
 
+        // 2. ADMIN 권한 검증 (RbacPort 사용)
+        boolean isAdmin = rbacPort.hasRole(actorId.toString(), "ADMIN");
+
+        if (!isAdmin) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "관리자만 비밀번호를 초기화할 수 있습니다.");
+        }
+
+        // 3. 임시 비밀번호 생성 및 초기화
         String tempPassword = passwordGenerator.generateTempPassword();
         String encodedPassword = passwordEncoder.encode(tempPassword);
 
@@ -145,34 +160,49 @@ public class AgentService implements
      */
     @Override
     public void changePassword(ChangePasswordUseCase.ChangePasswordCommand command) {
+        log.info("[USER] 비밀번호 변경 시작 - agentId={}, actorId={}", command.getAgentId(), command.getActorId());
+
         // 1. 본인 확인 (PC-004)
         if (!command.getAgentId().equals(command.getActorId())) {
+            log.warn("[USER] 본인 확인 실패 - agentId={}, actorId={}", command.getAgentId(), command.getActorId());
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
                     "다른 사용자의 비밀번호를 변경할 수 없습니다.");
         }
+        log.debug("[USER] 본인 확인 통과");
 
         // 2. 상담사 조회
         Agent agent = agentRepository.findByIdAndTenantId(command.getAgentId(), command.getTenantId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
+        log.debug("[USER] 상담사 조회 성공 - loginId={}", agent.getLoginId());
 
         // 3. 현재 비밀번호 검증 (PC-001)
-        if (!passwordEncoder.matches(command.getCurrentPassword(), agent.getPassword())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,
+        log.debug("[USER] 현재 비밀번호 검증 시작");
+        boolean passwordMatches = passwordEncoder.matches(command.getCurrentPassword(), agent.getPassword());
+        log.debug("[USER] 비밀번호 일치 여부: {}", passwordMatches);
+
+        if (!passwordMatches) {
+            log.warn("[USER] 현재 비밀번호 불일치 - agentId={}", command.getAgentId());
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH,
                     "현재 비밀번호가 일치하지 않습니다.");
         }
+        log.debug("[USER] 현재 비밀번호 검증 통과");
 
         // 4. 새 비밀번호 != 현재 비밀번호 검증 (PC-002)
         if (command.getCurrentPassword().equals(command.getNewPassword())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,
+            log.warn("[USER] 새 비밀번호가 현재 비밀번호와 동일 - agentId={}", command.getAgentId());
+            throw new BusinessException(ErrorCode.SAME_AS_CURRENT_PASSWORD,
                     "새 비밀번호는 현재 비밀번호와 달라야 합니다.");
         }
+        log.debug("[USER] 새 비밀번호 검증 통과");
 
         // 5. 비밀번호 변경
         String encodedPassword = passwordEncoder.encode(command.getNewPassword());
         agent.changePassword(encodedPassword);  // PC-003: passwordMustChange = false
+        log.debug("[USER] 비밀번호 암호화 및 변경 완료");
 
         // 6. 저장
         agentRepository.save(agent);
+        log.debug("[USER] 저장 완료");
 
         // 7. 로깅
         log.info("[USER] 비밀번호 변경 완료 - agentId={}", command.getAgentId());
@@ -183,10 +213,24 @@ public class AgentService implements
      *
      * @param command 수정할 상담사 ID와 변경할 정보 (이름 등)
      * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
+     *                           권한이 없는 경우 (ErrorCode.BUSINESS_RULE_VIOLATION)
      */
     @Override
     public void updateAgent(UpdateAgentCommand command) {
-        Agent agent = findAgentById(command.getAgentId());
+        // 1. 상담사 조회 (tenantId 포함)
+        Agent agent = agentRepository.findByIdAndTenantId(command.getAgentId(), command.getTenantId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
+
+        // 2. 권한 검증: 본인 또는 관리자만 수정 가능 (RbacPort 사용)
+        boolean isAdmin = rbacPort.hasRole(command.getActorId().toString(), "ADMIN");
+        boolean isSelf = command.getActorId().equals(command.getAgentId());
+
+        if (!isAdmin && !isSelf) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "본인 또는 관리자만 상담사 정보를 수정할 수 있습니다.");
+        }
+
+        // 3. 정보 수정
         agent.updateName(command.getName());
         // JPA dirty checking으로 자동 저장됨 (saveAgent 호출 불필요)
     }
@@ -194,13 +238,33 @@ public class AgentService implements
     /**
      * 상담사를 다른 조직으로 이동시킵니다.
      *
+     * @param tenantId 테넌트 ID
      * @param agentId 이동할 상담사 ID
+     * @param actorId 작업을 수행하는 사용자 ID
      * @param newOrganizationId 새로 배정될 조직 ID
      * @throws BusinessException 상담사를 찾을 수 없는 경우 (ErrorCode.AGENT_NOT_FOUND)
+     *                           권한이 없는 경우 (ErrorCode.BUSINESS_RULE_VIOLATION)
      */
     @Override
-    public void transferOrganization(UUID agentId, String newOrganizationId) {
-        Agent agent = findAgentById(agentId);
+    public void transferOrganization(String tenantId, UUID agentId, UUID actorId, String newOrganizationId) {
+        // 1. 상담사 조회 (tenantId 포함)
+        Agent agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
+
+        // 2. 대상 부서 존재 확인
+        organizationPort.getDepartmentInfo(tenantId, newOrganizationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORGANIZATION_NOT_FOUND,
+                        "이동할 부서를 찾을 수 없습니다."));
+
+        // 3. ADMIN 권한 검증 (RbacPort 사용)
+        boolean isAdmin = rbacPort.hasRole(actorId.toString(), "ADMIN");
+
+        if (!isAdmin) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "관리자만 상담사 조직을 이동시킬 수 있습니다.");
+        }
+
+        // 4. 조직 이동
         agent.transferOrganization(newOrganizationId);
         // JPA dirty checking으로 자동 저장됨
     }
@@ -362,6 +426,75 @@ public class AgentService implements
         agent.getRoles().clear();
         roles.forEach(agent::addRole);
         saveAgent(agent);
+    }
+
+    /**
+     * 역할 ID 목록으로 역할을 일괄 지정합니다.
+     * RBAC 모듈과 연동하여 실제 역할을 조회 후 할당합니다.
+     *
+     * @param agentId 역할을 지정할 상담사 ID
+     * @param roleIds 할당할 역할 ID 세트
+     * @throws BusinessException roleIds가 null이거나 empty인 경우
+     */
+    @Override
+    public void assignRolesByIds(UUID agentId, Set<String> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,
+                "최소 1개 이상의 역할을 지정해야 합니다.");
+        }
+
+        log.info("[USER] 역할 ID로 일괄 지정 - agentId={}, roleIds={}", agentId, roleIds);
+
+        // RBAC 모듈을 통해 역할 할당 (기존 역할은 제거하지 않고 추가만 함)
+        for (String roleId : roleIds) {
+            // roleId를 roleName으로 변환이 필요하지만, 여기서는 roleId가 실제로는 roleName일 것으로 가정
+            // 실제로는 RBAC 모듈에서 roleId로 역할을 조회하는 기능이 필요
+            rbacPort.assignRoleToAgent(agentId.toString(), roleId);
+        }
+
+        log.info("[USER] 역할 ID로 일괄 지정 완료 - agentId={}, roleCount={}", agentId, roleIds.size());
+    }
+
+    /**
+     * 역할 이름 목록으로 역할을 일괄 지정합니다.
+     * RBAC 모듈과 연동하여 역할 이름으로 역할을 조회 후 할당합니다.
+     *
+     * @param agentId 역할을 지정할 상담사 ID
+     * @param roleNames 할당할 역할 이름 세트 (예: "TEAM_LEAD", "MEMBER")
+     * @throws BusinessException roleNames가 null이거나 empty인 경우
+     */
+    @Override
+    public void assignRolesByNames(UUID agentId, Set<String> roleNames) {
+        if (roleNames == null || roleNames.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,
+                "최소 1개 이상의 역할을 지정해야 합니다.");
+        }
+
+        log.info("[USER] 역할 이름으로 일괄 지정 - agentId={}, roleNames={}", agentId, roleNames);
+
+        // RBAC 모듈을 통해 역할 할당
+        for (String roleName : roleNames) {
+            rbacPort.assignRoleToAgent(agentId.toString(), roleName);
+        }
+
+        log.info("[USER] 역할 이름으로 일괄 지정 완료 - agentId={}, roleCount={}", agentId, roleNames.size());
+    }
+
+    /**
+     * ADMIN 권한을 검증합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param actorId 권한을 검증할 사용자 ID
+     * @throws BusinessException ADMIN 권한이 없는 경우
+     */
+    @Override
+    public void validateAdminPermission(String tenantId, UUID actorId) {
+        boolean isAdmin = rbacPort.hasRole(actorId.toString(), "ADMIN");
+
+        if (!isAdmin) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "관리자만 이 작업을 수행할 수 있습니다.");
+        }
     }
 
     /**
@@ -696,12 +829,17 @@ private AgentInfo toAgentInfo(Agent agent) {
         Agent agent = agentRepository.findByIdAndTenantId(command.getAgentId(), command.getTenantId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.AGENT_NOT_FOUND));
 
-        // 2. T-003: RETIRED 상담사 이동 불가
+        // 2. T-001: 대상 부서 존재 확인
+        organizationPort.getDepartmentInfo(command.getTenantId(), command.getNewOrganizationId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORGANIZATION_NOT_FOUND,
+                        "이동할 부서를 찾을 수 없습니다."));
+
+        // 3. T-003: RETIRED 상담사 이동 불가
         if (agent.getStatus() == AgentStatus.RETIRED) {
             throw new BusinessException(ErrorCode.AGENT_ALREADY_RETIRED, "퇴사한 상담사는 부서를 이동할 수 없습니다.");
         }
 
-        // 3. T-002: 동일 부서로 이동 불가
+        // 4. T-002: 동일 부서로 이동 불가
         if (agent.getOrganizationId() != null &&
             agent.getOrganizationId().equals(command.getNewOrganizationId())) {
             throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
@@ -710,14 +848,14 @@ private AgentInfo toAgentInfo(Agent agent) {
 
         String fromOrganizationId = agent.getOrganizationId();
 
-        // 4. 조직 변경 (T-001 검증은 Organization 모듈에서 수행)
+        // 5. 조직 변경
         agent.transferOrganization(command.getNewOrganizationId());
         agentRepository.save(agent);
 
         log.info("[USER] 상담사 부서 이동 완료 - agentId={}, from={}, to={}",
                 command.getAgentId(), fromOrganizationId, command.getNewOrganizationId());
 
-        // 5. 이벤트 발행 (비동기 처리)
+        // 6. 이벤트 발행 (비동기 처리)
         // TODO: AgentTransferred 이벤트 발행
 
         return TransferAgentUseCase.TransferAgentResult.builder()

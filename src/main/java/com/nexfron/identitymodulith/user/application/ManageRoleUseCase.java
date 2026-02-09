@@ -25,4 +25,31 @@ public interface ManageRoleUseCase {
      * @throws BusinessException roles가 null이거나 empty인 경우
      */
     void assignRoles(UUID agentId, Set<Role> roles);
+
+    /**
+     * 역할 ID 목록으로 역할을 일괄 지정합니다.
+     *
+     * @param agentId 역할을 지정할 상담사 ID
+     * @param roleIds 할당할 역할 ID 세트
+     * @throws BusinessException roleIds가 null이거나 empty인 경우
+     */
+    void assignRolesByIds(UUID agentId, Set<String> roleIds);
+
+    /**
+     * 역할 이름 목록으로 역할을 일괄 지정합니다.
+     *
+     * @param agentId 역할을 지정할 상담사 ID
+     * @param roleNames 할당할 역할 이름 세트 (예: "TEAM_LEAD", "MEMBER")
+     * @throws BusinessException roleNames가 null이거나 empty인 경우
+     */
+    void assignRolesByNames(UUID agentId, Set<String> roleNames);
+
+    /**
+     * ADMIN 권한을 검증합니다.
+     *
+     * @param tenantId 테넌트 ID
+     * @param actorId 권한을 검증할 사용자 ID
+     * @throws BusinessException ADMIN 권한이 없는 경우
+     */
+    void validateAdminPermission(String tenantId, UUID actorId);
 }

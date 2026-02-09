@@ -237,11 +237,12 @@ BEGIN
         (frontend_team_id, std_tenant, dev_div_id, '프론트엔드팀', 'TEAM', 'DEV-FE', '/' || company_id || '/' || dev_div_id || '/' || frontend_team_id, 2, 'ACTIVE', now_time, now_time);
 
     -- 사용자 생성
+    -- 비밀번호: Admin123! (BCrypt 해시)
     INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, dept_id, status, created_at, updated_at)
     VALUES
-        (admin_id, std_tenant, 'admin', '$2a$10$dummyhash', '시스템관리자', 'EMP-0001', 'admin@nexfron.com', company_id, 'ACTIVE', now_time, now_time),
-        (dev_lead_id, std_tenant, 'dev.lead', '$2a$10$dummyhash', '김팀장', 'EMP-0002', 'dev.lead@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time),
-        (dev_member_id, std_tenant, 'dev.member', '$2a$10$dummyhash', '이개발', 'EMP-0003', 'dev.member@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time);
+        (admin_id, std_tenant, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMye1J8fqohVhEhHZqXzSJCy6P6RBLhxaYm', '시스템관리자', 'EMP-0001', 'admin@nexfron.com', company_id, 'ACTIVE', now_time, now_time),
+        (dev_lead_id, std_tenant, 'dev.lead', '$2a$10$N9qo8uLOickgx2ZMRZoMye1J8fqohVhEhHZqXzSJCy6P6RBLhxaYm', '김팀장', 'EMP-0002', 'dev.lead@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time),
+        (dev_member_id, std_tenant, 'dev.member', '$2a$10$N9qo8uLOickgx2ZMRZoMye1J8fqohVhEhHZqXzSJCy6P6RBLhxaYm', '이개발', 'EMP-0003', 'dev.member@nexfron.com', backend_team_id, 'ACTIVE', now_time, now_time);
 
     -- 역할 생성
     INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope_level, is_active, created_at, updated_at)

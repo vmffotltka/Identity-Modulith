@@ -55,6 +55,7 @@ public interface RbacManagementService {
     void assignRoleToAgent(String agentId, String roleName);
     void revokeRoleFromAgent(String agentId, String roleName);
     Set<String> getRolesByAgent(String agentId);
+    boolean hasRole(String agentId, String roleName);  // 신규: 특정 역할 보유 확인
     Set<String> getEffectivePermissions(String agentId);  // 신규: 사용자의 실제 권한 조회
     int getAgentCountByRole(String roleName);
 

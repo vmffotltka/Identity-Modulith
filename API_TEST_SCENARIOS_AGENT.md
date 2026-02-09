@@ -17,6 +17,17 @@
 | 10000000-0000-0000-0000-000000000002 | dev.lead | 김팀장 | EMP-0002 | dev.lead@nexfron.com | 백엔드팀 | ACTIVE | TEAM_LEAD |
 | 10000000-0000-0000-0000-000000000003 | dev.member | 이개발 | EMP-0003 | dev.member@nexfron.com | 백엔드팀 | ACTIVE | MEMBER |
 
+### 🔑 로그인 정보
+**모든 계정의 비밀번호**: `Admin123!`
+
+| login_id | password |
+|----------|----------|
+| admin | Admin123! |
+| dev.lead | Admin123! |
+| dev.member | Admin123! |
+
+⚠️ **중요**: 비밀번호 변경 테스트 시 `currentPassword`에 `Admin123!`를 사용하세요!
+
 ### 부서 (5개)
 | dept_id | name | code |
 |---------|------|------|
@@ -357,20 +368,19 @@ Content-Type: application/json
 
 ### Scenario 5: 상담사 정보 수정 ✅
 
-**⚠️ 주의**: 문서에는 X-User-Id 헤더가 필요하다고 되어 있으나, **실제 구현에서는 불필요**합니다.
-현재는 **조회/생성 API와 동일하게 공개 API**로 구현되어 있습니다.
+**⚠️ 필수 헤더**: `X-User-Id` (본인 또는 ADMIN만 수정 가능)
 
 **PATCH** `/api/v1/agents/{agentId}`
 
 **Headers**:
 ```
+X-User-Id: 10000000-0000-0000-0000-000000000003
 Content-Type: application/json
 ```
-(X-User-Id 헤더 불필요)
 
 **사용할 agentId**: `10000000-0000-0000-0000-000000000003` (이개발)
 
-#### 5-1. 이름과 이메일 변경
+#### 5-1. 본인이 이름과 이메일 변경
 
 **Request Body**:
 ```json
@@ -401,9 +411,10 @@ Content-Type: application/json
 ```
 
 **검증 항목**:
-- ✅ 변경된 필드만 업데이트됨 (email)
+- ✅ 변경된 필드만 업데이트됨 (name)
 - ✅ 다른 필드는 유지됨
-- ✅ 전체 객체 반환
+- ✅ 전체 객체 반환 안 됨 (204 No Content 응답)
+- ✅ 본인이 수정 가능
 
 #### 5-2. 전화번호 추가
 
@@ -414,20 +425,38 @@ Content-Type: application/json
 }
 ```
 
-#### 5-3. 권한 없는 사용자로 수정 시도 (MEMBER) ❌
+**예상 응답 (204 No Content)**: 응답 본문 없음
+
+#### 5-3. 권한 없는 사용자로 다른 사람 수정 시도 (MEMBER가 다른 사람 수정) ❌
 
 **Headers**:
 ```
 X-User-Id: 10000000-0000-0000-0000-000000000003
+Content-Type: application/json
 ```
 
-**예상 응답 (403 Forbidden)**:
+**사용할 agentId**: `10000000-0000-0000-0000-000000000002` (김팀장 - 다른 사람)
+
+**Request Body**:
 ```json
 {
-  "code": "INSUFFICIENT_PERMISSION",
-  "message": "user:update 권한이 필요합니다"
+  "name": "김매니저"
 }
 ```
+
+**예상 응답 (400 Bad Request)**:
+```json
+{
+  "code": "A005",
+  "message": "본인 또는 관리자만 상담사 정보를 수정할 수 있습니다."
+}
+```
+
+**검증 항목**:
+- ✅ 본인이 아닌 경우 수정 불가
+- ✅ ADMIN이 아닌 경우 다른 사람 수정 불가
+- ✅ HTTP 400 Bad Request 반환
+- ✅ 적절한 에러 메시지
 
 ---
 
@@ -503,10 +532,15 @@ Content-Type: application/json
 **예상 응답 (404 Not Found)**:
 ```json
 {
-  "code": "DEPARTMENT_NOT_FOUND",
-  "message": "부서를 찾을 수 없습니다"
+  "code": "A006",
+  "message": "이동할 부서를 찾을 수 없습니다."
 }
 ```
+
+**검증 항목**:
+- ✅ HTTP 404 Not Found 반환
+- ✅ 부서 존재 여부 검증 수행
+- ✅ 적절한 에러 메시지
 
 ---
 
@@ -550,7 +584,7 @@ Content-Type: application/json
 
 ### Scenario 8: 비밀번호 변경 (본인) ✅
 
-**권한**: 본인 또는 ADMIN
+**⚠️ 필수 헤더**: `X-User-Id` (본인만 가능)
 
 **POST** `/api/v1/agents/me/change-password`
 
@@ -569,25 +603,18 @@ Content-Type: application/json
 **Request Body**:
 ```json
 {
-  "currentPassword": "TempPassword123!",
+  "currentPassword": "Admin123!",
   "newPassword": "MyNewPassword456!",
   "confirmPassword": "MyNewPassword456!"
 }
 ```
 
-**예상 응답 (200 OK)**:
-```json
-{
-  "id": "10000000-0000-0000-0000-000000000003",
-  "loginId": "dev.member",
-  "passwordMustChange": false,
-  "message": "비밀번호가 성공적으로 변경되었습니다"
-}
-```
+**예상 응답 (204 No Content)**: 응답 본문 없음
 
 **검증 항목**:
 - ✅ passwordMustChange = false로 변경됨
-- ✅ 현재 비밀번호 검증됨
+- ✅ 현재 비밀번호 검증됨 (Admin123!)
+- ✅ confirmPassword 일치 확인
 
 #### 8-2. 현재 비밀번호 불일치 ❌
 
@@ -603,8 +630,8 @@ Content-Type: application/json
 **예상 응답 (400 Bad Request)**:
 ```json
 {
-  "code": "INVALID_PASSWORD",
-  "message": "현재 비밀번호가 일치하지 않습니다"
+  "code": "P001",
+  "message": "현재 비밀번호가 일치하지 않습니다."
 }
 ```
 
@@ -613,7 +640,7 @@ Content-Type: application/json
 **Request Body**:
 ```json
 {
-  "currentPassword": "TempPassword123!",
+  "currentPassword": "Admin123!",
   "newPassword": "MyNewPassword456!",
   "confirmPassword": "DifferentPassword789!"
 }
@@ -622,8 +649,27 @@ Content-Type: application/json
 **예상 응답 (400 Bad Request)**:
 ```json
 {
-  "code": "PASSWORD_MISMATCH",
-  "message": "새 비밀번호와 확인 비밀번호가 일치하지 않습니다"
+  "code": "P002",
+  "message": "새 비밀번호와 확인 비밀번호가 일치하지 않습니다."
+}
+```
+
+#### 8-4. 새 비밀번호가 현재 비밀번호와 동일 ❌
+
+**Request Body**:
+```json
+{
+  "currentPassword": "Admin123!",
+  "newPassword": "Admin123!",
+  "confirmPassword": "Admin123!"
+}
+```
+
+**예상 응답 (400 Bad Request)**:
+```json
+{
+  "code": "P003",
+  "message": "새 비밀번호는 현재 비밀번호와 달라야 합니다."
 }
 ```
 
@@ -1106,18 +1152,18 @@ tenantId=default-tenant
 **가능한 작업**: 조회, 생성 및 본인 비밀번호 변경
 - ✅ 조회 (Scenario 1-3, 13-14)
 - ✅ 생성 (Scenario 4)
-- ✅ 본인 비밀번호 변경 (Scenario 8)
+- ✅ 본인 비밀번호 변경 (Scenario 8) **⚠️ X-User-Id 필수**
 - ❌ 수정, 삭제
 
 **특징**:
 - 조회/생성: X-User-Id **불필요**
-- 본인 비밀번호 변경: X-User-Id **필요**
+- 본인 비밀번호 변경: X-User-Id **필수** (보안상 필수)
 
 **테스트 순서**:
 ```
 1. Scenario 1-2: 조회 (헤더 불필요) ✅
 2. Scenario 4: 상담사 생성 (헤더 불필요) ✅
-3. Scenario 8: 본인 비밀번호 변경 (X-User-Id 필요) ✅
+3. Scenario 8: 본인 비밀번호 변경 (X-User-Id 필수) ⚠️ ✅
 4. Scenario 5: 수정 시도 (X-User-Id로 시도, 403 Forbidden) ❌
 ```
 
@@ -1138,8 +1184,8 @@ tenantId=default-tenant
 **수정/삭제 API (헤더 필요)**:
 - ✅ Scenario 5: 수정
 - ✅ Scenario 6: 부서 이동
-- ✅ Scenario 7: 비밀번호 초기화
-- ✅ Scenario 8: 비밀번호 변경
+- ✅ Scenario 7: 비밀번호 초기화 (ADMIN만)
+- ✅ Scenario 8: 비밀번호 변경 (본인만)
 - ✅ Scenario 9: 역할 관리
 - ✅ Scenario 10: 정지
 - ✅ Scenario 11: 활성화

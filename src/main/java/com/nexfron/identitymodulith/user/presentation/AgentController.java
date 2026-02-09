@@ -18,6 +18,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
  * DDD 원칙을 준수하여 RBAC 모듈과의 직접 의존을 제거하고
  * Port/Adapter 패턴을 통해 간접적으로 연동합니다.
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/agents")
 @RequiredArgsConstructor
@@ -241,20 +243,26 @@ public class AgentController {
     @PatchMapping("/{agentId}")
     @Operation(
         summary = "상담사 정보 수정",
-        description = "상담사의 기본 정보(이름 등)를 수정합니다."
+        description = "상담사의 기본 정보(이름 등)를 수정합니다. 본인 또는 ADMIN만 수정 가능."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "수정 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "잘못된 요청")
+        @ApiResponse(responseCode = "400", description = "잘못된 요청 또는 권한 없음")
     })
     public ResponseEntity<Void> updateAgent(
+            @Parameter(description = "요청 사용자 ID", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody UpdateAgentRequest request) {
 
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
         UpdateAgentCommand command = UpdateAgentCommand.builder()
+                .tenantId(tenantId)
                 .agentId(agentId)
+                .actorId(UUID.fromString(userId))
                 .name(request.getName())
                 .build();
 
@@ -273,19 +281,23 @@ public class AgentController {
     @PatchMapping("/{agentId}/organization")
     @Operation(
         summary = "상담사 조직 이동",
-        description = "상담사를 다른 조직으로 이동시킵니다."
+        description = "상담사를 다른 조직으로 이동시킵니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "조직 이동 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "잘못된 요청 (존재하지 않는 조직 등)")
+        @ApiResponse(responseCode = "400", description = "잘못된 요청 (존재하지 않는 조직 등 또는 권한 없음)")
     })
     public ResponseEntity<Void> transferOrganization(
+            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody TransferOrganizationRequest request) {
 
-        updateAgentUseCase.transferOrganization(agentId, request.getOrganizationId());
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
+        updateAgentUseCase.transferOrganization(tenantId, agentId, UUID.fromString(userId), request.getOrganizationId());
         return ResponseEntity.noContent().build();
     }
 
@@ -301,7 +313,7 @@ public class AgentController {
     @PostMapping("/{agentId}/reset-password")
     @Operation(
         summary = "비밀번호 초기화",
-        description = "관리자가 상담사의 비밀번호를 초기화하고 임시 비밀번호를 발급합니다."
+        description = "관리자가 상담사의 비밀번호를 초기화하고 임시 비밀번호를 발급합니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(
@@ -309,12 +321,18 @@ public class AgentController {
             description = "초기화 성공",
             content = @Content(schema = @Schema(implementation = ResetPasswordResponse.class))
         ),
-        @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음")
+        @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
+        @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<ResetPasswordResponse> resetPassword(
+        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
-        ResetPasswordResult result = resetPasswordUseCase.resetPassword(agentId);
+
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
+        ResetPasswordResult result = resetPasswordUseCase.resetPassword(tenantId, agentId, UUID.fromString(userId));
 
         ResetPasswordResponse response = ResetPasswordResponse.builder()
                 .agentId(result.getAgentId())
@@ -338,7 +356,7 @@ public class AgentController {
     @PostMapping("/{agentId}/change-password")
     @Operation(
         summary = "비밀번호 변경",
-        description = "상담사가 자신의 비밀번호를 변경합니다. 현재 비밀번호 확인이 필요합니다."
+        description = "상담사가 자신의 비밀번호를 변경합니다. 현재 비밀번호 확인이 필요합니다. 본인만 가능."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "비밀번호 변경 성공"),
@@ -346,17 +364,32 @@ public class AgentController {
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음")
     })
     public ResponseEntity<Void> changePassword(
+            @Parameter(description = "요청 사용자 ID (본인)", required = true, example = "10000000-0000-0000-0000-000000000003")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody ChangePasswordRequest request) {
 
+        log.info("[Controller] 비밀번호 변경 요청 - userId={}, agentId={}", userId, agentId);
+        log.debug("[Controller] 비밀번호 일치 확인: newPassword={}, confirmPassword={}, matching={}",
+                request.getNewPassword(), request.getConfirmPassword(), request.isPasswordMatching());
+
+        // 1. 비밀번호 확인 검증
+        if (!request.isPasswordMatching()) {
+            log.warn("[Controller] 비밀번호 불일치 - newPassword={}, confirmPassword={}",
+                    request.getNewPassword(), request.getConfirmPassword());
+            throw new com.nexfron.identitymodulith.user.domain.exception.BusinessException(
+                    com.nexfron.identitymodulith.user.domain.exception.ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
+                    "새 비밀번호와 확인 비밀번호가 일치하지 않습니다.");
+        }
+
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
+        log.debug("[Controller] tenantId={}", tenantId);
 
         ChangePasswordUseCase.ChangePasswordCommand command = ChangePasswordUseCase.ChangePasswordCommand.builder()
                 .tenantId(tenantId)
                 .agentId(agentId)
-                .actorId(UUID.fromString(actorId))
+                .actorId(UUID.fromString(userId))
                 .currentPassword(request.getCurrentPassword())
                 .newPassword(request.getNewPassword())
                 .build();
@@ -386,10 +419,20 @@ public class AgentController {
         @ApiResponse(responseCode = "400", description = "현재 비밀번호 불일치 또는 새 비밀번호 형식 오류"),
         @ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
     })
-    public ResponseEntity<Void> changeMyPassword(@Valid @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<Void> changeMyPassword(
+            @Parameter(description = "요청 사용자 ID (본인)", required = true, example = "10000000-0000-0000-0000-000000000003")
+            @RequestHeader("X-User-Id") String userId,
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        // 1. 비밀번호 확인 검증
+        if (!request.isPasswordMatching()) {
+            throw new com.nexfron.identitymodulith.user.domain.exception.BusinessException(
+                    com.nexfron.identitymodulith.user.domain.exception.ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
+                    "새 비밀번호와 확인 비밀번호가 일치하지 않습니다.");
+        }
+
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
-        UUID agentId = UUID.fromString(actorId);
+        UUID agentId = UUID.fromString(userId);
 
         ChangePasswordUseCase.ChangePasswordCommand command = ChangePasswordUseCase.ChangePasswordCommand.builder()
                 .tenantId(tenantId)
@@ -527,7 +570,7 @@ public class AgentController {
     @PostMapping("/{agentId}/transfer")
     @Operation(
         summary = "상담사 부서 이동",
-        description = "상담사를 다른 부서로 이동시킵니다. 이동 이력이 기록됩니다."
+        description = "상담사를 다른 부서로 이동시킵니다. 이동 이력이 기록됩니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(
@@ -535,22 +578,23 @@ public class AgentController {
             description = "부서 이동 성공",
             content = @Content(schema = @Schema(implementation = TransferAgentResponse.class))
         ),
-        @ApiResponse(responseCode = "400", description = "잘못된 요청 (동일 부서, 퇴사한 상담사 등)"),
+        @ApiResponse(responseCode = "400", description = "잘못된 요청 (동일 부서, 퇴사한 상담사 등 또는 권한 없음)"),
         @ApiResponse(responseCode = "404", description = "상담사 또는 대상 부서를 찾을 수 없음")
     })
     public ResponseEntity<TransferAgentResponse> transferAgent(
+            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody TransferAgentRequest request) {
 
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
 
         TransferAgentUseCase.TransferAgentCommand command = TransferAgentUseCase.TransferAgentCommand.builder()
                 .tenantId(tenantId)
                 .agentId(agentId)
                 .newOrganizationId(request.getNewOrganizationId())
-                .actorId(UUID.fromString(actorId))
+                .actorId(UUID.fromString(userId))
                 .build();
 
         TransferAgentUseCase.TransferAgentResult result = transferAgentUseCase.transferAgent(command);
@@ -579,23 +623,55 @@ public class AgentController {
     @PutMapping("/{agentId}/roles")
     @Operation(
         summary = "상담사 역할 일괄 지정",
-        description = "상담사의 역할을 일괄 지정합니다. 기존 역할은 모두 제거되고 새로운 역할로 대체됩니다."
+        description = "상담사의 역할을 일괄 지정합니다. 기존 역할은 모두 제거되고 새로운 역할로 대체됩니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "역할 지정 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "잘못된 역할 정보")
+        @ApiResponse(responseCode = "400", description = "잘못된 역할 정보 또는 권한 없음")
     })
     public ResponseEntity<Void> assignRoles(
+            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody AssignRolesRequest request) {
 
-        var roles = request.getRoles().stream()
-                .map(AssignRolesRequest.RoleDto::toDomain)
-                .collect(Collectors.toSet());
+        log.info("[Controller] 역할 일괄 지정 요청 - userId={}, agentId={}", userId, agentId);
 
-        manageRoleUseCase.assignRoles(agentId, roles);
+        // agentId 설정 (pathVariable 우선)
+        if (request.getAgentId() == null) {
+            request.setAgentId(agentId);
+        }
+
+        // 역할 정보 검증
+        if (!request.hasValidRoles()) {
+            throw new com.nexfron.identitymodulith.user.domain.exception.BusinessException(
+                    com.nexfron.identitymodulith.user.domain.exception.ErrorCode.INVALID_INPUT_VALUE,
+                    "roles, roleIds, roleNames 중 하나는 필수입니다.");
+        }
+
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
+
+        // roleIds 또는 roleNames로 역할 할당
+        if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+            log.debug("[Controller] roleIds로 역할 할당 - roleIds={}", request.getRoleIds());
+            manageRoleUseCase.assignRolesByIds(agentId, request.getRoleIds());
+        } else if (request.getRoleNames() != null && !request.getRoleNames().isEmpty()) {
+            log.debug("[Controller] roleNames로 역할 할당 - roleNames={}", request.getRoleNames());
+            manageRoleUseCase.assignRolesByNames(agentId, request.getRoleNames());
+        } else {
+            // roles로 역할 할당 (기존 방식)
+            log.debug("[Controller] roles로 역할 할당 - roles={}", request.getRoles());
+            var roles = request.getRoles().stream()
+                    .map(AssignRolesRequest.RoleDto::toDomain)
+                    .collect(Collectors.toSet());
+            manageRoleUseCase.assignRoles(agentId, roles);
+        }
+
         return ResponseEntity.noContent().build();
     }
 
@@ -619,13 +695,22 @@ public class AgentController {
     )
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "역할 추가 성공 (이미 할당된 경우에도 201 반환)"),
-        @ApiResponse(responseCode = "404", description = "상담사 또는 역할을 찾을 수 없음")
+        @ApiResponse(responseCode = "404", description = "상담사 또는 역할을 찾을 수 없음"),
+        @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<Void> addRole(
+            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Parameter(description = "추가할 역할 이름", required = true, example = "SENIOR_AGENT")
             @PathVariable String roleName) {
+
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
+
         rbacPort.assignRoleToAgent(agentId.toString(), roleName);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
@@ -650,13 +735,22 @@ public class AgentController {
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "역할 제거 성공"),
-        @ApiResponse(responseCode = "404", description = "상담사, 역할을 찾을 수 없거나 해당 역할이 할당되지 않음")
+        @ApiResponse(responseCode = "404", description = "상담사, 역할을 찾을 수 없거나 해당 역할이 할당되지 않음"),
+        @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<Void> removeRole(
+            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Parameter(description = "제거할 역할 이름", required = true, example = "SENIOR_AGENT")
             @PathVariable String roleName) {
+
+        String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
+
         rbacPort.revokeRoleFromAgent(agentId.toString(), roleName);
         return ResponseEntity.noContent().build();
     }
