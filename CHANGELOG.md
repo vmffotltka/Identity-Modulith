@@ -1,5 +1,97 @@
 # 📋 프로젝트 변경 이력 (Changelog)
 
+## 🎯 v3.1.0 - 2026-02-10
+
+### ✨ 주요 개선 사항
+
+#### 1️⃣ **비밀번호 암호화 BCrypt로 통일**
+- ✅ **PasswordEncoderImpl 변경**: SHA-256 → BCrypt
+- ✅ **SecurityConfig에 BCryptPasswordEncoder Bean 등록**
+- ✅ **초기 데이터 비밀번호**: 모든 계정 `Admin123!`
+
+#### 2️⃣ **RBAC 권한 검증 완전 구현**
+- ✅ **RbacPort 확장**: hasRole(), hasPermission() 추가
+- ✅ **RbacAdapter 구현**: rbac_agent_roles 테이블 연동
+- ✅ **권한 검증 수정**: deprecated JSON 컬럼 제거
+
+#### 3️⃣ **비밀번호 에러 코드 세분화**
+- ✅ **P001**: PASSWORD_MISMATCH - 현재 비밀번호 불일치
+- ✅ **P002**: PASSWORD_CONFIRMATION_MISMATCH - 확인 비밀번호 불일치
+- ✅ **P003**: SAME_AS_CURRENT_PASSWORD - 동일한 비밀번호
+
+#### 4️⃣ **부서 이동 검증 강화**
+- ✅ **존재하지 않는 부서 이동 시 404 반환**
+- ✅ **부서 존재 확인 로직 추가**
+
+#### 5️⃣ **X-User-Id 헤더 일관성**
+- ✅ **비밀번호 변경 API**: X-User-Id 필수 추가
+- ✅ **모든 수정/삭제 API**: X-User-Id 필수 적용
+
+#### 6️⃣ **Bean Validation 에러 처리**
+- ✅ **GlobalExceptionHandler**: MethodArgumentNotValidException 처리
+- ✅ **상세한 검증 메시지 반환**
+
+#### 7️⃣ **개발 디버깅 도구**
+- ✅ **DevController**: 비밀번호 해시 생성/검증 API
+
+### 🐛 버그 수정
+
+- 🐛 PasswordEncoder 불일치 (SHA-256 vs BCrypt)
+- 🐛 confirmPassword 필드 누락
+- 🐛 @Setter 누락으로 JSON 역직렬화 실패
+- 🐛 hasRole() 메서드 누락
+- 🐛 부서 존재 확인 누락 (200 OK → 404 수정)
+- 🐛 GlobalExceptionHandler 불완전
+
+### 📋 API 테스트 진행 상황
+
+- ✅ **Organization API**: 전체 완료 (Scenario 1-12)
+- 🔄 **Agent API**: Scenario 8까지 완료, **Scenario 9 진행 중**
+- ⏳ **RBAC API**: 대기 중
+
+### 📁 추가/수정된 파일
+
+**추가 (14개)**:
+```
+DevController.java
+GeneratePasswordHash.java
+TestPasswordPattern.java
+PASSWORD_CHANGE_SECURITY_FIX.md
+PASSWORD_CONFIRM_FIX.md
+PASSWORD_VALIDATION_FIX.md
+ERROR_MESSAGE_IMPROVEMENT.md
+PASSWORD_SETTER_ISSUE.md
+BCRYPT_HASH_SOLUTION.md
+ROOT_CAUSE_SOLVED.md
+PASSWORD_ERROR_CODE_FIX.md
+FINAL_PASSWORD_FIX.md
+DEBUG_PASSWORD_CHANGE_400.md
+FINAL_DEBUG_GUIDE.md
+update_passwords.sql
+check_password.sql
+verify_current_password.sql
+check_actual_password_hash.sql
+```
+
+**수정 (11개)**:
+```
+PasswordEncoderImpl.java
+SecurityConfig.java
+ChangePasswordRequest.java
+AgentController.java
+AgentService.java
+GlobalExceptionHandler.java
+ErrorCode.java
+RbacPort.java
+RbacAdapter.java
+V2_0_0__Fixed_Schema.sql
+API_TEST_SCENARIOS_AGENT.md
+AssignRolesRequest.java
+ManageRoleUseCase.java
+```
+
+---
+
 ## 🎯 v3.0.0 - 2026-02-05
 
 ### ✨ 주요 개선 사항
