@@ -975,5 +975,23 @@ docker run -p 8080:8080 \
 - [CHANGELOG.md](./CHANGELOG.md) - 변경 이력
 - [TEST_PROGRESS_STATUS.md](./TEST_PROGRESS_STATUS.md) - 테스트 진행 현황
 
+### 인증/인가 (Keycloak)
+- [KEYCLOAK_SETUP_GUIDE_PRODUCTION.md](./Docs/KEYCLOAK_SETUP_GUIDE_PRODUCTION.md) - **실제 서버 연동 가이드** 🔥
+  - 현재 운영 중인 Keycloak 서버 연동 (http://1.224.162.188:51446)
+  - Step-by-Step 설정 가이드
+  - application.yml 설정 방법
+  - 즉시 테스트 가능
+- [KEYCLOAK_QUICK_START.md](./Docs/KEYCLOAK_QUICK_START.md) - **Keycloak 빠른 시작** ⚡
+  - 30분 안에 Keycloak 연동
+  - Docker 설치부터 테스트까지
+  - 3단계 Quick Start
+- [KEYCLOAK_INTEGRATION_GUIDE.md](./Docs/KEYCLOAK_INTEGRATION_GUIDE.md) - **Keycloak 연동 완벽 가이드** 🔐
+  - Keycloak 설치 및 설정 (Docker)
+  - Spring Boot OAuth 2.0 연동
+  - JWT 기반 인증/인가 구현
+  - RBAC 동기화 전략 (하이브리드)
+  - 커스텀 권한 검증 (PermissionEvaluator)
+  - 3�� 구현 로드맵
+
 ---
 
