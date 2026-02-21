@@ -266,13 +266,22 @@ Content-Type: application/json
 **Headers**:
 ```
 X-User-Id: 10000000-0000-0000-0000-000000000002
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "name": "NEW_ROLE",
+  "type": "POSITION"
+}
 ```
 
 **예상 응답 (403 Forbidden)**:
 ```json
 {
   "code": "INSUFFICIENT_PERMISSION",
-  "message": "role:create 권한이 필요합니다"
+  "message": "역할 생성은(는) ADMIN 역할이 필요합니다."
 }
 ```
 
@@ -337,6 +346,7 @@ Content-Type: application/json
 **Headers**:
 ```
 X-User-Id: 10000000-0000-0000-0000-000000000001
+Content-Type: application/json
 ```
 
 **사용할 roleName**: `MEMBER`
@@ -1288,7 +1298,7 @@ X-User-Id: 10000000-0000-0000-0000-000000000001
 
 **특징**:
 - 조회 API: X-User-Id **불필요**
-- 생성/수정/삭제 API: X-User-Id **필요**
+- 생성/수정/삭제 API: X-User-Id **필수**
 
 **테스트 순서**:
 ```
@@ -1354,7 +1364,7 @@ X-User-Id: 10000000-0000-0000-0000-000000000001
 - ❌ Scenario 16: 권한의 역할 조회
 - ❌ Scenario 18-19: 사용자 역할/권한 조회
 
-**생성/수정/삭제 API (헤더 필요)**:
+**생성/수정/삭제 API (헤더 필수, ADMIN만 가능)**:
 - ✅ Scenario 3: 역할 생성
 - ✅ Scenario 4: 역할 수정
 - ✅ Scenario 5: 권한 할당/제거
@@ -1365,14 +1375,15 @@ X-User-Id: 10000000-0000-0000-0000-000000000001
 - ✅ Scenario 15: 권한 삭제
 - ✅ Scenario 17: 사용자-역할 할당/회수
 
+
 ---
 
 ### Swagger UI에서
 **조회 API**: 헤더 추가 불필요 (그냥 실행)
 
 **생성/수정/삭제 API**: 
-1. **Authorize 버튼** 클릭 또는
-2. **각 API 실행 시 Parameters 섹션에 헤더 추가**
+1. **Parameters 섹션에서 X-User-Id 헤더 입력**
+2. 값: `10000000-0000-0000-0000-000000000001` (ADMIN)
 
 ### cURL에서
 **조회**:
@@ -1385,7 +1396,7 @@ curl -X GET "http://localhost:8080/api/rbac/roles"
 curl -X POST "http://localhost:8080/api/rbac/roles" \
   -H "X-User-Id: 10000000-0000-0000-0000-000000000001" \
   -H "Content-Type: application/json" \
-  -d '{"name": "NEW_ROLE", ...}'
+  -d '{"name": "NEW_ROLE", "type": "POSITION"}'
 ```
 
 ### Postman에서

@@ -24,6 +24,25 @@ public interface RbacPort {
     void assignRoleToAgent(String agentId, String roleName);
 
     /**
+     * 사용자에게 역할 할당 (roleId 사용)
+     *
+     * @param agentId 사용자 ID
+     * @param roleId 역할 ID (UUID)
+     * @throws RuntimeException 역할이 존재하지 않거나 이미 할당된 경우
+     */
+    void assignRoleToAgentByRoleId(String agentId, String roleId);
+
+    /**
+     * 사용자에게 역할 할당 (POSITION 자동 교체 없음)
+     * 역할 일괄 지정 시 사용
+     *
+     * @param agentId 사용자 ID
+     * @param roleName 역할명
+     * @throws RuntimeException 역할이 존재하지 않거나 이미 할당된 경우
+     */
+    void assignRoleToAgentWithoutAutoReplace(String agentId, String roleName);
+
+    /**
      * 사용자에게서 역할 제거
      *
      * @param agentId 사용자 ID
@@ -31,6 +50,14 @@ public interface RbacPort {
      * @throws RuntimeException 역할이 존재하지 않거나 할당되지 않은 경우
      */
     void revokeRoleFromAgent(String agentId, String roleName);
+
+    /**
+     * 사용자에게서 모든 역할 제거
+     * 역할 일괄 지정 시 기존 역할을 제거하기 위해 사용됩니다.
+     *
+     * @param agentId 사용자 ID
+     */
+    void removeAllRolesFromAgent(String agentId);
 
     /**
      * 역할 존재 여부 확인

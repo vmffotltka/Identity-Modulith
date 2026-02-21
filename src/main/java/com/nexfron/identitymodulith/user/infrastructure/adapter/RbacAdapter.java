@@ -33,9 +33,27 @@ public class RbacAdapter implements RbacPort {
     }
 
     @Override
+    public void assignRoleToAgentByRoleId(String agentId, String roleId) {
+        log.debug("[User->RBAC] 역할 할당 요청 (roleId) - agentId={}, roleId={}", agentId, roleId);
+        rbacManagementService.assignRoleToAgentByRoleId(agentId, roleId);
+    }
+
+    @Override
+    public void assignRoleToAgentWithoutAutoReplace(String agentId, String roleName) {
+        log.debug("[User->RBAC] 역할 할당 요청 (자동 교체 없음) - agentId={}, roleName={}", agentId, roleName);
+        rbacManagementService.assignRoleToAgentWithoutAutoReplace(agentId, roleName);
+    }
+
+    @Override
     public void revokeRoleFromAgent(String agentId, String roleName) {
         log.debug("[User->RBAC] 역할 제거 요청 - agentId={}, roleName={}", agentId, roleName);
         rbacManagementService.revokeRoleFromAgent(agentId, roleName);
+    }
+
+    @Override
+    public void removeAllRolesFromAgent(String agentId) {
+        log.debug("[User->RBAC] 모든 역할 제거 요청 - agentId={}", agentId);
+        rbacManagementService.removeAllRolesFromAgent(agentId);
     }
 
     @Override

@@ -36,6 +36,7 @@ public class RbacException extends RuntimeException {
         PERMISSION_NOT_FOUND("PERMISSION_NOT_FOUND", "권한을 찾을 수 없습니다"),
         PERMISSION_ALREADY_EXISTS("PERMISSION_ALREADY_EXISTS", "이미 존재하는 권한입니다"),
         PERMISSION_ALREADY_ASSIGNED("PERMISSION_ALREADY_ASSIGNED", "이미 할당된 권한입니다"),
+        PERMISSION_IN_USE("PERMISSION_IN_USE", "역할에서 사용 중인 권한은 삭제할 수 없습니다"),
         ROLE_HAS_USERS("ROLE_HAS_USERS", "사용자가 있는 역할은 삭제할 수 없습니다"),
         INSUFFICIENT_PERMISSION("INSUFFICIENT_PERMISSION", "권한이 부족합니다"),
         INTERNAL_ERROR("INTERNAL_ERROR", "내부 서버 오류가 발생했습니다");

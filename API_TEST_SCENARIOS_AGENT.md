@@ -464,11 +464,13 @@ Content-Type: application/json
 
 **⚠️ 필수 헤더**: `X-User-Id: 10000000-0000-0000-0000-000000000001` (ADMIN 권한 필요)
 
-**POST** `/api/v1/agents/{agentId}/transfer`
+**방법 1) POST** `/api/v1/agents/{agentId}/transfer`
 
-**또는**
+**방법 2) PATCH** `/api/v1/agents/{agentId}/organization`
 
-**PATCH** `/api/v1/agents/{agentId}/organization`
+> **📌 참고**: 두 API 모두 동일한 기능을 수행합니다.
+> - `POST /transfer`: 이동 이력과 사유를 함께 기록 (더 상세한 정보)
+> - `PATCH /organization`: 간단한 부서 변경 (빠른 수정)
 
 **Headers**:
 ```
@@ -478,9 +480,9 @@ Content-Type: application/json
 
 **사용할 agentId**: `10000000-0000-0000-0000-000000000003` (이시니어)
 
-#### 6-1. 백엔드팀 → 프론트엔드팀 이동
+#### 6-1. 백엔드팀 → 프론트엔드팀 이동 (POST /transfer 방식)
 
-**Request Body** (transfer):
+**Request Body**:
 ```json
 {
   "newOrganizationId": "00000000-0000-0000-0000-000000000005",
@@ -488,14 +490,40 @@ Content-Type: application/json
 }
 ```
 
-**또는 Request Body** (organization):
+**예상 응답 (200 OK)**:
+```json
+{
+  "agentId": "10000000-0000-0000-0000-000000000003",
+  "fromOrganizationId": "00000000-0000-0000-0000-000000000004",
+  "toOrganizationId": "00000000-0000-0000-0000-000000000005",
+  "transferredAt": "2026-02-21T10:00:00"
+}
+```
+
+#### 6-2. 백엔드팀 → 프론트엔드팀 이동 (PATCH /organization 방식)
+
+**Request Body**:
 ```json
 {
   "organizationId": "00000000-0000-0000-0000-000000000005"
 }
 ```
 
-**예상 응답 (200 OK)**:
+**예상 응답 (204 No Content)**: 응답 본문 없음
+
+**검증 항목**:
+- ✅ organizationId 변경됨
+- ✅ departmentName 업데이트됨
+- ✅ departmentPath 업데이트됨
+- ✅ POST /transfer는 이동 이력 응답 포함
+- ✅ PATCH /organization는 204 No Content 반환
+
+**조회로 확인**:
+```bash
+GET /api/v1/agents/10000000-0000-0000-0000-000000000003
+```
+
+**예상 조회 결과**:
 ```json
 {
   "id": "10000000-0000-0000-0000-000000000003",
@@ -515,12 +543,7 @@ Content-Type: application/json
 }
 ```
 
-**검증 항목**:
-- ✅ organizationId 변경됨
-- ✅ departmentName 업데이트됨
-- ✅ departmentPath 업데이트됨
-
-#### 6-2. 존재하지 않는 부서로 이동 시도 ❌
+#### 6-3. 존재하지 않는 부서로 이동 시도 ❌
 
 **Request Body**:
 ```json
@@ -586,11 +609,13 @@ Content-Type: application/json
 
 **⚠️ 필수 헤더**: `X-User-Id` (본인만 가능)
 
-**POST** `/api/v1/agents/me/change-password`
+**방법 1) POST** `/api/v1/agents/me/change-password`
 
-**또는**
+**방법 2) POST** `/api/v1/agents/{agentId}/change-password`
 
-**POST** `/api/v1/agents/{agentId}/change-password`
+> **📌 참고**: 두 API 모두 동일한 기능을 수행합니다.
+> - `/me/change-password`: 현재 로그인한 사용자 (agentId 자동 인식)
+> - `/{agentId}/change-password`: agentId를 명시적으로 지정
 
 **Headers**:
 ```
@@ -600,7 +625,7 @@ Content-Type: application/json
 
 #### 8-1. 본인이 비밀번호 변경
 
-**Request Body**:
+**Request Body** (두 방법 모두 동일):
 ```json
 {
   "currentPassword": "Admin123!",
@@ -615,6 +640,7 @@ Content-Type: application/json
 - ✅ passwordMustChange = false로 변경됨
 - ✅ 현재 비밀번호 검증됨 (Admin123!)
 - ✅ confirmPassword 일치 확인
+- ℹ️ `/me/change-password`와 `/{agentId}/change-password` 모두 동일하게 동작
 
 #### 8-2. 현재 비밀번호 불일치 ❌
 

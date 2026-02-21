@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * @see RbacException
  */
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.nexfron.identitymodulith.rbac")
 @RequiredArgsConstructor
 public class RbacExceptionHandler {
 
@@ -113,7 +113,7 @@ public class RbacExceptionHandler {
             case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
 
             // 400 Bad Request: 잘못된 요청 (비즈니스 규칙 위반)
-            case ROLE_HAS_USERS, ROLE_NOT_ACTIVE -> HttpStatus.BAD_REQUEST;
+            case ROLE_HAS_USERS, ROLE_NOT_ACTIVE, PERMISSION_IN_USE -> HttpStatus.BAD_REQUEST;
 
             // 500 Internal Server Error: 내부 서버 오류
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;

@@ -944,3 +944,36 @@ docker run -p 8080:8080 \
 
 ---
 
+## 📚 문서
+
+### 아키텍처 및 설계
+- [DATABASE_SCHEMA.md](./Docs/DATABASE_SCHEMA.md) - 데이터베이스 스키마 상세 설명
+- [EVENT_STORMING.md](./Docs/EVENT_STORMING.md) - 이벤트 스토밍 결과
+- [API_SPECIFICATION.md](./Docs/API_SPECIFICATION.md) - API 명세서
+
+### 테스트 시나리오
+- [API_TEST_SCENARIOS_ORGANIZATION.md](./API_TEST_SCENARIOS_ORGANIZATION.md) - Organization 모듈 테스트
+- [API_TEST_SCENARIOS_AGENT.md](./API_TEST_SCENARIOS_AGENT.md) - User/Agent 모듈 테스트
+- [API_TEST_SCENARIOS_RBAC.md](./API_TEST_SCENARIOS_RBAC.md) - RBAC 모듈 테스트
+
+### 성능 최적화
+- [PERFORMANCE_QUICK_REFERENCE.md](./Docs/PERFORMANCE_QUICK_REFERENCE.md) - **성능 최적화 빠른 참조** 🚀
+  - Top 5 최적화 기법 요약
+  - 개발 체크리스트
+  - 성능 측정 기준
+- [PERFORMANCE_ANALYSIS.md](./Docs/PERFORMANCE_ANALYSIS.md) - **종합 성능 최적화 분석** ⭐⭐⭐
+  - 15가지 최적화 기법 상세 분석
+  - Materialized Path, DTO 프로젝션, Bulk Delete
+  - 낙관적 잠금, Batch API, 인덱스 전략
+  - 성능 측정 결과 및 개선 효과 정량화
+- [PERFORMANCE_OPTIMIZATION_N_PLUS_1.md](./Docs/PERFORMANCE_OPTIMIZATION_N_PLUS_1.md) - **N+1 쿼리 문제 해결 가이드** ⭐
+  - JOIN 쿼리 최적화로 쿼리 수 85~96% 감소
+  - 응답 시간 82% 단축 (45ms → 8ms)
+  - 개선 전/후 비교 및 데이터 흐름 분석
+
+### 운영 가이드
+- [CHANGELOG.md](./CHANGELOG.md) - 변경 이력
+- [TEST_PROGRESS_STATUS.md](./TEST_PROGRESS_STATUS.md) - 테스트 진행 현황
+
+---
+

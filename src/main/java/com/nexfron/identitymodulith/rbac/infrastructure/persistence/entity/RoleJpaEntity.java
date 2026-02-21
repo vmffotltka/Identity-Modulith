@@ -188,6 +188,22 @@ public class RoleJpaEntity {
     private LocalDateTime updatedAt;
 
     /**
+     * 생성자 ID
+     * - 역할을 생성한 사용자의 ID (Agent ID)
+     * - 감사 추적(Audit Trail)용
+     */
+    @Column(name = "created_by", length = 36)
+    private String createdBy;
+
+    /**
+     * 마지막 수정자 ID
+     * - 역할을 마지막으로 수정한 사용자의 ID (Agent ID)
+     * - 감사 추적(Audit Trail)용
+     */
+    @Column(name = "updated_by", length = 36)
+    private String updatedBy;
+
+    /**
      * 낙관적 잠금(Optimistic Lock) 버전
      *
      * JPA에서 동시성 제어를 위해 자동 관리:

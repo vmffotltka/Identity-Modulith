@@ -81,8 +81,6 @@ public class Agent {
     // ========== Audit Fields ==========
     private String createdBy;
     private String updatedBy;
-    private String suspendedBy;
-    private String retiredBy;
 
     // ========== Optimistic Locking ==========
     private Long version;
@@ -95,22 +93,33 @@ public class Agent {
 
     @Builder
     public Agent(UUID id, String tenantId, String loginId, String password, String name,
+                 String employeeId, String email, String phone,
                  String organizationId, AgentStatus status, boolean passwordMustChange,
-                 LocalDateTime createdAt, LocalDateTime retiredAt,
-                 Set<Role> roles) {
+                 LocalDateTime createdAt, LocalDateTime updatedAt,
+                 LocalDateTime suspendedAt, LocalDateTime retiredAt, LocalDateTime scheduledDeleteAt,
+                 String createdBy, String updatedBy,
+                 Long version, Set<Role> roles, RetireDeletePolicy retireDeletePolicy) {
         this.id = id != null ? id : UUID.randomUUID();
         this.tenantId = tenantId;
         this.loginId = loginId;
         this.password = password;
         this.name = name;
+        this.employeeId = employeeId;
+        this.email = email;
+        this.phone = phone;
         this.organizationId = organizationId;
         this.status = status != null ? status : AgentStatus.ACTIVE;
         this.passwordMustChange = passwordMustChange;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = updatedAt != null ? updatedAt : LocalDateTime.now();
+        this.suspendedAt = suspendedAt;
         this.retiredAt = retiredAt;
+        this.scheduledDeleteAt = scheduledDeleteAt;
+        this.createdBy = createdBy;
+        this.updatedBy = updatedBy;
+        this.version = version != null ? version : 0L;
         this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
-        this.version = 0L;
+        this.retireDeletePolicy = retireDeletePolicy;
     }
 
     // ========== Password Management ==========
@@ -193,7 +202,7 @@ public class Agent {
      * 상담사를 정지(Suspend)합니다.
      * ACTIVE 상태만 정지 가능하며, 정지된 상담사는 activate()로 복귀 가능합니다.
      *
-     * @param suspendedByUserId 정지를 수행한 관리자 ID
+     * @param suspendedByUserId 정지를 수행한 관리자 ID (감사 로그용)
      * @throws BusinessException ACTIVE 상태가 아닌 경우
      */
     public void suspend(String suspendedByUserId) {
@@ -203,7 +212,7 @@ public class Agent {
         }
         this.status = AgentStatus.SUSPENDED;
         this.suspendedAt = LocalDateTime.now();
-        this.suspendedBy = suspendedByUserId;
+        this.updatedBy = suspendedByUserId;
         this.updatedAt = LocalDateTime.now();
     }
 
@@ -211,7 +220,6 @@ public class Agent {
      * 정지된 상담사를 활성화합니다.
      * SUSPENDED 상태만 활성화 가능하며, RETIRED는 복구 불가능합니다.
      *
-     * @param activatedByUserId 활성화를 수행한 관리자 ID
      * @throws BusinessException SUSPENDED 상태가 아닌 경우
      */
     public void activate() {
@@ -221,7 +229,6 @@ public class Agent {
         }
         this.status = AgentStatus.ACTIVE;
         this.suspendedAt = null;
-        this.suspendedBy = null;
         this.updatedAt = LocalDateTime.now();
     }
 
@@ -243,7 +250,7 @@ public class Agent {
 
         this.status = AgentStatus.RETIRED;
         this.retiredAt = LocalDateTime.now();
-        this.retiredBy = retiredByUserId;
+        this.updatedBy = retiredByUserId;
         this.retireDeletePolicy = deletePolicy;
         this.updatedAt = LocalDateTime.now();
 

@@ -119,6 +119,21 @@ public class PermissionJpaEntity {
     private String code;
 
     /**
+     * 권한명
+     * - 사용자 친화적인 권한 이름
+     * - UI에서 표시되는 이름
+     * - 길이: 최대 100자
+     * - 필수값: NOT NULL
+     *
+     * 예시:
+     * - "사용자 관리"
+     * - "대시보드 조회"
+     * - "보고서 내보내기"
+     */
+    @Column(name = "name", length = 100, nullable = false)
+    private String name;
+
+    /**
      * 권한 설명
      * - 관리자가 이해할 수 있는 권한의 목적 및 기능 설명
      * - 권한 관리 UI에서 사용자 친화적 정보 제공
@@ -157,6 +172,24 @@ public class PermissionJpaEntity {
      */
     @Column(name = "category", length = 64)
     private String category;
+
+    /**
+     * 리소스
+     * - 권한이 적용되는 리소스 (예: dashboard, user, report)
+     * - 길이: 최대 100자
+     * - 선택값: NULL 허용
+     */
+    @Column(name = "resource", length = 100)
+    private String resource;
+
+    /**
+     * 액션
+     * - 권한이 수행하는 동작 (예: view, create, update, delete)
+     * - 길이: 최대 50자
+     * - 선택값: NULL 허용
+     */
+    @Column(name = "action", length = 50)
+    private String action;
 
     /**
      * 생성 일시

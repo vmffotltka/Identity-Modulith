@@ -431,9 +431,10 @@ public class AgentService implements
     /**
      * 역할 ID 목록으로 역할을 일괄 지정합니다.
      * RBAC 모듈과 연동하여 실제 역할을 조회 후 할당합니다.
+     * 기존 역할은 모두 제거되고 새로운 역할로 완전히 대체됩니다. (PUT semantic)
      *
      * @param agentId 역할을 지정할 상담사 ID
-     * @param roleIds 할당할 역할 ID 세트
+     * @param roleIds 할당할 역할 ID 세트 (UUID 형식)
      * @throws BusinessException roleIds가 null이거나 empty인 경우
      */
     @Override
@@ -445,11 +446,20 @@ public class AgentService implements
 
         log.info("[USER] 역할 ID로 일괄 지정 - agentId={}, roleIds={}", agentId, roleIds);
 
-        // RBAC 모듈을 통해 역할 할당 (기존 역할은 제거하지 않고 추가만 함)
+        // 1. 기존 역할 모두 제거
+        rbacPort.removeAllRolesFromAgent(agentId.toString());
+        log.debug("[USER] 기존 역할 제거 완료 - agentId={}", agentId);
+
+        // 2. 새로운 역할 할당 (roleId가 UUID 형식인지 확인하여 적절한 메서드 호출)
         for (String roleId : roleIds) {
-            // roleId를 roleName으로 변환이 필요하지만, 여기서는 roleId가 실제로는 roleName일 것으로 가정
-            // 실제로는 RBAC 모듈에서 roleId로 역할을 조회하는 기능이 필요
-            rbacPort.assignRoleToAgent(agentId.toString(), roleId);
+            // UUID 형식인지 확인 (간단한 길이 체크: UUID는 36자)
+            if (roleId != null && roleId.length() == 36 && roleId.contains("-")) {
+                // UUID 형식이면 roleId로 할당
+                rbacPort.assignRoleToAgentByRoleId(agentId.toString(), roleId);
+            } else {
+                // 그 외에는 roleName으로 할당
+                rbacPort.assignRoleToAgent(agentId.toString(), roleId);
+            }
         }
 
         log.info("[USER] 역할 ID로 일괄 지정 완료 - agentId={}, roleCount={}", agentId, roleIds.size());
@@ -458,10 +468,15 @@ public class AgentService implements
     /**
      * 역할 이름 목록으로 역할을 일괄 지정합니다.
      * RBAC 모듈과 연동하여 역할 이름으로 역할을 조회 후 할당합니다.
+     * 기존 역할은 모두 제거되고 새로운 역할로 완전히 대체됩니다. (PUT semantic)
+     *
+     * 비즈니스 규칙 (RA-003):
+     * - POSITION 타입 역할은 1개만 할당 가능
+     * - CHANNEL 타입 역할은 여러 개 할당 가능
      *
      * @param agentId 역할을 지정할 상담사 ID
-     * @param roleNames 할당할 역할 이름 세트 (예: "TEAM_LEAD", "MEMBER")
-     * @throws BusinessException roleNames가 null이거나 empty인 경우
+     * @param roleNames 할당할 역할 이름 세트 (예: "TEAM_LEAD", "VOICE_INBOUND")
+     * @throws BusinessException roleNames가 null이거나 empty인 경우, POSITION 역할이 2개 이상인 경우
      */
     @Override
     public void assignRolesByNames(UUID agentId, Set<String> roleNames) {
@@ -472,9 +487,25 @@ public class AgentService implements
 
         log.info("[USER] 역할 이름으로 일괄 지정 - agentId={}, roleNames={}", agentId, roleNames);
 
-        // RBAC 모듈을 통해 역할 할당
+        // RA-003: POSITION 역할은 1개만 할당 가능 (검증)
+        // ADMIN, TEAM_LEAD, MEMBER는 POSITION 타입
+        Set<String> positionRoleNames = Set.of("ADMIN", "TEAM_LEAD", "MEMBER", "AGENT");
+        long positionCount = roleNames.stream()
+                .filter(positionRoleNames::contains)
+                .count();
+
+        if (positionCount > 1) {
+            throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                "POSITION 역할(ADMIN, TEAM_LEAD, MEMBER)은 1개만 할당할 수 있습니다.");
+        }
+
+        // 1. 기존 역할 모두 제거
+        rbacPort.removeAllRolesFromAgent(agentId.toString());
+        log.debug("[USER] 기존 역할 제거 완료 - agentId={}", agentId);
+
+        // 2. 새로운 역할 할당 (POSITION 자동 교체 로직 없이)
         for (String roleName : roleNames) {
-            rbacPort.assignRoleToAgent(agentId.toString(), roleName);
+            rbacPort.assignRoleToAgentWithoutAutoReplace(agentId.toString(), roleName);
         }
 
         log.info("[USER] 역할 이름으로 일괄 지정 완료 - agentId={}, roleCount={}", agentId, roleNames.size());

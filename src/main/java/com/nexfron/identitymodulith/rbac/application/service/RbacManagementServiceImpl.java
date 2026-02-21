@@ -3,7 +3,6 @@ package com.nexfron.identitymodulith.rbac.application.service;
 import com.nexfron.identitymodulith.common.security.TenantContextHolder;
 import com.nexfron.identitymodulith.rbac.RbacModuleApi;
 import com.nexfron.identitymodulith.rbac.application.exception.RbacException;
-// ...existing code...
 import com.nexfron.identitymodulith.rbac.domain.RoleType;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.nexfron.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
@@ -49,7 +48,7 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
     }
 
     /**
-     * 현재 사용자 ID 조회
+     * 현재 요청의 userId 추출
      */
     private String getCurrentUserId() {
         return TenantContextHolder.getCurrentUserId();
@@ -59,13 +58,52 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
     public List<RoleDto> getAllRoles() {
         String tenantId = getTenantId();
         return roleRepository.findByTenantId(tenantId).stream()
-                .map(role -> new RoleDto(
-                        role.getName(),
-                        role.getType(),
-                        role.getDescription(),
-                        role.getIsActive()
-                ))
+                .map(role -> {
+                    // 역할의 권한 목록 조회
+                    Set<PermissionDto> permissions = getPermissionsByRoleName(role.getName());
+
+                    // 역할을 사용하는 사용자 수 조회
+                    int userCount = getAgentCountByRoleId(role.getRoleId());
+
+                    return new RoleDto(
+                            role.getRoleId(),
+                            role.getName(),
+                            role.getType(),
+                            role.getDataScope() != null ? role.getDataScope().name() : null,
+                            role.getDescription(),
+                            role.getIsActive(),
+                            permissions,
+                            userCount,
+                            role.getCreatedAt(),
+                            role.getUpdatedAt()
+                    );
+                })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 역할명으로 권한 조회 (내부용)
+     */
+    private Set<PermissionDto> getPermissionsByRoleName(String roleName) {
+        try {
+            return getPermissionsByRole(roleName);
+        } catch (Exception e) {
+            log.warn("[RBAC] 권한 조회 실패 - roleName={}", roleName);
+            return Set.of();
+        }
+    }
+
+    /**
+     * roleId로 사용자 수 조회 (내부용)
+     */
+    private int getAgentCountByRoleId(String roleId) {
+        try {
+            List<AgentRoleJpaEntity> agentRoles = agentRoleRepository.findByRoleId(roleId);
+            return agentRoles.size();
+        } catch (Exception e) {
+            log.warn("[RBAC] 사용자 수 조회 실패 - roleId={}", roleId);
+            return 0;
+        }
     }
 
     @Override
@@ -74,27 +112,44 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
 
+        // 역할의 권한 목록 조회
+        Set<PermissionDto> permissions = getPermissionsByRole(roleName);
+
+        // 역할을 사용하는 사용자 수 조회
+        int userCount = getAgentCountByRole(roleName);
+
         return new RoleDto(
+                role.getRoleId(),
                 role.getName(),
                 role.getType(),
+                role.getDataScope() != null ? role.getDataScope().name() : null,
                 role.getDescription(),
-                role.getIsActive()
+                role.getIsActive(),
+                permissions,
+                userCount,
+                role.getCreatedAt(),
+                role.getUpdatedAt()
         );
     }
 
     @Override
     @Transactional
-    public RoleDto createRole(CreateRoleRequest request) {
+    public RoleDto createRole(CreateRoleRequest request, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        String currentUserId = getCurrentUserId();
-        log.info("[RBAC] 역할 생성 - tenantId={}, name={}, actorId={}", tenantId, request.name(), currentUserId);
+        log.info("[RBAC] 역할 생성 - tenantId={}, name={}, actorId={}", tenantId, request.name(), userId);
 
-        // RC-004: ADMIN 권한 검증
-        checkAdminPermission(currentUserId, "역할 생성");
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 생성");
 
         // 1. 중복 확인
-        if (roleRepository.existsByTenantIdAndName(tenantId, request.name())) {
-            throw new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
+        boolean exists = roleRepository.existsByTenantIdAndName(tenantId, request.name());
+        log.info("[RBAC] 역할 중복 체크 - tenantId={}, name={}, exists={}", tenantId, request.name(), exists);
+
+        if (exists) {
+            log.warn("[RBAC] 역할 생성 실패 - 이미 존재하는 역할명: {}", request.name());
+            RbacException exception = new RbacException(RbacException.RbacErrorCode.ROLE_ALREADY_EXISTS);
+            log.error("[RBAC] 예외 생성 완료, throw 직전 - exception={}", exception.getClass().getName());
+            throw exception;
         }
 
         // 2. 역할 생성
@@ -103,10 +158,12 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                 .tenantId(tenantId)
                 .name(request.name())
                 .type(request.type())
-                .description(null)
+                .description(request.description())
                 .isActive(true)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
+                .createdBy(userId)
+                .updatedBy(userId)
                 .build();
 
         // 3. 저장
@@ -128,8 +185,11 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
      */
     @Override
     @Transactional
-    public RoleDto updateRole(String roleName, UpdateRoleRequest request) {
+    public RoleDto updateRole(String roleName, UpdateRoleRequest request, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 수정");
 
         // 1. 역할 조회
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
@@ -142,21 +202,44 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
         if (request.description() != null) {
             role.setDescription(request.description());
         }
+        if (request.dataScopeLevel() != null) {
+            try {
+                com.nexfron.identitymodulith.rbac.domain.DataScopeLevel dataScope =
+                    com.nexfron.identitymodulith.rbac.domain.DataScopeLevel.valueOf(request.dataScopeLevel());
+                role.setDataScope(dataScope);
+            } catch (IllegalArgumentException e) {
+                log.warn("[RBAC] 잘못된 DataScopeLevel - value={}", request.dataScopeLevel());
+                throw new RbacException(RbacException.RbacErrorCode.INTERNAL_ERROR);
+            }
+        }
         if (request.isActive() != null) {
             role.setIsActive(request.isActive());
         }
         role.setUpdatedAt(LocalDateTime.now());
+        role.setUpdatedBy(userId);
 
         // 3. 저장
         RoleJpaEntity updatedRole = roleRepository.save(role);
 
         log.info("[RBAC] 역할 업데이트 완료 - tenantId: {}, roleName: {}", tenantId, roleName);
 
+        // 역할의 권한 목록 조회
+        Set<PermissionDto> permissions = getPermissionsByRoleName(updatedRole.getName());
+
+        // 역할을 사용하는 사용자 수 조회
+        int userCount = getAgentCountByRoleId(updatedRole.getRoleId());
+
         return new RoleDto(
+                updatedRole.getRoleId(),
                 updatedRole.getName(),
                 updatedRole.getType(),
+                updatedRole.getDataScope() != null ? updatedRole.getDataScope().name() : null,
                 updatedRole.getDescription(),
-                updatedRole.getIsActive()
+                updatedRole.getIsActive(),
+                permissions,
+                userCount,
+                updatedRole.getCreatedAt(),
+                updatedRole.getUpdatedAt()
         );
     }
 
@@ -179,12 +262,19 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public PermissionDto createPermission(CreatePermissionRequest request) {
+    public PermissionDto createPermission(CreatePermissionRequest request, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        log.info("[RBAC] 권한 생성 - tenantId={}, code={}", tenantId, request.code());
+        log.info("[RBAC] 권한 생성 - tenantId={}, code={}, actorId={}", tenantId, request.code(), userId);
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 생성");
 
         // 1. 중복 확인
-        if (permissionRepository.existsByTenantIdAndCode(tenantId, request.code())) {
+        boolean exists = permissionRepository.existsByTenantIdAndCode(tenantId, request.code());
+        log.info("[RBAC] 권한 중복 체크 - tenantId={}, code={}, exists={}", tenantId, request.code(), exists);
+
+        if (exists) {
+            log.warn("[RBAC] 권한 생성 실패 - 이미 존재하는 권한 코드: {}", request.code());
             throw new RbacException(RbacException.RbacErrorCode.PERMISSION_ALREADY_EXISTS);
         }
 
@@ -193,14 +283,21 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                 .permissionId(UUID.randomUUID().toString())
                 .tenantId(tenantId)
                 .code(request.code())
+                .name(request.name())
+                .description(request.description())
+                .category(request.category())
+                .resource(request.resource())
+                .action(request.action())
                 .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
                 .build();
+
+        log.info("[RBAC] 권한 엔티티 생성 완료, 저장 시도 - permissionId={}", permission.getPermissionId());
 
         // 3. 저장
         PermissionJpaEntity savedPermission = permissionRepository.save(permission);
 
-
-        log.info("[RBAC] 권한 생성 완료 - permissionId={}", savedPermission.getPermissionId());
+        log.info("[RBAC] 권한 저장 완료 - permissionId={}", savedPermission.getPermissionId());
 
         return new PermissionDto(savedPermission.getCode(), savedPermission.getDescription(), savedPermission.getCategory());
     }
@@ -210,8 +307,11 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
      */
     @Override
     @Transactional
-    public PermissionDto updatePermission(String code, UpdatePermissionRequest request) {
+    public PermissionDto updatePermission(String code, UpdatePermissionRequest request, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 수정");
 
         // 1. 권한 조회
         PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, code)
@@ -228,6 +328,10 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
         if (request.description() != null) {
             permission.setDescription(request.description());
         }
+        if (request.category() != null) {
+            permission.setCategory(request.category());
+        }
+        permission.setUpdatedAt(LocalDateTime.now());
 
         // 3. 저장
         PermissionJpaEntity updatedPermission = permissionRepository.save(permission);
@@ -239,12 +343,11 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public void assignPermissionToRole(String roleName, String permissionCode) {
+    public void assignPermissionToRole(String roleName, String permissionCode, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        String currentUserId = getCurrentUserId();
 
-        // PA-004: ADMIN 권한 검증
-        checkAdminPermission(currentUserId, "권한 할당");
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 할당");
 
         // 1. 역할 조회
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
@@ -275,8 +378,11 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public void revokePermissionFromRole(String roleName, String permissionCode) {
+    public void revokePermissionFromRole(String roleName, String permissionCode, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 제거");
 
         // 1. 역할 조회
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
@@ -298,8 +404,12 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
      */
     @Override
     @Transactional
-    public BatchAssignmentResult batchAssignPermissionsToRole(String roleName, Set<String> permissionCodes) {
+    public BatchAssignmentResult batchAssignPermissionsToRole(String roleName, Set<String> permissionCodes, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 일괄 할당");
+
         int successCount = 0;
         int failedCount = 0;
         int skippedCount = 0;
@@ -349,8 +459,12 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
      */
     @Override
     @Transactional
-    public BatchAssignmentResult batchRevokePermissionsFromRole(String roleName, Set<String> permissionCodes) {
+    public BatchAssignmentResult batchRevokePermissionsFromRole(String roleName, Set<String> permissionCodes, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 일괄 제거");
+
         int successCount = 0;
         int failedCount = 0;
         int skippedCount = 0;
@@ -501,6 +615,111 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                 agentId, roleName, role.getType());
     }
 
+    /**
+     * 사용자에게 역할 할당 (권한 검증 포함)
+     */
+    @Override
+    @Transactional
+    public void assignRoleToAgent(String agentId, String roleName, String userId) {
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 할당");
+
+        // 기존 메소드 호출
+        assignRoleToAgent(agentId, roleName);
+    }
+
+    @Override
+    @Transactional
+    public void assignRoleToAgentByRoleId(String agentId, String roleId) {
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        log.info("[RBAC] 역할 할당 시작 (roleId) - agentId={}, roleId={}", agentId, roleId);
+
+        // 1. roleId로 역할 조회 (테넌트 범위)
+        RoleJpaEntity role = roleRepository.findByTenantIdAndRoleId(tenantId, roleId)
+                .orElseThrow(() -> {
+                    log.warn("[RBAC] 역할 없음 - roleId={}", roleId);
+                    return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
+                });
+
+        // 2. 역할이 비활성화 상태면 차단
+        if (!role.getIsActive()) {
+            log.warn("[RBAC] 비활성화된 역할 할당 차단 - roleId={}, roleName={}", roleId, role.getName());
+            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
+        }
+
+        // 3. 매핑 생성
+        AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
+                .agentId(agentId)
+                .roleId(role.getRoleId())
+                .assignedAt(LocalDateTime.now())
+                .build();
+
+        // 4. 저장 (DB UNIQUE 제약으로 중복 방지)
+        try {
+            agentRoleRepository.save(mapping);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("[RBAC] 중복 할당 차단 - agentId={}, roleId={}", agentId, roleId);
+            return;
+        }
+
+        log.info("[RBAC] 역할 할당 완료 (roleId) - agentId={}, roleId={}, roleName={}",
+                agentId, roleId, role.getName());
+    }
+
+    @Override
+    @Transactional
+    public void assignRoleToAgentWithoutAutoReplace(String agentId, String roleName) {
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        log.info("[RBAC] 역할 할당 시작 (일괄 지정 모드) - agentId={}, roleName={}", agentId, roleName);
+
+        // 1. 역할 조회 (테넌트 범위)
+        RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
+                .orElseThrow(() -> {
+                    log.warn("[RBAC] 역할 없음 - roleName={}", roleName);
+                    return new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND);
+                });
+
+        // 2. 역할이 비활성화 상태면 차단
+        if (!role.getIsActive()) {
+            log.warn("[RBAC] 비활성 역할 - roleName={}", roleName);
+            throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
+        }
+
+        // 3. 기존 역할 조회
+        List<AgentRoleJpaEntity> existingRoles = agentRoleRepository.findByAgentId(agentId);
+
+        // 4. ✅ POSITION 역할인 경우 기존 POSITION 자동 교체 (RA-003)
+        if (role.getType() == RoleType.POSITION) {
+            for (AgentRoleJpaEntity ar : existingRoles) {
+                RoleJpaEntity existingRole = roleRepository.findById(ar.getRoleId()).orElse(null);
+
+                if (existingRole != null && existingRole.getType() == RoleType.POSITION) {
+                    log.info("[RBAC] 기존 POSITION 역할 자동 제거 - agentId={}, oldRole={}, newRole={}",
+                            agentId, existingRole.getName(), roleName);
+                    agentRoleRepository.delete(ar);
+                }
+            }
+        }
+
+        // 5. 매핑 생성
+        AgentRoleJpaEntity mapping = AgentRoleJpaEntity.builder()
+                .agentId(agentId)
+                .roleId(role.getRoleId())
+                .assignedAt(LocalDateTime.now())
+                .build();
+
+        // 6. 저장 (DB UNIQUE 제약으로 중복 방지)
+        try {
+            agentRoleRepository.save(mapping);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("[RBAC] 중복 할당 차단 - agentId={}, roleName={}", agentId, roleName);
+            return;
+        }
+
+        log.info("[RBAC] 역할 할당 완료 - agentId={}, roleName={}, type={}",
+                agentId, roleName, role.getType());
+    }
+
     @Override
     @Transactional
     public void revokeRoleFromAgent(String agentId, String roleName) {
@@ -522,6 +741,32 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
         long duration = System.currentTimeMillis() - startTime;
         log.info("[RBAC 역할 회수] agentId={}, roleName={}, roleId={}, 소요시간={}ms", agentId, roleName, role.getRoleId(), duration);
+    }
+
+    /**
+     * 사용자에게서 역할 회수 (권한 검증 포함)
+     */
+    @Override
+    @Transactional
+    public void revokeRoleFromAgent(String agentId, String roleName, String userId) {
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 회수");
+
+        // 기존 메소드 호출
+        revokeRoleFromAgent(agentId, roleName);
+    }
+
+    @Override
+    @Transactional
+    public void removeAllRolesFromAgent(String agentId) {
+        long startTime = System.currentTimeMillis();
+        log.debug("[RBAC] 사용자의 모든 역할 제거 시작 - agentId={}", agentId);
+
+        // agentId에 할당된 모든 역할 삭제
+        agentRoleRepository.deleteByAgentId(agentId);
+
+        long duration = System.currentTimeMillis() - startTime;
+        log.info("[RBAC] 사용자의 모든 역할 제거 완료 - agentId={}, 소요시간={}ms", agentId, duration);
     }
 
     @Override
@@ -576,16 +821,26 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
      */
     @Override
     @Transactional
-    public RoleDeletionResult deleteRole(String roleName, boolean forceDelete) {
+    public RoleDeletionResult deleteRole(String roleName, boolean forceDelete, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
+
+        log.info("[RBAC] 역할 삭제 요청 - tenantId={}, roleName={}, forceDelete={}, userId={}",
+            tenantId, roleName, forceDelete, userId);
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 삭제");
 
         // 1. 역할 조회
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
 
+        log.info("[RBAC] 역할 조회 완료 - roleId={}", role.getRoleId());
+
         // 2. 영향도 조회
         List<AgentRoleJpaEntity> agentRoles = agentRoleRepository.findByRoleId(role.getRoleId());
         int affectedUserCount = agentRoles.size();
+
+        log.info("[RBAC] 영향도 조회 - affectedUserCount={}", affectedUserCount);
 
         // 3. 권한 매핑 수 조회
         List<RolePermissionJpaEntity> rolePermissions = rolePermissionRepository.findByRoleId(role.getRoleId());
@@ -593,6 +848,8 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
         // 4. 안전 모드에서 사용자가 있는 경우 예외 발생
         if (!forceDelete && affectedUserCount > 0) {
+            log.warn("[RBAC] 역할 삭제 차단 - roleName={}, affectedUserCount={}, forceDelete={}",
+                roleName, affectedUserCount, forceDelete);
             String warningMessage = String.format(
                     "역할 '%s'을 %d명의 사용자가 사용 중이므로 삭제할 수 없습니다. " +
                             "강제 삭제하려면 force=true 옵션을 사용하세요.",
@@ -600,6 +857,8 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
             );
             throw new RbacException(RbacException.RbacErrorCode.ROLE_HAS_USERS, warningMessage);
         }
+
+        log.info("[RBAC] 역할 삭제 진행 - 사용자 체크 통과");
 
         // 5. 강제 모드에서 사용자 역할 먼저 회수
         if (forceDelete && affectedUserCount > 0) {
@@ -679,9 +938,12 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public void deactivateRole(String roleName) {
+    public void deactivateRole(String roleName, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        log.info("[RBAC] 역할 비활성화 - tenantId={}, roleName={}", tenantId, roleName);
+        log.info("[RBAC] 역할 비활성화 - tenantId={}, roleName={}, actorId={}", tenantId, roleName, userId);
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 비활성화");
 
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
@@ -699,9 +961,12 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public void activateRole(String roleName) {
+    public void activateRole(String roleName, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        log.info("[RBAC] 역할 활성화 - tenantId={}, roleName={}", tenantId, roleName);
+        log.info("[RBAC] 역할 활성화 - tenantId={}, roleName={}, actorId={}", tenantId, roleName, userId);
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "역할 활성화");
 
         RoleJpaEntity role = roleRepository.findByTenantIdAndName(tenantId, roleName)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.ROLE_NOT_FOUND));
@@ -719,19 +984,48 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
 
     @Override
     @Transactional
-    public void deletePermission(String code) {
+    public void deletePermission(String code, String userId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
 
+        log.info("[RBAC] 권한 삭제 요청 - tenantId={}, code={}, userId={}", tenantId, code, userId);
+
+        // ADMIN 권한 검증
+        checkAdminPermission(userId, "권한 삭제");
+
+        // 1. 권한 조회
         PermissionJpaEntity permission = permissionRepository.findByTenantIdAndCode(tenantId, code)
                 .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.PERMISSION_NOT_FOUND));
 
-        // 권한에 매핑된 모든 역할 관계 삭제 (카스케이드)
-        rolePermissionRepository.deleteByPermissionId(permission.getPermissionId());
+        // 2. 역할 매핑 체크
+        List<RolePermissionJpaEntity> rolePermissions = rolePermissionRepository.findByPermissionId(permission.getPermissionId());
+        int assignedRoleCount = rolePermissions.size();
 
-        // 권한 삭제
+        log.info("[RBAC] 권한 영향도 조회 - assignedRoleCount={}", assignedRoleCount);
+
+        if (assignedRoleCount > 0) {
+            // 권한이 역할에 할당되어 있으면 삭제 차단
+            log.warn("[RBAC] 권한 삭제 차단 - code={}, assignedRoleCount={}", code, assignedRoleCount);
+
+            // 어떤 역할들이 사용 중인지 조회
+            List<String> roleNames = rolePermissions.stream()
+                .map(rp -> roleRepository.findById(rp.getRoleId()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .map(RoleJpaEntity::getName)
+                .collect(java.util.stream.Collectors.toList());
+
+            String warningMessage = String.format(
+                "권한 '%s'이(가) %d개의 역할에서 사용 중이므로 삭제할 수 없습니다. 사용 중인 역할: %s",
+                code, assignedRoleCount, String.join(", ", roleNames)
+            );
+
+            throw new RbacException(RbacException.RbacErrorCode.PERMISSION_IN_USE, warningMessage);
+        }
+
+        // 3. 권한 삭제 (역할 매핑이 없는 경우에만)
         permissionRepository.delete(permission);
 
-        log.info("[RBAC] 권한 삭제: code={}, tenantId={}", code, tenantId);
+        log.info("[RBAC] 권한 삭제 완료: code={}, tenantId={}, actorId={}", code, tenantId, userId);
     }
 
 

@@ -449,6 +449,7 @@ public class AgentController {
     /**
      * 상담사 정지 (Suspend)
      *
+     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
      * @param agentId 상담사 ID (UUID)
      * @return 204 No Content
      *         ※ ACTIVE 상태만 정지 가능
@@ -458,23 +459,25 @@ public class AgentController {
     @PostMapping("/{agentId}/suspend")
     @Operation(
         summary = "상담사 정지",
-        description = "상담사를 정지 상태로 변경합니다. 정지된 상담사는 로그인할 수 없습니다."
+        description = "상담사를 정지 상태로 변경합니다. 정지된 상담사는 로그인할 수 없습니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "정지 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "정지할 수 없는 상태 (이미 정지됨 또는 퇴사함)")
+        @ApiResponse(responseCode = "400", description = "정지할 수 없는 상태 (이미 정지됨 또는 퇴사함) 또는 권한 없음")
     })
     public ResponseEntity<Void> suspendAgent(
+        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
+
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
 
         SuspendAgentUseCase.SuspendAgentCommand command = SuspendAgentUseCase.SuspendAgentCommand.builder()
                 .tenantId(tenantId)
                 .agentId(agentId)
-                .actorId(UUID.fromString(actorId))
+                .actorId(UUID.fromString(userId))
                 .build();
 
         suspendAgentUseCase.suspendAgent(command);
@@ -484,6 +487,7 @@ public class AgentController {
     /**
      * 상담사 활성화 (Activate)
      *
+     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
      * @param agentId 상담사 ID (UUID)
      * @return 204 No Content
      *         ※ SUSPENDED 상태만 활성화 가능
@@ -493,23 +497,25 @@ public class AgentController {
     @PostMapping("/{agentId}/activate")
     @Operation(
         summary = "상담사 활성화",
-        description = "정지된 상담사를 활성화 상태로 복구합니다. 퇴사한 상담사는 활성화할 수 없습니다."
+        description = "정지된 상담사를 활성화 상태로 복구합니다. 퇴사한 상담사는 활성화할 수 없습니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "활성화 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "활성화할 수 없는 상태 (이미 활성화됨 또는 퇴사함)")
+        @ApiResponse(responseCode = "400", description = "활성화할 수 없는 상태 (이미 활성화됨 또는 퇴사함) 또는 권한 없음")
     })
     public ResponseEntity<Void> activateAgent(
+        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
+
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
 
         ActivateAgentUseCase.ActivateAgentCommand command = ActivateAgentUseCase.ActivateAgentCommand.builder()
                 .tenantId(tenantId)
                 .agentId(agentId)
-                .actorId(UUID.fromString(actorId))
+                .actorId(UUID.fromString(userId))
                 .build();
 
         activateAgentUseCase.activateAgent(command);
@@ -519,6 +525,7 @@ public class AgentController {
     /**
      * 상담사 퇴사 처리 (Soft Delete)
      *
+     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
      * @param agentId 상담사 ID (UUID)
      * @return 204 No Content
      *         ※ 실제 삭제가 아닌 status를 RETIRED로 변경
@@ -528,23 +535,25 @@ public class AgentController {
     @DeleteMapping("/{agentId}")
     @Operation(
         summary = "상담사 퇴사 처리",
-        description = "상담사를 퇴사 처리합니다. 실제 데이터는 삭제되지 않으며 상태만 변경됩니다."
+        description = "상담사를 퇴사 처리합니다. 실제 데이터는 삭제되지 않으며 상태만 변경됩니다. ADMIN 권한 필요."
     )
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "퇴사 처리 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "이미 퇴사 처리됨")
+        @ApiResponse(responseCode = "400", description = "이미 퇴사 처리됨 또는 권한 없음")
     })
     public ResponseEntity<Void> retireAgent(
+        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
+        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
+
         String tenantId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentTenantId();
-        String actorId = com.nexfron.identitymodulith.common.security.TenantContextHolder.getCurrentUserId();
 
         RetireAgentUseCase.RetireAgentCommand command = RetireAgentUseCase.RetireAgentCommand.builder()
                 .tenantId(tenantId)
                 .agentId(agentId)
-                .actorId(UUID.fromString(actorId))
+                .actorId(UUID.fromString(userId))
                 .deletePolicy(RetireAgentUseCase.RetireDeletePolicy.PRESERVE)
                 .build();
 
