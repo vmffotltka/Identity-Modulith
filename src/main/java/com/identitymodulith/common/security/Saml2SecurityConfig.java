@@ -1,6 +1,5 @@
 package com.identitymodulith.common.security;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,17 +23,16 @@ import java.util.List;
  * Keycloak SAML 2.0 연동 Spring Security 설정
  *
  * AWS Connect SSO 연동을 위한 SAML 2.0 IdP 구성
+ *
+ * 순환 참조 방지:
+ * - Saml2AuthenticationSuccessHandler, Saml2AuthenticationFailureHandler, CustomPermissionEvaluator
+ *   를 필드 주입 대신 @Bean 메서드 파라미터로 받아 Spring이 알아서 주입
  */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@RequiredArgsConstructor
 @Slf4j
 public class Saml2SecurityConfig {
-
-    private final CustomPermissionEvaluator customPermissionEvaluator;
-    private final Saml2AuthenticationSuccessHandler saml2AuthenticationSuccessHandler;
-    private final Saml2AuthenticationFailureHandler saml2AuthenticationFailureHandler;
 
     /**
      * RelyingPartyRegistrationRepository Bean - SAML SP 설정
@@ -57,10 +55,10 @@ public class Saml2SecurityConfig {
                 .entityId("http://localhost:8080/saml2/service-provider-metadata/keycloak")
                 .assertionConsumerServiceLocation("http://localhost:8080/login/saml2/sso/keycloak")
                 .singleLogoutServiceLocation("http://localhost:8080/logout/saml2/slo")
-                // 🔥 핵심: AuthnRequest 서명 비활성화 (Keycloak에서 Client Signature Required: OFF 설정과 일치)
-                .signingX509Credentials(credentials -> credentials.clear())  // 서명 자격 증명 제거
+                // AuthnRequest 서명 비활성화 (Keycloak에서 Client Signature Required: OFF 설정과 일치)
+                .signingX509Credentials(credentials -> credentials.clear())
                 .assertingPartyMetadata(party -> party
-                    .wantAuthnRequestsSigned(false)  // SP가 서명 안 함
+                    .wantAuthnRequestsSigned(false)
                 )
                 .build();
 
@@ -70,8 +68,8 @@ public class Saml2SecurityConfig {
             log.info("- ACS URL: http://localhost:8080/login/saml2/sso/keycloak");
             log.info("- SLO URL: http://localhost:8080/logout/saml2/slo");
             log.info("- IdP Entity ID: {}", registration.getAssertingPartyMetadata().getEntityId());
-            log.info("- AuthnRequest Signing: DISABLED ✅ (서명 안 함)");
-            log.info("- Assertion Encryption: DISABLED ✅ (암호화 안 함)");
+            log.info("- AuthnRequest Signing: DISABLED (서명 안 함)");
+            log.info("- Assertion Encryption: DISABLED (암호화 안 함)");
             log.info("====================================");
             log.info("📝 Keycloak 클라이언트 필수 설정:");
             log.info("   1. Client ID: http://localhost:8080/saml2/service-provider-metadata/keycloak");
@@ -93,54 +91,53 @@ public class Saml2SecurityConfig {
         }
     }
 
-
-
-
+    /**
+     * Security Filter Chain 설정
+     *
+     * 핸들러를 파라미터로 받아 순환 참조를 방지합니다.
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            Saml2AuthenticationSuccessHandler saml2AuthenticationSuccessHandler,
+            Saml2AuthenticationFailureHandler saml2AuthenticationFailureHandler) throws Exception {
+
         http
-            // CORS 설정 (모든 필터보다 먼저 적용)
+            // CORS 설정
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
             // CSRF 설정: SAML 엔드포인트는 CSRF 검증 제외
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
-                    "/saml2/**",        // SAML 메타데이터 및 콜백
-                    "/login/saml2/**",  // SAML SSO 콜백
-                    "/logout/saml2/**"  // SAML 로그아웃
+                    "/saml2/**",
+                    "/login/saml2/**",
+                    "/logout/saml2/**"
                 )
             )
 
             // 인증/인가 규칙
             .authorizeHttpRequests(auth -> auth
-                // Public 엔드포인트 (인증 불필요)
                 .requestMatchers(
-                    "/",                // 홈페이지
-                    "/swagger-ui/**",   // Swagger UI
-                    "/v3/api-docs/**",  // OpenAPI 문서
-                    "/actuator/**",     // Actuator
-                    "/error",           // 에러 페이지
-                    "/saml2/**",        // SAML 메타데이터 및 콜백
-                    "/login/**",        // 로그인 페이지 (SAML 시작점 포함)
-                    "/logout/**",       // 로그아웃
-                    "/favicon.ico",     // Favicon
-                    "/.well-known/**"   // Chrome DevTools 등
+                    "/",
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    "/actuator/**",
+                    "/error",
+                    "/saml2/**",
+                    "/login/**",
+                    "/logout/**",
+                    "/favicon.ico",
+                    "/.well-known/**"
                 ).permitAll()
-
-                // SAML 테스트 엔드포인트는 인증 필요
                 .requestMatchers("/saml-info").authenticated()
-
-                // API 엔드포인트는 인증 필요
                 .requestMatchers("/api/**").authenticated()
-
-                // 나머지는 허용
                 .anyRequest().permitAll()
             )
 
             // SAML 2.0 로그인 설정
             .saml2Login(saml2 -> saml2
-                .successHandler(saml2AuthenticationSuccessHandler)  // 커스텀 성공 핸들러
-                .failureHandler(saml2AuthenticationFailureHandler)  // 커스텀 실패 핸들러
+                .successHandler(saml2AuthenticationSuccessHandler)
+                .failureHandler(saml2AuthenticationFailureHandler)
             )
 
             // 일반 로그아웃 설정
@@ -152,7 +149,7 @@ public class Saml2SecurityConfig {
                 .permitAll()
             )
 
-            // SAML 2.0 로그아웃 설정 (기본 동작 사용)
+            // SAML 2.0 로그아웃 설정
             .saml2Logout(saml2Logout -> saml2Logout
                 .logoutUrl("/saml2/logout")
             );
@@ -160,14 +157,13 @@ public class Saml2SecurityConfig {
         return http.build();
     }
 
-
     /**
-     * CORS 설정 - Keycloak 서버 포함
+     * CORS 설정
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));  // 모든 오리진 허용 (개발 환경)
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -179,13 +175,13 @@ public class Saml2SecurityConfig {
         return source;
     }
 
-
     /**
      * Method Security Expression Handler 설정
-     * CustomPermissionEvaluator 등록하여 @PreAuthorize에서 hasPermission() 사용 가능
+     * CustomPermissionEvaluator를 파라미터로 받아 순환 참조를 방지합니다.
      */
     @Bean
-    public MethodSecurityExpressionHandler methodSecurityExpressionHandler() {
+    public MethodSecurityExpressionHandler methodSecurityExpressionHandler(
+            CustomPermissionEvaluator customPermissionEvaluator) {
         DefaultMethodSecurityExpressionHandler handler = new DefaultMethodSecurityExpressionHandler();
         handler.setPermissionEvaluator(customPermissionEvaluator);
         return handler;

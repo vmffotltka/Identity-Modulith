@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * @see RbacException
  */
-@RestControllerAdvice(basePackages = "com.nexfron.identitymodulith.rbac")
+@RestControllerAdvice(basePackages = "com.identitymodulith.rbac")
 @RequiredArgsConstructor
 public class RbacExceptionHandler {
 

@@ -214,7 +214,7 @@ public class OrganizationExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException e) {
         // BusinessException 처리 (user 모듈)
-        if ("com.nexfron.identitymodulith.user.domain.exception.BusinessException".equals(e.getClass().getName())) {
+        if ("com.identitymodulith.user.domain.exception.BusinessException".equals(e.getClass().getName())) {
             try {
                 // Reflection으로 ErrorCode 추출
                 java.lang.reflect.Method getErrorCodeMethod = e.getClass().getMethod("getErrorCode");
