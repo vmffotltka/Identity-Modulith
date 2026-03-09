@@ -1,7 +1,7 @@
 // organization.application.port.OrgUserView.java
 package com.identitymodulith.organization.application.port;
 
-import com.identitymodulith.organization.domain.model.DataScopeLevel;
+import com.identitymodulith.common.domain.DataScopeLevel;
 import lombok.Builder;
 import lombok.Getter;
 

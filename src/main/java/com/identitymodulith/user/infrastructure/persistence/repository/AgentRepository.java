@@ -122,4 +122,14 @@ public interface AgentRepository {
      * @return 해당 조직의 상담사 목록
      */
     List<Agent> findByTenantIdAndOrganizationId(String tenantId, String organizationId);
+
+    /**
+     * 여러 조직 ID에 속한 특정 상태의 상담사를 단일 IN 쿼리로 조회합니다. (N+1 방지)
+     *
+     * @param tenantId        테넌트 ID
+     * @param organizationIds 조직 ID 목록
+     * @param status          상담사 상태
+     * @return 해당 조직들에 속한 상담사 목록
+     */
+    List<Agent> findByTenantIdAndOrganizationIdsAndStatus(String tenantId, List<String> organizationIds, AgentStatus status);
 }

@@ -1,9 +1,11 @@
 package com.identitymodulith.common.security;
 
+import com.identitymodulith.common.security.context.JwtUserContext;
+import com.identitymodulith.common.security.principal.SimpleAuthPrincipal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -12,10 +14,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * SAML 2.0 테스트 컨트롤러
+ * SAML 2.0 테스트 컨트롤러 (개발 환경 전용)
  *
- * 브라우저에서 SAML SSO 테스트용
+ * ⚠️  @Profile("dev") — 운영 환경에서는 자동으로 비활성화됩니다.
+ *     운영 배포 시 spring.profiles.active=prod 설정으로 이 컨트롤러가 로드되지 않습니다.
  */
+@Profile("dev")
 @Controller
 @Slf4j
 public class SamlTestController {
@@ -135,33 +139,55 @@ public class SamlTestController {
 
     /**
      * SAML 사용자 정보 확인
+     *
+     * SimpleAuthPrincipal 기반으로 연동 상태를 확인합니다.
+     * - SAML 원본 정보 (Saml2AuthenticatedPrincipal)
+     * - 로컬 매핑 정보 (SimpleAuthPrincipal)
+     * - JwtUserContext (ThreadLocal)
+     * - 부여된 RBAC 권한 목록
      */
     @GetMapping("/saml-info")
     @ResponseBody
-    public Map<String, Object> samlInfo(@AuthenticationPrincipal Saml2AuthenticatedPrincipal principal) {
+    public Map<String, Object> samlInfo(Authentication authentication) {
         log.info("====================================");
         log.info("📋 SAML 사용자 정보 요청");
         log.info("====================================");
 
         Map<String, Object> info = new HashMap<>();
 
-        if (principal != null) {
-            info.put("username", principal.getName());
-            info.put("attributes", principal.getAttributes());
-            info.put("sessionIndexes", principal.getSessionIndexes());
-            info.put("registrationId", principal.getRelyingPartyRegistrationId());
-
-            log.info("✅ SAML Principal 정보:");
-            log.info("  - Username: {}", principal.getName());
-            log.info("  - Registration ID: {}", principal.getRelyingPartyRegistrationId());
-            log.info("  - Attributes: {}", principal.getAttributes());
-            log.info("  - Session Indexes: {}", principal.getSessionIndexes());
-        } else {
-            info.put("error", "SAML Principal이 없습니다");
-            log.error("❌ SAML Principal이 없습니다!");
+        if (authentication == null || !authentication.isAuthenticated()) {
+            info.put("error", "인증 정보가 없습니다");
+            return info;
         }
 
+        Object principal = authentication.getPrincipal();
+
+        // ─── 로컬 매핑 정보 (SimpleAuthPrincipal) ───────────────────────────
+        if (principal instanceof SimpleAuthPrincipal sp) {
+            Map<String, Object> localInfo = new HashMap<>();
+            localInfo.put("tenantId", sp.getTenantId());
+            localInfo.put("agentId", sp.getUserId());
+            info.put("localMapping", localInfo);
+
+            log.info("✅ SimpleAuthPrincipal 매핑 정보: tenantId={}, agentId={}", sp.getTenantId(), sp.getUserId());
+        }
+
+        // ─── JwtUserContext (ThreadLocal) ────────────────────────────────────
+        Map<String, Object> contextInfo = new HashMap<>();
+        contextInfo.put("tenantId",  JwtUserContext.getCurrentTenantId());
+        contextInfo.put("userId",    JwtUserContext.getCurrentUserId());
+        contextInfo.put("username",  JwtUserContext.getCurrentUsername());
+        info.put("jwtUserContext", contextInfo);
+
+        // ─── RBAC 권한 목록 ───────────────────────────────────────────────────
+        var authorities = authentication.getAuthorities().stream()
+            .map(GrantedAuthority::getAuthority)
+            .toList();
+        info.put("authorities", authorities);
+
+        log.info("  - Authorities: {}", authorities);
         log.info("====================================");
+
         return info;
     }
 

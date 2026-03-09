@@ -22,7 +22,7 @@
     <Properties>
         <!-- 기본 경로 및 앱 정보 -->
         <Property name="LOG_PATH">${sys:LOG_PATH:-${env:LOG_PATH:-logs}}</Property>
-        <Property name="APP_NAME">apim-dataplane</Property>
+        <Property name="APP_NAME">identity-modulith</Property>
 
         <!-- 환경별 로그 레벨 (환경 변수로 오버라이드 가능) -->
         <Property name="LOG_LEVEL_ROOT">${env:LOG_LEVEL_ROOT:-INFO}</Property>
@@ -128,7 +128,7 @@
         <!-- ==================== Application Loggers ==================== -->
 
         <!-- 애플리케이션 메인 로거 -->
-        <Logger name="com.clalink.apimdataplan" level="${LOG_LEVEL_APP}" additivity="false">
+        <Logger name="com.identitymodulith" level="${LOG_LEVEL_APP}" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="AsyncFile"/>
             <AppenderRef ref="AsyncError"/>

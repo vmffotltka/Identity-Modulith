@@ -1,4 +1,4 @@
-package com.identitymodulith.common.security;
+package com.identitymodulith.common.security.context;
 
 import lombok.extern.slf4j.Slf4j;
 

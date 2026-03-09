@@ -4,6 +4,12 @@
 
 spring:
   # ---------------------------------------------------------------------------
+  # 활성 프로파일 (운영 시 환경변수 SPRING_PROFILES_ACTIVE=prod 로 오버라이드)
+  # ---------------------------------------------------------------------------
+  profiles:
+    active: dev
+
+  # ---------------------------------------------------------------------------
   # 애플리케이션 기본 설정
   # ---------------------------------------------------------------------------
   application:
@@ -52,15 +58,8 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: true
+    show-sql: false              # 운영 환경 SQL 로그 비활성화 (개발 시 true로 변경)
     open-in-view: false            # OSIV(Open Session In View) 비활성화
-
-  # ---------------------------------------------------------------------------
-  # Spring MVC 설정
-  # ---------------------------------------------------------------------------
-  mvc:
-    favicon:
-      enabled: false                # favicon.ico 요청 무시
 
   # ---------------------------------------------------------------------------
   # Flyway 마이그레이션 설정
@@ -69,10 +68,10 @@ spring:
     enabled: true                    # Flyway 활성화
     baseline-on-migrate: true        # 기존 DB에 Flyway 적용 시
     locations: classpath:db/migration # 마이그레이션 스크립트 위치
-    validate-on-migrate: false       # 🔴 체크섬 검증 비활성화
+    validate-on-migrate: false       # ⚠️  기존 마이그레이션 파일 수정 이력 있음 — 새 버전으로 분리 후 true로 변경 권장
     encoding: UTF-8                  # SQL 파일 인코딩 설정
     detect-encoding: true            # 자동 인코딩 감지 활성화
-    clean-disabled: false            # Flyway clean 명령 활성화 (개발 환경)
+    clean-disabled: true             # 🔴 DB 전체 삭제 방지 (운영 안전)
 
   # ---------------------------------------------------------------------------
   # Spring Security 기본 인증 설정 (개발 환경용)
@@ -84,19 +83,11 @@ spring:
 
 
 # =============================================================================
-# Keycloak SAML 2.0 연동 설정
+# Keycloak SAML 2.0 연동 정보 (참고용 — 실제 설정은 Saml2SecurityConfig.java)
 # =============================================================================
-keycloak:
-  realm: identity-system
-  auth-server-url: http://1.224.162.188:51446
-  saml:
-    idp-entity-id: http://1.224.162.188:51446/realms/identity-system
-    sp-entity-id: http://localhost:8080/saml/metadata
-
-  # CORS 설정
-  cors: true
-  cors-allowed-origins: http://localhost:3000,http://localhost:8080,http://1.224.162.188:8080
-  cors-allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+# IdP 메타데이터 URL: http://1.224.162.188:51446/realms/identity-system/protocol/saml/descriptor
+# SP Entity ID: http://localhost:8080/saml2/service-provider-metadata/keycloak
+# ACS URL: http://localhost:8080/login/saml2/sso/keycloak
 
 
 # =============================================================================
@@ -104,7 +95,9 @@ keycloak:
 # =============================================================================
 logging:
   level:
-    com.nexfron.identitymodulith.organization.presentation.com.identitymodulith.organization.presentation.OrganizationExceptionHandler: ERROR
-    org.springframework.web.servlet.resource: ERROR
+    com.identitymodulith: INFO                    # 앱 기본 로그 레벨
+    com.identitymodulith.common.security: INFO    # SAML 인증 흐름
+    org.springframework.web.servlet.resource: ERROR  # 정적 리소스 404 노이즈 제거
+    org.hibernate.SQL: WARN                       # SQL 로그 (show-sql 대신 세밀하게 제어)
 
 

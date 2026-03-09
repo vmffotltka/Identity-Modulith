@@ -1,5 +1,8 @@
 package com.identitymodulith.common.security;
 
+import com.identitymodulith.common.security.filter.SamlSecurityContextFilter;
+import com.identitymodulith.common.security.handler.Saml2AuthenticationFailureHandler;
+import com.identitymodulith.common.security.handler.Saml2AuthenticationSuccessHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +16,7 @@ import org.springframework.security.saml2.provider.service.registration.RelyingP
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrations;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -94,13 +98,15 @@ public class Saml2SecurityConfig {
     /**
      * Security Filter Chain 설정
      *
-     * 핸들러를 파라미터로 받아 순환 참조를 방지합니다.
+     * 핸들러와 필터를 파라미터로 받아 순환 참조를 방지합니다.
+     * - SamlSecurityContextFilter: 매 요청마다 JwtUserContext ThreadLocal 동기화
      */
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             Saml2AuthenticationSuccessHandler saml2AuthenticationSuccessHandler,
-            Saml2AuthenticationFailureHandler saml2AuthenticationFailureHandler) throws Exception {
+            Saml2AuthenticationFailureHandler saml2AuthenticationFailureHandler,
+            SamlSecurityContextFilter samlSecurityContextFilter) throws Exception {
 
         http
             // CORS 설정
@@ -130,6 +136,7 @@ public class Saml2SecurityConfig {
                     "/.well-known/**"
                 ).permitAll()
                 .requestMatchers("/saml-info").authenticated()
+                .requestMatchers("/api/me/status").permitAll()   // 로그인 상태 확인은 누구나 가능
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )
@@ -152,7 +159,10 @@ public class Saml2SecurityConfig {
             // SAML 2.0 로그아웃 설정
             .saml2Logout(saml2Logout -> saml2Logout
                 .logoutUrl("/saml2/logout")
-            );
+            )
+
+            // JwtUserContext ThreadLocal 동기화 필터 등록
+            .addFilterAfter(samlSecurityContextFilter, SecurityContextHolderAwareRequestFilter.class);
 
         return http.build();
     }

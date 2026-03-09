@@ -58,6 +58,15 @@ public interface AgentJpaRepository extends JpaRepository<AgentJpaEntity, String
     List<AgentJpaEntity> findByTenantIdAndDeptId(String tenantId, String deptId);
 
     /**
+     * 여러 조직 ID + 상태로 상담사를 단일 IN 쿼리로 조회합니다. (N+1 방지)
+     */
+    @Query("SELECT a FROM AgentJpaEntity a WHERE a.tenantId = :tenantId AND a.deptId IN :deptIds AND a.status = :status")
+    List<AgentJpaEntity> findByTenantIdAndDeptIdInAndStatus(
+            @Param("tenantId") String tenantId,
+            @Param("deptIds") List<String> deptIds,
+            @Param("status") String status);
+
+    /**
      * 상태별 카운트 조회
      */
     long countByStatus(String status);

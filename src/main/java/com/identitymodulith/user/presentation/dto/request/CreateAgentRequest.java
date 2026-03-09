@@ -13,15 +13,14 @@ import java.util.Set;
 
 /**
  * 상담사 생성 요청 DTO
+ *
+ * tenantId는 SAML 인증 정보(SecurityContext)에서 자동 추출되므로 요청에 포함하지 않습니다.
  */
 @Getter
 @NoArgsConstructor
 @Schema(description = "상담사 생성 요청")
 public class CreateAgentRequest {
 
-    @Schema(description = "테넌트 ID", example = "default-tenant", required = true)
-    @NotBlank(message = "테넌트 ID는 필수입니다")
-    private String tenantId;
 
     @Schema(description = "로그인 아이디 (4-20자, 영문/숫자/특수문자(_.-) 가능)", example = "agent001", required = true)
     @NotBlank(message = "로그인 아이디는 필수입니다")

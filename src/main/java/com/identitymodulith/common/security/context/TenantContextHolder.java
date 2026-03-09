@@ -1,5 +1,6 @@
-package com.identitymodulith.common.security;
+package com.identitymodulith.common.security.context;
 
+import com.identitymodulith.common.security.principal.AuthPrincipal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

@@ -3,7 +3,7 @@ package com.identitymodulith.organization.application.service;
 import com.identitymodulith.organization.application.exception.OrganizationException;
 import com.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
 import com.identitymodulith.organization.application.port.OrgUserView;
-import com.identitymodulith.organization.domain.model.DataScopeLevel;
+import com.identitymodulith.common.domain.DataScopeLevel;
 import com.identitymodulith.organization.domain.model.DepartmentType;
 import com.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import com.identitymodulith.organization.presentation.dto.DepartmentDto;
@@ -347,7 +347,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 .findByTenantIdAndOrgPathStartsWith(tenantId, originalOrgPath)
                 .stream()
                 .filter(d -> !d.getDeptId().equals(target.getDeptId()))
-                .collect(Collectors.toList());
+                .toList();
 
         for (DepartmentEntity child : childDepts) {
             String relativeSubPath = child.getOrgPath()
@@ -594,7 +594,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         List<DepartmentEntity> allDepts = departmentRepository.findAllByTenantId(tenantId);
         List<DepartmentEntity> scopedDepts = allDepts.stream()
                 .filter(d -> scopeDeptIds.contains(d.getDeptId()))
-                .collect(Collectors.toList());
+                .toList();
 
         return buildTree(scopedDepts);
     }
@@ -654,7 +654,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         return departmentEntities.stream()
                 .map(DepartmentDto.Response::from)
                 .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -693,7 +693,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         return subtree.stream()
                 .map(DepartmentDto.Response::from)
                 .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -711,7 +711,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         return departmentEntities.stream()
                 .map(DepartmentDto.Response::from)
                 .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -729,7 +729,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         return departmentEntities.stream()
                 .map(DepartmentDto.Response::from)
                 .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**

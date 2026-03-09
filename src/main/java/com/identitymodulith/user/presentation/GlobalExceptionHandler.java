@@ -1,9 +1,9 @@
 package com.identitymodulith.user.presentation;
 
-import com.identitymodulith.rbac.application.exception.RbacException;
+import com.identitymodulith.ApiErrorResponse;
+import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.user.domain.exception.BusinessException;
 import com.identitymodulith.user.domain.exception.ErrorCode;
-import com.identitymodulith.user.presentation.dto.response.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,77 +15,62 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.stream.Collectors;
 
 /**
- * 전역 예외 처리 핸들러
+ * User 모듈 전역 예외 처리
+ *
+ * <h3>로그 레벨 규칙:</h3>
+ * <ul>
+ *   <li>WARN  - 403/409 권한 부족·충돌 / 비즈니스 규칙 위반</li>
+ *   <li>INFO  - 400/404 클라이언트 실수</li>
+ *   <li>ERROR - 500 내부 오류 / 예측 불가 예외</li>
+ * </ul>
+ *
+ * 모듈 경계 원칙:
+ * - OrganizationException → OrganizationExceptionHandler에서 처리
+ * - RbacException        → RbacExceptionHandler에서 처리
+ * - BusinessException    → 여기서 처리 (user 모듈 전용)
  */
 @Slf4j
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.identitymodulith.user")
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
+    public ResponseEntity<ApiErrorResponse> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
-        ErrorResponse response = ErrorResponse.of(errorCode, e.getMessage());
-        return ResponseEntity.status(errorCode.getStatus()).body(response);
+        HttpStatus status = errorCode.getStatus();
+
+        if (status == HttpStatus.FORBIDDEN || status == HttpStatus.CONFLICT) {
+            log.warn("[User] code={}, status={}, message={}", errorCode.getCode(), status.value(), e.getMessage());
+        } else if (status == HttpStatus.INTERNAL_SERVER_ERROR) {
+            log.error("[User] code={}, status={}, message={}", errorCode.getCode(), status.value(), e.getMessage(), e);
+        } else {
+            log.info("[User] code={}, status={}, message={}", errorCode.getCode(), status.value(), e.getMessage());
+        }
+
+        return ResponseEntity.status(status)
+                .body(ApiErrorResponse.of(status.value(), errorCode.getCode(), e.getMessage()));
     }
 
-    /**
-     * RBAC 예외 처리
-     */
-    @ExceptionHandler(RbacException.class)
-    public ResponseEntity<java.util.Map<String, String>> handleRbacException(RbacException e) {
-        log.warn("[GlobalExceptionHandler] RbacException 발생!");
-
-        RbacException.RbacErrorCode errorCode = e.getErrorCode();
-
-        log.warn("[GlobalExceptionHandler] errorCode={}, code={}, message={}",
-            errorCode, errorCode.getCode(), errorCode.getMessage());
-
-        // HTTP 상태 코드 매핑
-        HttpStatus status = switch (errorCode) {
-            case ROLE_NOT_FOUND, PERMISSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case ROLE_ALREADY_EXISTS, PERMISSION_ALREADY_EXISTS, PERMISSION_ALREADY_ASSIGNED -> HttpStatus.CONFLICT;
-            case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
-            case ROLE_HAS_USERS, ROLE_NOT_ACTIVE, PERMISSION_IN_USE -> HttpStatus.BAD_REQUEST;
-            case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
-        };
-
-        log.warn("[GlobalExceptionHandler] status={}", status);
-
-        java.util.Map<String, String> response = java.util.Map.of(
-            "code", errorCode.getCode(),
-            "message", errorCode.getMessage()
-        );
-
-        log.warn("[RBAC Exception] code={}, message={}, status={}", errorCode.getCode(), errorCode.getMessage(), status);
-
-        return ResponseEntity.status(status).body(response);
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnauthorizedException(UnauthorizedException e) {
+        log.warn("[User][Auth] 미인증 요청: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiErrorResponse.of(401, "UNAUTHORIZED", e.getMessage()));
     }
 
-    /**
-     * Bean Validation 에러 처리
-     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
+    public ResponseEntity<ApiErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
         String errorMessage = e.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
-
-        log.warn("[Validation Error] {}", errorMessage);
-
-        ErrorResponse response = ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE, errorMessage);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        log.warn("[User][Validation] {}", errorMessage);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of(400, "INVALID_INPUT_VALUE", errorMessage));
     }
 
-    /**
-     * 기타 예외 처리
-     */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleException(Exception e) {
-        log.error("[Unexpected Error] {}", e.getMessage(), e);
-
-        ErrorResponse response = ErrorResponse.of(
-                ErrorCode.INTERNAL_SERVER_ERROR,
-                "서버 내부 오류가 발생했습니다.");
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    public ResponseEntity<ApiErrorResponse> handleException(Exception e) {
+        log.error("[User][Unexpected] {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiErrorResponse.of(500, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."));
     }
 }

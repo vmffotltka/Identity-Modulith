@@ -3,11 +3,12 @@ package com.identitymodulith.organization.infrastructure.adapter;
 import com.identitymodulith.organization.presentation.dto.DepartmentDto;
 import com.identitymodulith.organization.application.port.OrgUserPort;
 import com.identitymodulith.organization.application.port.OrgUserView;
-import com.identitymodulith.organization.domain.model.DataScopeLevel;
+import com.identitymodulith.common.domain.DataScopeLevel;
 import com.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import com.identitymodulith.organization.infrastructure.persistence.repository.JpaDepartmentRepository;
 import com.identitymodulith.user.UserModuleApi;
 import com.identitymodulith.user.AgentExternalInfo;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ import java.util.UUID;
  * @author Identity System Team
  * @version 1.0
  */
+@Slf4j
 @Service
 @Primary  // OrgUserPort의 기본 구현체로 지정
 public class AgentOrgUserAdapter implements OrgUserPort {
@@ -288,22 +290,18 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * @return 최고 데이터 스코프 레벨
      */
     private DataScopeLevel mapRoleLevelFromExternal(AgentExternalInfo info) {
-        java.util.List<String> roleNames = info.getRoles().stream()
-                .map(role -> role.getName())
-                .collect(java.util.stream.Collectors.toList());
+        List<String> roleNames = info.getRoles().stream()
+                .map(AgentExternalInfo.RoleInfo::getName)
+                .toList();
 
-        System.out.println("[DEBUG] User " + info.getId() + " roles: " + roleNames);
+        log.debug("[Org] userId={} roles={}", info.getId(), roleNames);
 
         DataScopeLevel result = info.getRoles().stream()
-                .map(role -> {
-                    DataScopeLevel level = DataScopeLevel.fromRoleName(role.getName());
-                    System.out.println("[DEBUG] Role: " + role.getName() + " -> Level: " + level);
-                    return level;
-                })
-                .max(java.util.Comparator.naturalOrder())  // ADMIN > TEAM_LEAD > MEMBER
-                .orElse(DataScopeLevel.MEMBER);  // 역할이 없으면 MEMBER (최소 권한)
+                .map(role -> DataScopeLevel.fromRoleName(role.getName()))
+                .max(java.util.Comparator.naturalOrder())
+                .orElse(DataScopeLevel.MEMBER);
 
-        System.out.println("[DEBUG] Final DataScopeLevel for " + info.getId() + ": " + result);
+        log.debug("[Org] userId={} finalDataScopeLevel={}", info.getId(), result);
         return result;
     }
 }

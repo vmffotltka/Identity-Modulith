@@ -145,4 +145,14 @@ public class AgentRepositoryImpl implements AgentRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<Agent> findByTenantIdAndOrganizationIdsAndStatus(String tenantId, List<String> organizationIds, AgentStatus status) {
+        if (organizationIds == null || organizationIds.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findByTenantIdAndDeptIdInAndStatus(tenantId, organizationIds, status.name()).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
 }

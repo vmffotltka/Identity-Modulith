@@ -1,4 +1,4 @@
-package com.identitymodulith.common.security;
+package com.identitymodulith.common.security.context;
 
 /**
  * UnauthorizedException - 인증/권한 예외

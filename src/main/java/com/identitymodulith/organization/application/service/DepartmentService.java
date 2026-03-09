@@ -143,6 +143,15 @@ public interface DepartmentService {
     // ============================================================
 
     /**
+     * 특정 부서 및 모든 하위 부서 조회 (서브트리)
+     *
+     * @param tenantId 테넌트 ID
+     * @param deptId   기준 부서 ID
+     * @return 해당 부서 및 하위 부서 목록
+     */
+    List<DepartmentDto.Response> getSubtree(String tenantId, String deptId);
+
+    /**
      * 전체 조직도 조회 (트리 구조)
      *
      * @param tenantId 테넌트 ID

@@ -1,8 +1,9 @@
 package com.identitymodulith.rbac.presentation;
 
-import com.identitymodulith.rbac.application.exception.RbacException;
+import com.identitymodulith.common.security.context.JwtUserContext;
+import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.rbac.application.service.RbacManagementService;
-import com.identitymodulith.rbac.application.service.RbacManagementService.*;
+import com.identitymodulith.rbac.presentation.dto.RbacDto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,15 +23,9 @@ import java.util.Set;
 /**
  * RbacController - 역할기반 접근제어(RBAC) 관리 REST API
  *
- * 역할과 권한의 CRUD 및 할당 기능을 제공합니다.
- *
- * @author Identity System Team
- * @version 1.0
+ * 인증 방식: SAML 2.0 (Keycloak) - SecurityContext에서 userId 자동 추출
  */
-@Tag(
-        name = "RBAC Management",
-        description = "역할기반 접근제어 관리 API"
-)
+@Tag(name = "RBAC Management", description = "역할기반 접근제어 관리 API")
 @RestController
 @RequestMapping("/api/rbac")
 @RequiredArgsConstructor
@@ -38,6 +33,15 @@ import java.util.Set;
 public class RbacController {
 
     private final RbacManagementService rbacManagementService;
+
+    /** SAML 인증 사용자의 userId 추출 */
+    private String currentUserId() {
+        String userId = JwtUserContext.getCurrentUserId();
+        if (userId == null) {
+            throw new UnauthorizedException("인증 정보가 없습니다. SAML 로그인이 필요합니다.");
+        }
+        return userId;
+    }
 
     // ============================================================
     // 역할(Role) 관리 엔드포인트
@@ -69,38 +73,12 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PostMapping("/roles")
-    public ResponseEntity<?> createRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
+    public ResponseEntity<RoleDto> createRole(
             @Valid @RequestBody CreateRoleRequest request) {
-        try {
-            log.info("[RbacController] 역할 생성 요청 - userId={}, name={}", userId, request.name());
-            RoleDto result = rbacManagementService.createRole(request, userId);
-            log.info("[RbacController] 역할 생성 성공");
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
-        } catch (RbacException e) {
-            log.error("[RbacController] RbacException catch! code={}, message={}",
-                e.getErrorCode().getCode(), e.getErrorCode().getMessage());
-
-            // 직접 에러 응답 생성
-            HttpStatus status = switch (e.getErrorCode()) {
-                case ROLE_ALREADY_EXISTS -> HttpStatus.CONFLICT;
-                case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
-                case ROLE_NOT_FOUND -> HttpStatus.NOT_FOUND;
-                default -> HttpStatus.BAD_REQUEST;
-            };
-
-            java.util.Map<String, String> errorResponse = java.util.Map.of(
-                "code", e.getErrorCode().getCode(),
-                "message", e.getErrorCode().getMessage()
-            );
-
-            log.error("[RbacController] 에러 응답 반환 - status={}, body={}", status, errorResponse);
-            return ResponseEntity.status(status).body(errorResponse);
-        } catch (Exception e) {
-            log.error("[RbacController] 일반 예외 발생! type={}, message={}", e.getClass().getName(), e.getMessage(), e);
-            throw e;
-        }
+        String userId = currentUserId();
+        log.info("[RBAC] 역할 생성 - userId={}, name={}", userId, request.name());
+        RoleDto result = rbacManagementService.createRole(request, userId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @Operation(summary = "역할 업데이트", description = "역할 정보(타입, 설명, 활성화 상태)를 수정합니다. ADMIN 권한 필요.")
@@ -111,12 +89,10 @@ public class RbacController {
     })
     @PatchMapping("/roles/{roleName}")
     public ResponseEntity<RoleDto> updateRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody UpdateRoleRequest request) {
-        return ResponseEntity.ok(rbacManagementService.updateRole(roleName, request, userId));
+        return ResponseEntity.ok(rbacManagementService.updateRole(roleName, request, currentUserId()));
     }
 
     @Operation(summary = "역할 삭제", description = "역할을 삭제합니다. force=true일 경우 사용자가 있어도 강제 삭제합니다. ADMIN 권한 필요.")
@@ -127,42 +103,14 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @DeleteMapping("/roles/{roleName}")
-    public ResponseEntity<?> deleteRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
+    public ResponseEntity<RoleDeletionResult> deleteRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Parameter(description = "강제 삭제 여부 (true: 사용자가 있어도 삭제)", example = "false")
             @RequestParam(defaultValue = "false") boolean forceDelete) {
-        try {
-            log.info("[RbacController] 역할 삭제 요청 - userId={}, roleName={}, forceDelete={}",
-                userId, roleName, forceDelete);
-            RoleDeletionResult result = rbacManagementService.deleteRole(roleName, forceDelete, userId);
-            log.info("[RbacController] 역할 삭제 성공 - roleName={}", roleName);
-            return ResponseEntity.ok(result);
-        } catch (RbacException e) {
-            log.error("[RbacController] RbacException catch! code={}, message={}",
-                e.getErrorCode().getCode(), e.getErrorCode().getMessage());
-
-            // 직접 에러 응답 생성
-            HttpStatus status = switch (e.getErrorCode()) {
-                case ROLE_HAS_USERS -> HttpStatus.CONFLICT;
-                case ROLE_NOT_FOUND -> HttpStatus.NOT_FOUND;
-                case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
-                default -> HttpStatus.BAD_REQUEST;
-            };
-
-            java.util.Map<String, String> errorResponse = java.util.Map.of(
-                "code", e.getErrorCode().getCode(),
-                "message", e.getErrorCode().getMessage()
-            );
-
-            return ResponseEntity.status(status).body(errorResponse);
-        } catch (Exception e) {
-            log.error("[RbacController] 일반 예외 발생! type={}, message={}",
-                e.getClass().getName(), e.getMessage(), e);
-            throw e;
-        }
+        String userId = currentUserId();
+        log.info("[RBAC] 역할 삭제 - userId={}, roleName={}, forceDelete={}", userId, roleName, forceDelete);
+        return ResponseEntity.ok(rbacManagementService.deleteRole(roleName, forceDelete, userId));
     }
 
     @Operation(summary = "역할 삭제 영향도 조회", description = "역할 삭제 시 영향을 미치는 사용자 수와 권한 수를 조회합니다.")
@@ -185,11 +133,9 @@ public class RbacController {
     })
     @PostMapping("/roles/{roleName}/deactivate")
     public ResponseEntity<Void> deactivateRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
-        rbacManagementService.deactivateRole(roleName, userId);
+        rbacManagementService.deactivateRole(roleName, currentUserId());
         return ResponseEntity.ok().build();
     }
 
@@ -201,11 +147,9 @@ public class RbacController {
     })
     @PostMapping("/roles/{roleName}/activate")
     public ResponseEntity<Void> activateRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
-        rbacManagementService.activateRole(roleName, userId);
+        rbacManagementService.activateRole(roleName, currentUserId());
         return ResponseEntity.ok().build();
     }
 
@@ -239,38 +183,11 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PostMapping("/permissions")
-    public ResponseEntity<?> createPermission(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
+    public ResponseEntity<PermissionDto> createPermission(
             @Valid @RequestBody CreatePermissionRequest request) {
-        try {
-            log.info("[RbacController] 권한 생성 요청 - userId={}, code={}", userId, request.code());
-            PermissionDto result = rbacManagementService.createPermission(request, userId);
-            log.info("[RbacController] 권한 생성 성공");
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
-        } catch (RbacException e) {
-            log.error("[RbacController] RbacException catch! code={}, message={}",
-                e.getErrorCode().getCode(), e.getMessage());
-
-            HttpStatus status = switch (e.getErrorCode()) {
-                case PERMISSION_ALREADY_EXISTS -> HttpStatus.CONFLICT;
-                case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
-                case PERMISSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
-                case PERMISSION_IN_USE -> HttpStatus.BAD_REQUEST;
-                default -> HttpStatus.BAD_REQUEST;
-            };
-
-            java.util.Map<String, String> errorResponse = java.util.Map.of(
-                "code", e.getErrorCode().getCode(),
-                "message", e.getMessage() != null ? e.getMessage() : e.getErrorCode().getMessage()
-            );
-
-            return ResponseEntity.status(status).body(errorResponse);
-        } catch (Exception e) {
-            log.error("[RbacController] 일반 예외 발생! type={}, message={}",
-                e.getClass().getName(), e.getMessage(), e);
-            throw e;
-        }
+        String userId = currentUserId();
+        log.info("[RBAC] 권한 생성 - userId={}, code={}", userId, request.code());
+        return ResponseEntity.status(HttpStatus.CREATED).body(rbacManagementService.createPermission(request, userId));
     }
 
     @Operation(summary = "권한 업데이트", description = "권한 정보(코드, 설명)를 수정합니다. ADMIN 권한 필요.")
@@ -282,12 +199,10 @@ public class RbacController {
     })
     @PatchMapping("/permissions/{code}")
     public ResponseEntity<PermissionDto> updatePermission(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "권한 코드", example = "user:create", required = true)
             @PathVariable String code,
             @Valid @RequestBody UpdatePermissionRequest request) {
-        return ResponseEntity.ok(rbacManagementService.updatePermission(code, request, userId));
+        return ResponseEntity.ok(rbacManagementService.updatePermission(code, request, currentUserId()));
     }
 
     @Operation(summary = "권한 삭제", description = "권한을 삭제합니다. 역할에서 사용 중인 권한은 삭제할 수 없습니다. ADMIN 권한 필요.")
@@ -298,38 +213,13 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @DeleteMapping("/permissions/{code}")
-    public ResponseEntity<?> deletePermission(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
+    public ResponseEntity<Void> deletePermission(
             @Parameter(description = "권한 코드", example = "user:manage", required = true)
             @PathVariable String code) {
-        try {
-            log.info("[RbacController] 권한 삭제 요청 - userId={}, code={}", userId, code);
-            rbacManagementService.deletePermission(code, userId);
-            log.info("[RbacController] 권한 삭제 성공");
-            return ResponseEntity.noContent().build();
-        } catch (RbacException e) {
-            log.error("[RbacController] RbacException catch! code={}, message={}",
-                e.getErrorCode().getCode(), e.getMessage());
-
-            HttpStatus status = switch (e.getErrorCode()) {
-                case PERMISSION_IN_USE -> HttpStatus.BAD_REQUEST;
-                case PERMISSION_NOT_FOUND -> HttpStatus.NOT_FOUND;
-                case INSUFFICIENT_PERMISSION -> HttpStatus.FORBIDDEN;
-                default -> HttpStatus.BAD_REQUEST;
-            };
-
-            java.util.Map<String, String> errorResponse = java.util.Map.of(
-                "code", e.getErrorCode().getCode(),
-                "message", e.getMessage() != null ? e.getMessage() : e.getErrorCode().getMessage()
-            );
-
-            return ResponseEntity.status(status).body(errorResponse);
-        } catch (Exception e) {
-            log.error("[RbacController] 일반 예외 발생! type={}, message={}",
-                e.getClass().getName(), e.getMessage(), e);
-            throw e;
-        }
+        String userId = currentUserId();
+        log.info("[RBAC] 권한 삭제 - userId={}, code={}", userId, code);
+        rbacManagementService.deletePermission(code, userId);
+        return ResponseEntity.noContent().build();
     }
 
     // ============================================================
@@ -357,13 +247,11 @@ public class RbacController {
     })
     @PostMapping("/roles/{roleName}/permissions/{permissionCode}")
     public ResponseEntity<Void> assignPermissionToRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Parameter(description = "권한 코드", example = "user:manage", required = true)
             @PathVariable String permissionCode) {
-        rbacManagementService.assignPermissionToRole(roleName, permissionCode, userId);
+        rbacManagementService.assignPermissionToRole(roleName, permissionCode, currentUserId());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -375,17 +263,15 @@ public class RbacController {
     })
     @DeleteMapping("/roles/{roleName}/permissions/{permissionCode}")
     public ResponseEntity<Void> revokePermissionFromRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Parameter(description = "권한 코드", example = "user:manage", required = true)
             @PathVariable String permissionCode) {
-        rbacManagementService.revokePermissionFromRole(roleName, permissionCode, userId);
+        rbacManagementService.revokePermissionFromRole(roleName, permissionCode, currentUserId());
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "역할에 여러 권한 한 번에 할당", description = "특정 역할에 여러 권한을 한 번에 할당합니다. 이미 할당된 권한은 건너뜁니다. ADMIN 권한 필요.")
+    @Operation(summary = "역할에 여러 권한 한 번에 할당", description = "특정 역할에 여러 권한을 한 번에 할당합니다. ADMIN 권한 필요.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "대량 할당 완료"),
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음"),
@@ -393,15 +279,13 @@ public class RbacController {
     })
     @PostMapping("/roles/{roleName}/permissions/batch")
     public ResponseEntity<BatchAssignmentResult> batchAssignPermissionsToRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody BatchPermissionRequest request) {
-        return ResponseEntity.ok(rbacManagementService.batchAssignPermissionsToRole(roleName, request.permissionCodes(), userId));
+        return ResponseEntity.ok(rbacManagementService.batchAssignPermissionsToRole(roleName, request.permissionCodes(), currentUserId()));
     }
 
-    @Operation(summary = "역할에서 여러 권한 한 번에 제거", description = "특정 역할에서 여러 권한을 한 번에 제거합니다. 할당되지 않은 권한은 건너뜁니다. ADMIN 권한 필요.")
+    @Operation(summary = "역할에서 여러 권한 한 번에 제거", description = "특정 역할에서 여러 권한을 한 번에 제거합니다. ADMIN 권한 필요.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "대량 제거 완료"),
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음"),
@@ -409,12 +293,10 @@ public class RbacController {
     })
     @DeleteMapping("/roles/{roleName}/permissions/batch")
     public ResponseEntity<BatchAssignmentResult> batchRevokePermissionsFromRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody BatchPermissionRequest request) {
-        return ResponseEntity.ok(rbacManagementService.batchRevokePermissionsFromRole(roleName, request.permissionCodes(), userId));
+        return ResponseEntity.ok(rbacManagementService.batchRevokePermissionsFromRole(roleName, request.permissionCodes(), currentUserId()));
     }
 
     // ============================================================
@@ -430,13 +312,11 @@ public class RbacController {
     })
     @PostMapping("/agents/{agentId}/roles/{roleName}")
     public ResponseEntity<Void> assignRoleToAgent(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "사용자 ID", example = "550e8400-e29b-41d4-a716-446655440000", required = true)
             @PathVariable String agentId,
             @Parameter(description = "역할명", example = "TEAM_LEAD", required = true)
             @PathVariable String roleName) {
-        rbacManagementService.assignRoleToAgent(agentId, roleName, userId);
+        rbacManagementService.assignRoleToAgent(agentId, roleName, currentUserId());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
@@ -448,13 +328,11 @@ public class RbacController {
     })
     @DeleteMapping("/agents/{agentId}/roles/{roleName}")
     public ResponseEntity<Void> revokeRoleFromAgent(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "사용자 ID", example = "550e8400-e29b-41d4-a716-446655440000", required = true)
             @PathVariable String agentId,
             @Parameter(description = "역할명", example = "TEAM_LEAD", required = true)
             @PathVariable String roleName) {
-        rbacManagementService.revokeRoleFromAgent(agentId, roleName, userId);
+        rbacManagementService.revokeRoleFromAgent(agentId, roleName, currentUserId());
         return ResponseEntity.noContent().build();
     }
 

@@ -1,7 +1,7 @@
 package com.identitymodulith.rbac.application.service;
 
-import com.identitymodulith.common.security.TenantContextHolder;
-import com.identitymodulith.rbac.domain.DataScopeLevel;
+import com.identitymodulith.common.security.context.TenantContextHolder;
+import com.identitymodulith.common.domain.DataScopeLevel;
 import com.identitymodulith.rbac.RbacModuleApi;
 import com.identitymodulith.rbac.application.exception.RbacException;
 import com.identitymodulith.rbac.domain.RoleType;
@@ -13,8 +13,11 @@ import com.identitymodulith.rbac.infrastructure.persistence.repository.AgentRole
 import com.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
+import com.identitymodulith.rbac.presentation.dto.RbacDto.*;
+import com.identitymodulith.user.UserModuleApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +33,6 @@ import java.util.stream.Collectors;
  * 멀티테넌시 격리
  */
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 @Slf4j
 public class RbacManagementServiceImpl implements RbacManagementService, RbacModuleApi {
@@ -40,6 +42,22 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
     private final RolePermissionJpaRepository rolePermissionRepository;
     private final AgentRoleJpaRepository agentRoleRepository;
     private final RbacQueryService rbacQueryService;
+    private final UserModuleApi userModuleApi;
+
+    public RbacManagementServiceImpl(
+            RoleJpaRepository roleRepository,
+            PermissionJpaRepository permissionRepository,
+            RolePermissionJpaRepository rolePermissionRepository,
+            AgentRoleJpaRepository agentRoleRepository,
+            RbacQueryService rbacQueryService,
+            @Lazy UserModuleApi userModuleApi) {
+        this.roleRepository = roleRepository;
+        this.permissionRepository = permissionRepository;
+        this.rolePermissionRepository = rolePermissionRepository;
+        this.agentRoleRepository = agentRoleRepository;
+        this.rbacQueryService = rbacQueryService;
+        this.userModuleApi = userModuleApi;
+    }
 
     /**
      * 현재 요청의 tenantId 추출
@@ -79,7 +97,7 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                             role.getUpdatedAt()
                     );
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -249,7 +267,7 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
         String tenantId = TenantContextHolder.getCurrentTenantId();
         return permissionRepository.findByTenantId(tenantId).stream()
                 .map(perm -> new PermissionDto(perm.getCode(), perm.getDescription(), perm.getCategory()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -522,7 +540,7 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                 .findByRoleId(role.getRoleId())
                 .stream()
                 .map(RolePermissionJpaEntity::getPermissionId)
-                .collect(Collectors.toList());
+                .toList();
 
         // 3. 권한 엔티티 조회 후 DTO 변환
         return permissionIds.stream()
@@ -556,14 +574,13 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
             throw new RbacException(RbacException.RbacErrorCode.ROLE_NOT_ACTIVE);
         }
 
-        // 3. 🔴 RA-005: RETIRED 상담사 역할 변경 불가 (User 모듈 통합 후 활성화 예정)
-        // TODO: User 모듈 UserModuleApi를 통해 Agent 상태 검증
-        // AgentExternalInfo agentInfo = userModuleApi.findAgentById(tenantId, UUID.fromString(agentId))
-        //     .orElseThrow(() -> new RbacException(RbacException.RbacErrorCode.AGENT_NOT_FOUND));
-        // if (agentInfo.getStatus() == AgentStatus.RETIRED) {
-        //     log.warn("[RBAC] RETIRED 상담사 역할 할당 차단 - agentId={}", agentId);
-        //     throw new RbacException(RbacException.RbacErrorCode.AGENT_ALREADY_RETIRED);
-        // }
+        // 3. RA-005: RETIRED/비활성 상담사 역할 변경 불가
+        userModuleApi.findAgentByLoginId(agentId).ifPresent(agentInfo -> {
+            if (!agentInfo.isActive()) {
+                log.warn("[RBAC] 비활성/퇴사 상담사 역할 할당 차단 - agentId={}", agentId);
+                throw new RbacException(RbacException.RbacErrorCode.AGENT_RETIRED);
+            }
+        });
 
         // 4. 기존 역할 조회
         List<AgentRoleJpaEntity> existingRoles = agentRoleRepository.findByAgentId(agentId);
@@ -1054,11 +1071,8 @@ public class RbacManagementServiceImpl implements RbacManagementService, RbacMod
                     rolePermissionRepository.findByRoleId(agentRole.getRoleId());
 
             for (RolePermissionJpaEntity rp : rolePermissions) {
-                PermissionJpaEntity permission = permissionRepository.findById(rp.getPermissionId())
-                        .orElse(null);
-                if (permission != null) {
-                    permissionCodes.add(permission.getCode());
-                }
+                permissionRepository.findById(rp.getPermissionId())
+                        .ifPresent(permission -> permissionCodes.add(permission.getCode()));
             }
         }
 

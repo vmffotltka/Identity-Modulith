@@ -1,6 +1,6 @@
 package com.identitymodulith.user.application;
 
-import com.identitymodulith.common.security.TenantContextHolder;
+import com.identitymodulith.common.security.context.TenantContextHolder;
 import com.identitymodulith.rbac.RbacModuleApi;
 import com.identitymodulith.user.AgentExternalInfo;
 import com.identitymodulith.user.UserModuleApi;
@@ -15,14 +15,20 @@ import com.identitymodulith.user.infrastructure.persistence.repository.AgentRepo
 import com.identitymodulith.user.domain.service.PasswordEncoder;
 import com.identitymodulith.user.domain.service.PasswordGenerator;
 import com.identitymodulith.user.infrastructure.retry.DatabaseRetrySupplier;
+import com.identitymodulith.user.domain.event.AgentActivatedEvent;
+import com.identitymodulith.user.domain.event.AgentRetiredEvent;
+import com.identitymodulith.user.domain.event.AgentSuspendedEvent;
+import com.identitymodulith.user.domain.event.AgentTransferredEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -54,9 +60,10 @@ public class AgentService implements
     private final AgentRepository agentRepository;
     private final PasswordEncoder passwordEncoder;
     private final PasswordGenerator passwordGenerator;
-    private final OrganizationPort organizationPort;  // Organization 모듈 연동
-    private final RbacModuleApi rbacModuleApi;  // RBAC 모듈 연동
-    private final RbacPort rbacPort;  // RBAC 권한 검증용
+    private final OrganizationPort organizationPort;
+    private final RbacModuleApi rbacModuleApi;
+    private final RbacPort rbacPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 새로운 상담사를 생성합니다.
@@ -270,61 +277,6 @@ public class AgentService implements
     }
 
     /**
-     * 상담사를 정지(Suspend)합니다.
-     * ACTIVE 상태의 상담사만 정지 가능하며, 정지된 상담사는 임시로 로그인 및 상담 배정이 불가능합니다.
-     * 정지된 상담사는 activate() 메서드로 복귀 가능합니다.
-     *
-     * 참고: 현재 공개 API는 아니며, 내부 용도로만 사용됩니다.
-     *
-     * @param agentId 정지할 상담사 ID
-     * @param suspendedByUserId 정지를 수행한 관리자 ID
-     * @throws BusinessException 상담사를 찾을 수 없거나 ACTIVE 상태가 아닌 경우
-     */
-    public void suspendAgent(UUID agentId, String suspendedByUserId) {
-        Agent agent = findAgentById(agentId);
-        agent.suspend(suspendedByUserId);
-        // JPA dirty checking으로 자동 저장됨
-    }
-
-    /**
-     * 정지된 상담사를 활성화합니다.
-     * SUSPENDED 상태의 상담사만 활성화 가능하며, RETIRED 상태는 복구 불가능합니다.
-     *
-     * 참고: 현재 공개 API는 아니며, 내부 용도로만 사용됩니다.
-     *
-     * @param agentId 활성화할 상담사 ID
-     * @param activatedByUserId 활성화를 수행한 관리자 ID (감사 로그용, 현재 미사용)
-     * @throws BusinessException 상담사를 찾을 수 없거나 SUSPENDED 상태가 아닌 경우
-     */
-    public void activateAgentInternal(UUID agentId, String activatedByUserId) {
-        Agent agent = findAgentById(agentId);
-        agent.activate();
-        // JPA dirty checking으로 자동 저장됨
-    }
-
-    /**
-     * 퇴사 후 데이터 처리 정책을 지정하여 상담사를 퇴사 처리합니다.
-     * 상태가 RETIRED로 변경되며, 퇴사 일시가 기록됩니다.
-     * 퇴사 정책에 따라 다음과 같이 처리됩니다:
-     * - IMMEDIATE: 즉시 개인정보 익명화
-     * - SCHEDULED: retentionDays 후 자동 삭제 (배치 작업)
-     * - PRESERVE: 데이터 영구 보존
-     *
-     * 내부 용도용 메서드입니다.
-     *
-     * @param agentId 퇴사 처리할 상담사 ID
-     * @param retiredByUserId 퇴사를 처리한 관리자 ID
-     * @param deletePolicy 퇴사 후 데이터 처리 정책
-     * @param retentionDays SCHEDULED 정책일 경우 보관 기간 (일 단위)
-     * @throws BusinessException 상담사를 찾을 수 없거나 이미 RETIRED인 경우
-     */
-    public void retireAgentWithPolicyInternal(UUID agentId, String retiredByUserId, Agent.RetireDeletePolicy deletePolicy, Integer retentionDays) {
-        Agent agent = findAgentById(agentId);
-        agent.retire(retiredByUserId, deletePolicy, retentionDays);
-        // JPA dirty checking으로 자동 저장됨
-    }
-
-    /**
      * 퇴사 예정인 상담사들을 자동으로 삭제합니다.
      * 스케줄러에서 정기적으로 호출되는 배치 작업입니다.
      * scheduledDeleteAt이 현재 시간 이전인 RETIRED 상담사의 개인정보를 익명화합니다.
@@ -332,7 +284,7 @@ public class AgentService implements
      * @return 처리된 상담사 수
      */
     public int deleteScheduledRetiredAgents() {
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
         List<Agent> agents = DatabaseRetrySupplier.withRetry(
                 () -> agentRepository.findRetiredWithScheduledDelete(now)
         );
@@ -625,17 +577,21 @@ private AgentInfo toAgentInfo(Agent agent) {
         ).stream()
                 .filter(agent -> tenantId.equals(agent.getTenantId()))
                 .map(this::toAgentExternalInfo)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<AgentExternalInfo> findActiveAgentsByOrganizationIds(String tenantId, List<String> organizationIds) {
-        List<AgentExternalInfo> result = new ArrayList<>();
-        for (String orgId : organizationIds) {
-            result.addAll(findActiveAgentsByOrganizationId(tenantId, orgId));
+        if (organizationIds == null || organizationIds.isEmpty()) {
+            return List.of();
         }
-        return result;
+        return DatabaseRetrySupplier.withRetry(
+                () -> agentRepository.findByTenantIdAndOrganizationIdsAndStatus(
+                        tenantId, organizationIds, AgentStatus.ACTIVE)
+        ).stream()
+                .map(this::toAgentExternalInfo)
+                .toList();
     }
 
     /**
@@ -744,8 +700,10 @@ private AgentInfo toAgentInfo(Agent agent) {
         agent.suspend(command.getActorId().toString());
         agentRepository.save(agent);
 
-        // 이벤트 발행 (KeyCloak 동기화, 세션 종료 등)
-        // TODO: AgentSuspended 이벤트 발행
+        eventPublisher.publishEvent(new AgentSuspendedEvent(
+                agent.getId(), command.getTenantId(),
+                command.getActorId().toString(), agent.getSuspendedAt()));
+        log.info("[USER] AgentSuspendedEvent 발행 - agentId={}", agent.getId());
     }
 
     /**
@@ -782,8 +740,10 @@ private AgentInfo toAgentInfo(Agent agent) {
         agent.activate();
         agentRepository.save(agent);
 
-        // 이벤트 발행 (KeyCloak 동기화 등)
-        // TODO: AgentActivated 이벤트 발행
+        eventPublisher.publishEvent(new AgentActivatedEvent(
+                agent.getId(), command.getTenantId(),
+                command.getActorId().toString(), LocalDateTime.now()));
+        log.info("[USER] AgentActivatedEvent 발행 - agentId={}", agent.getId());
     }
 
     /**
@@ -840,8 +800,12 @@ private AgentInfo toAgentInfo(Agent agent) {
 
         agentRepository.save(agent);
 
-        // 이벤트 발행 (모든 역할/권한 제거, KeyCloak 동기화 등)
-        // TODO: AgentRetired 이벤트 발행
+        eventPublisher.publishEvent(new AgentRetiredEvent(
+                agent.getId(), command.getTenantId(),
+                command.getActorId().toString(),
+                command.getDeletePolicy().name(),
+                agent.getRetiredAt()));
+        log.info("[USER] AgentRetiredEvent 발행 - agentId={}, policy={}", agent.getId(), command.getDeletePolicy());
     }
 
     // ========== 부서 이동 ==========
@@ -901,8 +865,11 @@ private AgentInfo toAgentInfo(Agent agent) {
         log.info("[USER] 상담사 부서 이동 완료 - agentId={}, from={}, to={}",
                 command.getAgentId(), fromOrganizationId, command.getNewOrganizationId());
 
-        // 6. 이벤트 발행 (비동기 처리)
-        // TODO: AgentTransferred 이벤트 발행
+        eventPublisher.publishEvent(new AgentTransferredEvent(
+                agent.getId(), command.getTenantId(),
+                fromOrganizationId, command.getNewOrganizationId(),
+                LocalDateTime.now()));
+        log.info("[USER] AgentTransferredEvent 발행 - agentId={}", agent.getId());
 
         return TransferAgentUseCase.TransferAgentResult.builder()
                 .agentId(agent.getId())
@@ -952,31 +919,26 @@ private AgentInfo toAgentInfo(Agent agent) {
         int retiredCount = 0;
         int passwordChangeRequired = 0;
 
-        java.util.Map<String, Integer> byOrganization = new java.util.HashMap<>();
-        java.util.Map<String, Integer> byStatus = new java.util.HashMap<>();
+        Map<String, Integer> byOrganization = new HashMap<>();
+        Map<String, Integer> byStatus = new HashMap<>();
 
         for (Agent agent : agents) {
-            // 상태별 카운트
             switch (agent.getStatus()) {
                 case ACTIVE -> activeCount++;
                 case SUSPENDED -> suspendedCount++;
                 case RETIRED -> retiredCount++;
             }
 
-            // 비밀번호 변경 필요 카운트
             if (agent.isPasswordMustChange()) {
                 passwordChangeRequired++;
             }
 
-            // 조직별 카운트
             String orgId = agent.getOrganizationId();
             if (orgId != null) {
                 byOrganization.merge(orgId, 1, Integer::sum);
             }
 
-            // 상태별 카운트 (맵)
-            String statusName = agent.getStatus().name();
-            byStatus.merge(statusName, 1, Integer::sum);
+            byStatus.merge(agent.getStatus().name(), 1, Integer::sum);
         }
 
         return AgentStatistics.builder()
@@ -988,17 +950,5 @@ private AgentInfo toAgentInfo(Agent agent) {
                 .byOrganization(byOrganization)
                 .byStatus(byStatus)
                 .build();
-    }
-
-    /**
-     * 감사 로그 기록 (콘솔 로깅)
-     *
-     * @param tenantId 테넌트 ID
-     * @param agentId 상담사 ID
-     * @param actionType 작업 유형 (SUSPEND, ACTIVATE, RETIRE 등)
-     * @param description 변경 내용 설명
-     */
-    private void logAudit(String tenantId, UUID agentId, String actionType, String description) {
-        log.info("[AUDIT] Action: {}, Agent: {}, Description: {}", actionType, agentId, description);
     }
 }

@@ -1,6 +1,8 @@
 package com.identitymodulith.user.presentation;
 
-import com.identitymodulith.common.security.TenantContextHolder;
+import com.identitymodulith.common.security.context.JwtUserContext;
+import com.identitymodulith.common.security.context.TenantContextHolder;
+import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.user.application.*;
 import com.identitymodulith.user.domain.exception.BusinessException;
 import com.identitymodulith.user.domain.exception.ErrorCode;
@@ -10,7 +12,6 @@ import com.identitymodulith.user.presentation.dto.response.AgentResponse;
 import com.identitymodulith.user.presentation.dto.response.CreateAgentResponse;
 import com.identitymodulith.user.presentation.dto.response.ResetPasswordResponse;
 import com.identitymodulith.user.presentation.dto.response.TransferAgentResponse;
-import com.identitymodulith.user.application.*;
 import com.identitymodulith.user.application.CreateAgentUseCase.CreateAgentCommand;
 import com.identitymodulith.user.application.CreateAgentUseCase.CreateAgentResult;
 import com.identitymodulith.user.application.GetAgentUseCase.AgentSearchCriteria;
@@ -18,8 +19,6 @@ import com.identitymodulith.user.application.ResetPasswordUseCase.ResetPasswordR
 import com.identitymodulith.user.application.UpdateAgentUseCase.UpdateAgentCommand;
 import com.identitymodulith.user.application.port.RbacPort;
 import com.identitymodulith.user.domain.model.Agent;
-import com.identitymodulith.user.presentation.dto.request.*;
-import com.identitymodulith.user.presentation.dto.response.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -45,6 +44,10 @@ import java.util.stream.Collectors;
  *
  * DDD 원칙을 준수하여 RBAC 모듈과의 직접 의존을 제거하고
  * Port/Adapter 패턴을 통해 간접적으로 연동합니다.
+ *
+ * 인증 방식: SAML 2.0 (Keycloak) - SecurityContext에서 자동 추출
+ * - tenantId: TenantContextHolder.getCurrentTenantId()
+ * - userId:   JwtUserContext.getCurrentUserId()
  */
 @Slf4j
 @RestController
@@ -67,45 +70,46 @@ public class AgentController {
     private final TransferAgentUseCase transferAgentUseCase;
     private final RbacPort rbacPort;  // Port 인터페이스 사용 (DDD 원칙)
 
-    /**
-     * 상담사 생성 (Onboarding)
-     *
-     * @param request 요청 본문
-     *                - loginId: 로그인 아이디 (중복 불가)
-     *                - name: 상담사 이름
-     *                - organizationId: 소속 조직 ID (UUID)
-     * @return 201 Created
-     *         - agentId: 생성된 상담사 ID (UUID)
-     *         - loginId: 로그인 아이디
-     *         - tempPassword: 임시 비밀번호 (일회성, 팝업으로 표시 후 재조회 불가)
-     */
+    // ─── SecurityContext 헬퍼 ─────────────────────────────────────────────────
+
+    /** SAML 인증 사용자의 tenantId 추출 */
+    private String currentTenantId() {
+        return TenantContextHolder.getCurrentTenantId();
+    }
+
+    /** SAML 인증 사용자의 UUID 추출 */
+    private UUID currentUserId() {
+        String userId = JwtUserContext.getCurrentUserId();
+        if (userId == null) {
+            throw new UnauthorizedException("인증 정보가 없습니다. SAML 로그인이 필요합니다.");
+        }
+        return UUID.fromString(userId);
+    }
+
+    // ─── 상담사 생성 ──────────────────────────────────────────────────────────
+
     @PostMapping
     @Operation(
         summary = "상담사 생성",
         description = "새로운 상담사를 생성합니다. 임시 비밀번호가 자동 생성되며 최초 로그인 시 비밀번호 변경이 필요합니다."
     )
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "201",
-            description = "상담사 생성 성공",
-            content = @Content(schema = @Schema(implementation = CreateAgentResponse.class))
-        ),
+        @ApiResponse(responseCode = "201", description = "상담사 생성 성공",
+            content = @Content(schema = @Schema(implementation = CreateAgentResponse.class))),
         @ApiResponse(responseCode = "400", description = "잘못된 요청 (필수 필드 누락, 형식 오류)"),
         @ApiResponse(responseCode = "409", description = "이미 존재하는 로그인 아이디")
     })
     public ResponseEntity<CreateAgentResponse> createAgent(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "상담사 생성 요청",
-            required = true
+            description = "상담사 생성 요청", required = true
         ) CreateAgentRequest request) {
 
-        // roles 문자열을 Agent.Role 객체로 변환
         Set<Agent.Role> roles = request.getRoles().stream()
                 .map(roleName -> new Agent.Role(roleName, Agent.Role.RoleType.POSITION))
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
         CreateAgentCommand command = CreateAgentCommand.builder()
-                .tenantId(request.getTenantId())
+                .tenantId(currentTenantId())   // ← SecurityContext에서 자동 추출
                 .loginId(request.getLoginId())
                 .name(request.getName())
                 .organizationId(request.getOrganizationId())
@@ -117,104 +121,55 @@ public class AgentController {
 
         CreateAgentResult result = createAgentUseCase.createAgent(command);
 
-        CreateAgentResponse response = CreateAgentResponse.builder()
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+            CreateAgentResponse.builder()
                 .agentId(result.getAgentId())
                 .loginId(result.getLoginId())
                 .tempPassword(result.getTempPassword())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+                .build());
     }
 
-    /**
-     * 아이디 중복 체크
-     *
-     * @param loginId 검사할 로그인 아이디
-     * @return 200 OK
-     *         - isUnique: true(사용 가능) / false(중복)
-     */
+    // ─── 아이디 중복 체크 ─────────────────────────────────────────────────────
+
     @GetMapping("/check-login-id")
-    @Operation(
-        summary = "로그인 아이디 중복 체크",
-        description = "상담사 생성 전 로그인 아이디의 사용 가능 여부를 확인합니다."
-    )
+    @Operation(summary = "로그인 아이디 중복 체크",
+        description = "상담사 생성 전 로그인 아이디의 사용 가능 여부를 확인합니다.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "중복 체크 성공",
-            content = @Content(schema = @Schema(example = "{\"isUnique\": true}"))
-        )
+        @ApiResponse(responseCode = "200", description = "중복 체크 성공",
+            content = @Content(schema = @Schema(example = "{\"isUnique\": true}")))
     })
     public ResponseEntity<Map<String, Boolean>> checkLoginId(
         @Parameter(description = "검사할 로그인 아이디", required = true, example = "agent001")
         @RequestParam String loginId) {
-        boolean isUnique = checkLoginIdUseCase.isLoginIdUnique(loginId);
-        return ResponseEntity.ok(Map.of("isUnique", isUnique));
+        return ResponseEntity.ok(Map.of("isUnique", checkLoginIdUseCase.isLoginIdUnique(loginId)));
     }
 
-    /**
-     * 상담사 단건 조회
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @return 200 OK
-     *         - id: 상담사 ID
-     *         - loginId: 로그인 아이디
-     *         - name: 상담사 이름
-     *         - organizationId: 소속 조직 ID
-     *         - status: 상태 (ACTIVE / RETIRED)
-     *         - passwordMustChange: 비밀번호 변경 필요 여부
-     *         - createdAt: 생성 일시
-     *         - retiredAt: 퇴사 일시 (nullable)
-     *         - roles: 역할 목록 [{name, type}]
-     *         ※ 비밀번호(해시값 포함)는 절대 리턴하지 않음
-     */
+    // ─── 상담사 단건 조회 ─────────────────────────────────────────────────────
+
     @GetMapping("/{agentId}")
-    @Operation(
-        summary = "상담사 단건 조회",
-        description = "상담사 ID로 상담사 상세 정보를 조회합니다. 비밀번호 정보는 포함되지 않습니다."
-    )
+    @Operation(summary = "상담사 단건 조회",
+        description = "상담사 ID로 상담사 상세 정보를 조회합니다. 비밀번호 정보는 포함되지 않습니다.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "조회 성공",
-            content = @Content(schema = @Schema(implementation = AgentResponse.class))
-        ),
+        @ApiResponse(responseCode = "200", description = "조회 성공",
+            content = @Content(schema = @Schema(implementation = AgentResponse.class))),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음")
     })
     public ResponseEntity<AgentResponse> getAgent(
-        @Parameter(description = "상담사 ID", required = true, example = "550e8400-e29b-41d4-a716-446655440000")
+        @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
-        var agentInfo = getAgentUseCase.getAgent(agentId);
-        return ResponseEntity.ok(AgentResponse.from(agentInfo));
+        return ResponseEntity.ok(AgentResponse.from(getAgentUseCase.getAgent(agentId)));
     }
 
-    /**
-     * 상담사 목록 조회 (필터링 및 검색 지원)
-     *
-     * @param tenantId 테넌트 ID
-     * @param organizationId 조직 ID로 필터링 (optional)
-     * @param status 상태 필터 (ACTIVE, SUSPENDED, RETIRED) (optional)
-     * @param nameKeyword 이름 검색 키워드 (부분 일치) (optional)
-     * @param loginIdKeyword 로그인 ID 검색 키워드 (부분 일치) (optional)
-     * @param includeRetired 퇴사자 포함 여부 (default: false)
-     * @return 200 OK - AgentResponse 목록
-     *         ※ 기본적으로 ACTIVE 상태만 조회, includeRetired=true 시 퇴사자 포함
-     */
+    // ─── 상담사 목록 조회 ─────────────────────────────────────────────────────
+
     @GetMapping
-    @Operation(
-        summary = "상담사 목록 조회",
-        description = "필터링 및 검색 조건에 따라 상담사 목록을 조회합니다. 기본적으로 활성 상담사만 조회됩니다."
-    )
+    @Operation(summary = "상담사 목록 조회",
+        description = "필터링 및 검색 조건에 따라 상담사 목록을 조회합니다. tenantId는 인증 정보에서 자동 추출됩니다.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "조회 성공",
-            content = @Content(schema = @Schema(implementation = AgentResponse.class))
-        )
+        @ApiResponse(responseCode = "200", description = "조회 성공",
+            content = @Content(schema = @Schema(implementation = AgentResponse.class)))
     })
     public ResponseEntity<List<AgentResponse>> getAgents(
-            @Parameter(description = "테넌트 ID", required = true, example = "tenant-001")
-            @RequestParam String tenantId,
             @Parameter(description = "조직 ID 필터", example = "550e8400-e29b-41d4-a716-446655440000")
             @RequestParam(required = false) String organizationId,
             @Parameter(description = "상태 필터 (ACTIVE, SUSPENDED, RETIRED)")
@@ -227,7 +182,7 @@ public class AgentController {
             @RequestParam(defaultValue = "false") boolean includeRetired) {
 
         AgentSearchCriteria criteria = AgentSearchCriteria.builder()
-                .tenantId(tenantId)
+                .tenantId(currentTenantId())   // ← SecurityContext에서 자동 추출
                 .organizationId(organizationId)
                 .status(status)
                 .nameKeyword(nameKeyword)
@@ -235,44 +190,29 @@ public class AgentController {
                 .includeRetired(includeRetired)
                 .build();
 
-        List<AgentResponse> responses = getAgentUseCase.getAgents(criteria).stream()
-                .map(AgentResponse::from)
-                .toList();
-
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(getAgentUseCase.getAgents(criteria).stream()
+                .map(AgentResponse::from).toList());
     }
 
-    /**
-     * 상담사 정보 수정
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param request 요청 본문
-     *                - name: 변경할 상담사 이름
-     * @return 204 No Content
-     */
+    // ─── 상담사 정보 수정 ─────────────────────────────────────────────────────
+
     @PatchMapping("/{agentId}")
-    @Operation(
-        summary = "상담사 정보 수정",
-        description = "상담사의 기본 정보(이름 등)를 수정합니다. 본인 또는 ADMIN만 수정 가능."
-    )
+    @Operation(summary = "상담사 정보 수정",
+        description = "상담사의 기본 정보(이름 등)를 수정합니다. 본인 또는 ADMIN만 수정 가능.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "수정 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
         @ApiResponse(responseCode = "400", description = "잘못된 요청 또는 권한 없음")
     })
     public ResponseEntity<Void> updateAgent(
-            @Parameter(description = "요청 사용자 ID", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody UpdateAgentRequest request) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
         UpdateAgentCommand command = UpdateAgentCommand.builder()
-                .tenantId(tenantId)
+                .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(UUID.fromString(userId))
+                .actorId(currentUserId())      // ← SecurityContext에서 자동 추출
                 .name(request.getName())
                 .build();
 
@@ -280,126 +220,74 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사 조직 이동 (Transfer)
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param request 요청 본문
-     *                - organizationId: 이동할 조직 ID (UUID)
-     * @return 204 No Content
-     */
+    // ─── 상담사 조직 이동 ─────────────────────────────────────────────────────
+
     @PatchMapping("/{agentId}/organization")
-    @Operation(
-        summary = "상담사 조직 이동",
-        description = "상담사를 다른 조직으로 이동시킵니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 조직 이동",
+        description = "상담사를 다른 조직으로 이동시킵니다. ADMIN 권한 필요.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "조직 이동 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "잘못된 요청 (존재하지 않는 조직 등 또는 권한 없음)")
+        @ApiResponse(responseCode = "400", description = "잘못된 요청 또는 권한 없음")
     })
     public ResponseEntity<Void> transferOrganization(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody TransferOrganizationRequest request) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        updateAgentUseCase.transferOrganization(tenantId, agentId, UUID.fromString(userId), request.getOrganizationId());
+        updateAgentUseCase.transferOrganization(currentTenantId(), agentId, currentUserId(), request.getOrganizationId());
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 비밀번호 초기화 (관리자용)
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @return 200 OK
-     *         - agentId: 상담사 ID
-     *         - tempPassword: 새로 생성된 임시 비밀번호 (일회성, 팝업으로 표시 후 재조회 불가)
-     *         ※ 초기화 후 passwordMustChange가 true로 설정됨
-     */
+    // ─── 비밀번호 초기화 (관리자용) ───────────────────────────────────────────
+
     @PostMapping("/{agentId}/reset-password")
-    @Operation(
-        summary = "비밀번호 초기화",
-        description = "관리자가 상담사의 비밀번호를 초기화하고 임시 비밀번호를 발급합니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "비밀번호 초기화",
+        description = "관리자가 상담사의 비밀번호를 초기화하고 임시 비밀번호를 발급합니다. ADMIN 권한 필요.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "초기화 성공",
-            content = @Content(schema = @Schema(implementation = ResetPasswordResponse.class))
-        ),
+        @ApiResponse(responseCode = "200", description = "초기화 성공",
+            content = @Content(schema = @Schema(implementation = ResetPasswordResponse.class))),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
         @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<ResetPasswordResponse> resetPassword(
-        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
+        ResetPasswordResult result = resetPasswordUseCase.resetPassword(currentTenantId(), agentId, currentUserId());
 
-        ResetPasswordResult result = resetPasswordUseCase.resetPassword(tenantId, agentId, UUID.fromString(userId));
-
-        ResetPasswordResponse response = ResetPasswordResponse.builder()
+        return ResponseEntity.ok(ResetPasswordResponse.builder()
                 .agentId(result.getAgentId())
                 .tempPassword(result.getTempPassword())
-                .build();
-
-        return ResponseEntity.ok(response);
+                .build());
     }
 
-    /**
-     * 비밀번호 변경 (본인용)
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param request 요청 본문
-     *                - currentPassword: 현재 비밀번호
-     *                - newPassword: 새 비밀번호
-     * @return 204 No Content
-     *         ※ 본인만 변경 가능
-     *         ※ 변경 후 passwordMustChange가 false로 설정됨
-     */
+    // ─── 비밀번호 변경 (본인용) ───────────────────────────────────────────────
+
     @PostMapping("/{agentId}/change-password")
-    @Operation(
-        summary = "비밀번호 변경",
-        description = "상담사가 자신의 비밀번호를 변경합니다. 현재 비밀번호 확인이 필요합니다. 본인만 가능."
-    )
+    @Operation(summary = "비밀번호 변경",
+        description = "상담사가 자신의 비밀번호를 변경합니다. 현재 비밀번호 확인이 필요합니다. 본인만 가능.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "비밀번호 변경 성공"),
         @ApiResponse(responseCode = "400", description = "현재 비밀번호 불일치 또는 새 비밀번호 형식 오류"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음")
     })
     public ResponseEntity<Void> changePassword(
-            @Parameter(description = "요청 사용자 ID (본인)", required = true, example = "10000000-0000-0000-0000-000000000003")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody ChangePasswordRequest request) {
 
-        log.info("[Controller] 비밀번호 변경 요청 - userId={}, agentId={}", userId, agentId);
-        log.debug("[Controller] 비밀번호 일치 확인: newPassword={}, confirmPassword={}, matching={}",
-                request.getNewPassword(), request.getConfirmPassword(), request.isPasswordMatching());
+        log.info("[Controller] 비밀번호 변경 요청 - agentId={}", agentId);
 
-        // 1. 비밀번호 확인 검증
         if (!request.isPasswordMatching()) {
-            log.warn("[Controller] 비밀번호 불일치 - newPassword={}, confirmPassword={}",
-                    request.getNewPassword(), request.getConfirmPassword());
-            throw new BusinessException(
-                    ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
+            throw new BusinessException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
                     "새 비밀번호와 확인 비밀번호가 일치하지 않습니다.");
         }
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-        log.debug("[Controller] tenantId={}", tenantId);
-
         ChangePasswordUseCase.ChangePasswordCommand command = ChangePasswordUseCase.ChangePasswordCommand.builder()
-                .tenantId(tenantId)
+                .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(UUID.fromString(userId))
+                .actorId(currentUserId())
                 .currentPassword(request.getCurrentPassword())
                 .newPassword(request.getNewPassword())
                 .build();
@@ -408,44 +296,28 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 비밀번호 변경 (본인용 - /me 경로)
-     * API 명세서에 정의된 /me/change-password 엔드포인트
-     *
-     * @param request 요청 본문
-     *                - currentPassword: 현재 비밀번호
-     *                - newPassword: 새 비밀번호
-     * @return 204 No Content
-     *         ※ 현재 로그인한 사용자의 비밀번호만 변경 가능
-     *         ※ 변경 후 passwordMustChange가 false로 설정됨
-     */
+    // ─── 내 비밀번호 변경 (/me) ───────────────────────────────────────────────
+
     @PostMapping("/me/change-password")
-    @Operation(
-        summary = "내 비밀번호 변경",
-        description = "현재 로그인한 상담사가 자신의 비밀번호를 변경합니다. 현재 비밀번호 확인이 필요합니다."
-    )
+    @Operation(summary = "내 비밀번호 변경",
+        description = "현재 로그인한 상담사가 자신의 비밀번호를 변경합니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "비밀번호 변경 성공"),
         @ApiResponse(responseCode = "400", description = "현재 비밀번호 불일치 또는 새 비밀번호 형식 오류"),
         @ApiResponse(responseCode = "401", description = "인증되지 않은 사용자")
     })
     public ResponseEntity<Void> changeMyPassword(
-            @Parameter(description = "요청 사용자 ID (본인)", required = true, example = "10000000-0000-0000-0000-000000000003")
-            @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody ChangePasswordRequest request) {
 
-        // 1. 비밀번호 확인 검증
         if (!request.isPasswordMatching()) {
-            throw new BusinessException(
-                    ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
+            throw new BusinessException(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH,
                     "새 비밀번호와 확인 비밀번호가 일치하지 않습니다.");
         }
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-        UUID agentId = UUID.fromString(userId);
+        UUID agentId = currentUserId();
 
         ChangePasswordUseCase.ChangePasswordCommand command = ChangePasswordUseCase.ChangePasswordCommand.builder()
-                .tenantId(tenantId)
+                .tenantId(currentTenantId())
                 .agentId(agentId)
                 .actorId(agentId)
                 .currentPassword(request.getCurrentPassword())
@@ -456,235 +328,139 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사 정지 (Suspend)
-     *
-     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
-     * @param agentId 상담사 ID (UUID)
-     * @return 204 No Content
-     *         ※ ACTIVE 상태만 정지 가능
-     *         ※ 정지 시 로그인 차단
-     *         ※ activate로 복구 가능
-     */
+    // ─── 상담사 정지 ──────────────────────────────────────────────────────────
+
     @PostMapping("/{agentId}/suspend")
-    @Operation(
-        summary = "상담사 정지",
-        description = "상담사를 정지 상태로 변경합니다. 정지된 상담사는 로그인할 수 없습니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 정지",
+        description = "상담사를 정지 상태로 변경합니다. ADMIN 권한 필요.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "정지 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "정지할 수 없는 상태 (이미 정지됨 또는 퇴사함) 또는 권한 없음")
+        @ApiResponse(responseCode = "400", description = "정지할 수 없는 상태 또는 권한 없음")
     })
     public ResponseEntity<Void> suspendAgent(
-        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        SuspendAgentUseCase.SuspendAgentCommand command = SuspendAgentUseCase.SuspendAgentCommand.builder()
-                .tenantId(tenantId)
+        suspendAgentUseCase.suspendAgent(SuspendAgentUseCase.SuspendAgentCommand.builder()
+                .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(UUID.fromString(userId))
-                .build();
-
-        suspendAgentUseCase.suspendAgent(command);
+                .actorId(currentUserId())
+                .build());
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사 활성화 (Activate)
-     *
-     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
-     * @param agentId 상담사 ID (UUID)
-     * @return 204 No Content
-     *         ※ SUSPENDED 상태만 활성화 가능
-     *         ※ RETIRED는 복구 불가능
-     *         ※ 활성화 후 로그인 허용
-     */
+    // ─── 상담사 활성화 ────────────────────────────────────────────────────────
+
     @PostMapping("/{agentId}/activate")
-    @Operation(
-        summary = "상담사 활성화",
-        description = "정지된 상담사를 활성화 상태로 복구합니다. 퇴사한 상담사는 활성화할 수 없습니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 활성화",
+        description = "정지된 상담사를 활성화 상태로 복구합니다. ADMIN 권한 필요.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "활성화 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
-        @ApiResponse(responseCode = "400", description = "활성화할 수 없는 상태 (이미 활성화됨 또는 퇴사함) 또는 권한 없음")
+        @ApiResponse(responseCode = "400", description = "활성화할 수 없는 상태 또는 권한 없음")
     })
     public ResponseEntity<Void> activateAgent(
-        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        ActivateAgentUseCase.ActivateAgentCommand command = ActivateAgentUseCase.ActivateAgentCommand.builder()
-                .tenantId(tenantId)
+        activateAgentUseCase.activateAgent(ActivateAgentUseCase.ActivateAgentCommand.builder()
+                .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(UUID.fromString(userId))
-                .build();
-
-        activateAgentUseCase.activateAgent(command);
+                .actorId(currentUserId())
+                .build());
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사 퇴사 처리 (Soft Delete)
-     *
-     * @param userId 요청 사용자 ID (ADMIN 권한 필요)
-     * @param agentId 상담사 ID (UUID)
-     * @return 204 No Content
-     *         ※ 실제 삭제가 아닌 status를 RETIRED로 변경
-     *         ※ retiredAt에 퇴사 일시 기록
-     *         ※ 즉시 로그인 차단 및 상담 배정 제외
-     */
+    // ─── 상담사 퇴사 처리 ─────────────────────────────────────────────────────
+
     @DeleteMapping("/{agentId}")
-    @Operation(
-        summary = "상담사 퇴사 처리",
-        description = "상담사를 퇴사 처리합니다. 실제 데이터는 삭제되지 않으며 상태만 변경됩니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 퇴사 처리",
+        description = "상담사를 퇴사 처리합니다. 실제 데이터는 삭제되지 않으며 상태만 변경됩니다. ADMIN 권한 필요.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "퇴사 처리 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
         @ApiResponse(responseCode = "400", description = "이미 퇴사 처리됨 또는 권한 없음")
     })
     public ResponseEntity<Void> retireAgent(
-        @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-        @RequestHeader("X-User-Id") String userId,
         @Parameter(description = "상담사 ID", required = true)
         @PathVariable UUID agentId) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        RetireAgentUseCase.RetireAgentCommand command = RetireAgentUseCase.RetireAgentCommand.builder()
-                .tenantId(tenantId)
+        retireAgentUseCase.retireAgent(RetireAgentUseCase.RetireAgentCommand.builder()
+                .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(UUID.fromString(userId))
+                .actorId(currentUserId())
                 .deletePolicy(RetireAgentUseCase.RetireDeletePolicy.PRESERVE)
-                .build();
-
-        retireAgentUseCase.retireAgent(command);
+                .build());
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사 부서 이동 (Transfer)
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param request 요청 본문
-     *                - newOrganizationId: 새 조직(부서) ID
-     * @return 200 OK
-     *         - agentId: 상담사 ID
-     *         - fromOrganizationId: 이전 조직 ID
-     *         - toOrganizationId: 새 조직 ID
-     *         - transferredAt: 이동 일시
-     *         ※ 동일 부서로 이동 불가
-     *         ※ RETIRED 상담사 이동 불가
-     *         ※ 대상 부서는 ACTIVE 상태여야 함
-     */
+    // ─── 상담사 부서 이동 ─────────────────────────────────────────────────────
+
     @PostMapping("/{agentId}/transfer")
-    @Operation(
-        summary = "상담사 부서 이동",
-        description = "상담사를 다른 부서로 이동시킵니다. 이동 이력이 기록됩니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 부서 이동",
+        description = "상담사를 다른 부서로 이동시킵니다. ADMIN 권한 필요.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "부서 이동 성공",
-            content = @Content(schema = @Schema(implementation = TransferAgentResponse.class))
-        ),
-        @ApiResponse(responseCode = "400", description = "잘못된 요청 (동일 부서, 퇴사한 상담사 등 또는 권한 없음)"),
+        @ApiResponse(responseCode = "200", description = "부서 이동 성공",
+            content = @Content(schema = @Schema(implementation = TransferAgentResponse.class))),
+        @ApiResponse(responseCode = "400", description = "잘못된 요청 또는 권한 없음"),
         @ApiResponse(responseCode = "404", description = "상담사 또는 대상 부서를 찾을 수 없음")
     })
     public ResponseEntity<TransferAgentResponse> transferAgent(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody TransferAgentRequest request) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        TransferAgentUseCase.TransferAgentCommand command = TransferAgentUseCase.TransferAgentCommand.builder()
-                .tenantId(tenantId)
+        TransferAgentUseCase.TransferAgentResult result = transferAgentUseCase.transferAgent(
+            TransferAgentUseCase.TransferAgentCommand.builder()
+                .tenantId(currentTenantId())
                 .agentId(agentId)
                 .newOrganizationId(request.getNewOrganizationId())
-                .actorId(UUID.fromString(userId))
-                .build();
+                .actorId(currentUserId())
+                .build());
 
-        TransferAgentUseCase.TransferAgentResult result = transferAgentUseCase.transferAgent(command);
-
-        TransferAgentResponse response = TransferAgentResponse.builder()
+        return ResponseEntity.ok(TransferAgentResponse.builder()
                 .agentId(result.getAgentId())
                 .fromOrganizationId(result.getFromOrganizationId())
                 .toOrganizationId(result.getToOrganizationId())
                 .transferredAt(result.getTransferredAt())
-                .build();
-
-        return ResponseEntity.ok(response);
+                .build());
     }
 
-    /**
-     * 상담사 역할 지정
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param request 요청 본문
-     *                - roles: 역할 목록
-     *                  - name: 역할 이름
-     *                  - type: 역할 유형 (POSITION: 직급, CHANNEL: 채널)
-     *         ※ 기존 역할은 모두 대체됨 (PUT semantic)
-     * @return 204 No Content
-     */
+    // ─── 역할 일괄 지정 ───────────────────────────────────────────────────────
+
     @PutMapping("/{agentId}/roles")
-    @Operation(
-        summary = "상담사 역할 일괄 지정",
-        description = "상담사의 역할을 일괄 지정합니다. 기존 역할은 모두 제거되고 새로운 역할로 대체됩니다. ADMIN 권한 필요."
-    )
+    @Operation(summary = "상담사 역할 일괄 지정",
+        description = "상담사의 역할을 일괄 지정합니다. 기존 역할은 모두 제거되고 새로운 역할로 대체됩니다. ADMIN 권한 필요.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "역할 지정 성공"),
         @ApiResponse(responseCode = "404", description = "상담사를 찾을 수 없음"),
         @ApiResponse(responseCode = "400", description = "잘못된 역할 정보 또는 권한 없음")
     })
     public ResponseEntity<Void> assignRoles(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Valid @RequestBody AssignRolesRequest request) {
 
-        log.info("[Controller] 역할 일괄 지정 요청 - userId={}, agentId={}", userId, agentId);
+        log.info("[Controller] 역할 일괄 지정 요청 - agentId={}", agentId);
 
-        // agentId 설정 (pathVariable 우선)
         if (request.getAgentId() == null) {
             request.setAgentId(agentId);
         }
 
-        // 역할 정보 검증
         if (!request.hasValidRoles()) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_INPUT_VALUE,
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE,
                     "roles, roleIds, roleNames 중 하나는 필수입니다.");
         }
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
+        String tenantId = currentTenantId();
+        manageRoleUseCase.validateAdminPermission(tenantId, currentUserId());
 
-        // ADMIN 권한 검증
-        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
-
-        // roleIds 또는 roleNames로 역할 할당
         if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
-            log.debug("[Controller] roleIds로 역할 할당 - roleIds={}", request.getRoleIds());
             manageRoleUseCase.assignRolesByIds(agentId, request.getRoleIds());
         } else if (request.getRoleNames() != null && !request.getRoleNames().isEmpty()) {
-            log.debug("[Controller] roleNames로 역할 할당 - roleNames={}", request.getRoleNames());
             manageRoleUseCase.assignRolesByNames(agentId, request.getRoleNames());
         } else {
-            // roles로 역할 할당 (기존 방식)
-            log.debug("[Controller] roles로 역할 할당 - roles={}", request.getRoles());
             var roles = request.getRoles().stream()
                     .map(AssignRolesRequest.RoleDto::toDomain)
                     .collect(Collectors.toSet());
@@ -694,152 +470,73 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 상담사에게 특정 역할 추가
-     * API 명세서에 정의된 개별 역할 할당 엔드포인트
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param roleName 추가할 역할 이름
-     * @return 201 Created
-     *         ※ 기존 역할은 유지되며 새 역할만 추가됨
-     *         ※ 이미 할당된 역할인 경우 무시됨 (멱등성)
-     *
-     * @apiNote Port/Adapter 패턴을 통해 RBAC 모듈과 연동
-     *          직접 RBAC API(/api/rbac/agents/{id}/roles/{name}) 사용도 가능합니다.
-     */
+    // ─── 역할 개별 추가 ───────────────────────────────────────────────────────
+
     @PostMapping("/{agentId}/roles/{roleName}")
-    @Operation(
-        summary = "상담사에게 역할 추가",
-        description = "상담사에게 특정 역할을 추가합니다. 기존 역할은 유지됩니다."
-    )
+    @Operation(summary = "상담사에게 역할 추가",
+        description = "상담사에게 특정 역할을 추가합니다. 기존 역할은 유지됩니다.")
     @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "역할 추가 성공 (이미 할당된 경우에도 201 반환)"),
+        @ApiResponse(responseCode = "201", description = "역할 추가 성공"),
         @ApiResponse(responseCode = "404", description = "상담사 또는 역할을 찾을 수 없음"),
         @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<Void> addRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Parameter(description = "추가할 역할 이름", required = true, example = "SENIOR_AGENT")
             @PathVariable String roleName) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        // ADMIN 권한 검증
-        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
-
+        manageRoleUseCase.validateAdminPermission(currentTenantId(), currentUserId());
         rbacPort.assignRoleToAgent(agentId.toString(), roleName);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    /**
-     * 상담사에게서 특정 역할 제거
-     * API 명세서에 정의된 개별 역할 제거 엔드포인트
-     *
-     * @param agentId 상담사 ID (UUID)
-     * @param roleName 제거할 역할 이름
-     * @return 204 No Content
-     *         ※ 다른 역할은 유지되며 지정된 역할만 제거됨
-     *         ※ 할당되지 않은 역할인 경우 404 에러 반환
-     *
-     * @apiNote Port/Adapter 패턴을 통해 RBAC 모듈과 연동
-     *          직접 RBAC API(/api/rbac/agents/{id}/roles/{name}) 사용도 가능합니다.
-     */
+    // ─── 역할 개별 제거 ───────────────────────────────────────────────────────
+
     @DeleteMapping("/{agentId}/roles/{roleName}")
-    @Operation(
-        summary = "상담사에게서 역할 제거",
-        description = "상담사에게서 특정 역할을 제거합니다. 다른 역할은 유지됩니다."
-    )
+    @Operation(summary = "상담사에게서 역할 제거",
+        description = "상담사에게서 특정 역할을 제거합니다. 다른 역할은 유지됩니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "역할 제거 성공"),
         @ApiResponse(responseCode = "404", description = "상담사, 역할을 찾을 수 없거나 해당 역할이 할당되지 않음"),
         @ApiResponse(responseCode = "400", description = "권한 없음")
     })
     public ResponseEntity<Void> removeRole(
-            @Parameter(description = "요청 사용자 ID (ADMIN)", required = true, example = "10000000-0000-0000-0000-000000000001")
-            @RequestHeader("X-User-Id") String userId,
             @Parameter(description = "상담사 ID", required = true)
             @PathVariable UUID agentId,
             @Parameter(description = "제거할 역할 이름", required = true, example = "SENIOR_AGENT")
             @PathVariable String roleName) {
 
-        String tenantId = TenantContextHolder.getCurrentTenantId();
-
-        // ADMIN 권한 검증
-        manageRoleUseCase.validateAdminPermission(tenantId, UUID.fromString(userId));
-
+        manageRoleUseCase.validateAdminPermission(currentTenantId(), currentUserId());
         rbacPort.revokeRoleFromAgent(agentId.toString(), roleName);
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 테넌트별 상담사 통계 조회
-     * AG-021: 대시보드용 실시간 통계
-     *
-     * @param tenantId 테넌트 ID
-     * @return 200 OK
-     *         - totalCount: 전체 상담사 수
-     *         - activeCount: 활성 상담사 수
-     *         - suspendedCount: 정지된 상담사 수
-     *         - retiredCount: 퇴사 상담사 수
-     *         - passwordChangeRequired: 비밀번호 변경 필요 상담사 수
-     *         - byOrganization: 조직별 상담사 수 맵
-     *         - byStatus: 상태별 상담사 수 맵
-     */
+    // ─── 통계 조회 ────────────────────────────────────────────────────────────
+
     @GetMapping("/statistics")
-    @Operation(
-        summary = "상담사 통계 조회",
-        description = "대시보드용 실시간 상담사 통계를 제공합니다. 전체/활성/정지/퇴사 수 및 조직별 통계를 포함합니다."
-    )
+    @Operation(summary = "상담사 통계 조회",
+        description = "대시보드용 실시간 상담사 통계를 제공합니다. tenantId는 인증 정보에서 자동 추출됩니다.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "통계 조회 성공",
-            content = @Content(schema = @Schema(implementation = GetAgentStatisticsUseCase.AgentStatistics.class))
-        )
+        @ApiResponse(responseCode = "200", description = "통계 조회 성공",
+            content = @Content(schema = @Schema(implementation = GetAgentStatisticsUseCase.AgentStatistics.class)))
     })
-    public ResponseEntity<GetAgentStatisticsUseCase.AgentStatistics> getStatistics(
-            @Parameter(description = "테넌트 ID", required = true, example = "tenant-001")
-            @RequestParam String tenantId) {
-
-        GetAgentStatisticsUseCase.AgentStatistics statistics =
-            getAgentStatisticsUseCase.getStatistics(tenantId);
-
-        return ResponseEntity.ok(statistics);
+    public ResponseEntity<GetAgentStatisticsUseCase.AgentStatistics> getStatistics() {
+        return ResponseEntity.ok(getAgentStatisticsUseCase.getStatistics(currentTenantId()));
     }
 
-    /**
-     * 조직별 상담사 통계 조회
-     * AG-021: 조직별 통계 제공
-     *
-     * @param tenantId 테넌트 ID
-     * @param organizationId 조직 ID
-     * @return 200 OK - 해당 조직의 상담사 통계
-     */
     @GetMapping("/statistics/organization/{organizationId}")
-    @Operation(
-        summary = "조직별 상담사 통계 조회",
-        description = "특정 조직(부서)의 상담사 통계를 조회합니다."
-    )
+    @Operation(summary = "조직별 상담사 통계 조회",
+        description = "특정 조직(부서)의 상담사 통계를 조회합니다.")
     @ApiResponses({
-        @ApiResponse(
-            responseCode = "200",
-            description = "통계 조회 성공",
-            content = @Content(schema = @Schema(implementation = GetAgentStatisticsUseCase.AgentStatistics.class))
-        ),
+        @ApiResponse(responseCode = "200", description = "통계 조회 성공",
+            content = @Content(schema = @Schema(implementation = GetAgentStatisticsUseCase.AgentStatistics.class))),
         @ApiResponse(responseCode = "404", description = "조직을 찾을 수 없음")
     })
     public ResponseEntity<GetAgentStatisticsUseCase.AgentStatistics> getStatisticsByOrganization(
-            @Parameter(description = "테넌트 ID", required = true, example = "tenant-001")
-            @RequestParam String tenantId,
-            @Parameter(description = "조직 ID", required = true, example = "550e8400-e29b-41d4-a716-446655440001")
+            @Parameter(description = "조직 ID", required = true)
             @PathVariable String organizationId) {
-
-        GetAgentStatisticsUseCase.AgentStatistics statistics =
-            getAgentStatisticsUseCase.getStatisticsByOrganization(tenantId, organizationId);
-
-        return ResponseEntity.ok(statistics);
+        return ResponseEntity.ok(
+            getAgentStatisticsUseCase.getStatisticsByOrganization(currentTenantId(), organizationId));
     }
 }

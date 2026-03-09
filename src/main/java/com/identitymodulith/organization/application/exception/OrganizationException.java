@@ -1,5 +1,8 @@
 package com.identitymodulith.organization.application.exception;
 
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
+
 /**
  * Organization 비즈니스 예외
  * 
@@ -17,39 +20,24 @@ package com.identitymodulith.organization.application.exception;
  * throw new OrganizationException(INTERNAL_ERROR, cause);
  * </pre>
  */
+@Getter
 public class OrganizationException extends RuntimeException {
 
     private final OrganizationErrorCode errorCode;
 
-    /**
-     * 기본 메시지를 사용하는 예외 생성
-     */
     public OrganizationException(OrganizationErrorCode errorCode) {
         super(errorCode.getMessage());
         this.errorCode = errorCode;
     }
 
-    /**
-     * 커스텀 메시지를 사용하는 예외 생성
-     *
-     * @param errorCode 에러 코드
-     * @param customMessage 커스텀 메시지
-     */
     public OrganizationException(OrganizationErrorCode errorCode, String customMessage) {
         super(customMessage);
         this.errorCode = errorCode;
     }
 
-    /**
-     * 원인 예외를 포함하는 예외 생성
-     */
     public OrganizationException(OrganizationErrorCode errorCode, Throwable cause) {
         super(errorCode.getMessage(), cause);
         this.errorCode = errorCode;
-    }
-
-    public OrganizationErrorCode getErrorCode() {
-        return errorCode;
     }
 
     /**
@@ -78,57 +66,46 @@ public class OrganizationException extends RuntimeException {
      *   <li>INTERNAL_ERROR: 내부 서버 오류</li>
      * </ul>
      */
+    @Getter
     public enum OrganizationErrorCode {
         // 부서 관련 에러
-        DEPARTMENT_NOT_FOUND("DEPT_NOT_FOUND", "부서를 찾을 수 없습니다", 404),
-        INVALID_PARENT("INVALID_PARENT", "부모 부서를 찾을 수 없습니다", 400),
-        CIRCULAR_REFERENCE("CIRCULAR_REFERENCE", "자신의 하위 부서로 이동할 수 없습니다", 400),
-        CHILD_DEPARTMENT_EXISTS("CHILD_DEPT_EXISTS", "하위 부서가 존재하여 삭제할 수 없습니다", 409),
-        ACTIVE_USERS_EXIST("ACTIVE_USERS_EXIST", "소속 구성원이 존재하여 삭제할 수 없습니다", 409),
-        DUPLICATE_DEPT_CODE("DUPLICATE_DEPT_CODE", "이미 존재하는 부서 코드입니다", 409),
+        DEPARTMENT_NOT_FOUND("DEPT_NOT_FOUND", "부서를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+        INVALID_PARENT("INVALID_PARENT", "부모 부서를 찾을 수 없습니다", HttpStatus.BAD_REQUEST),
+        CIRCULAR_REFERENCE("CIRCULAR_REFERENCE", "자신의 하위 부서로 이동할 수 없습니다", HttpStatus.BAD_REQUEST),
+        CHILD_DEPARTMENT_EXISTS("CHILD_DEPT_EXISTS", "하위 부서가 존재하여 삭제할 수 없습니다", HttpStatus.CONFLICT),
+        ACTIVE_USERS_EXIST("ACTIVE_USERS_EXIST", "소속 구성원이 존재하여 삭제할 수 없습니다", HttpStatus.CONFLICT),
+        DUPLICATE_DEPT_CODE("DUPLICATE_DEPT_CODE", "이미 존재하는 부서 코드입니다", HttpStatus.CONFLICT),
 
-        // 루트 부서 관련 에러 (DEPARTMENT_SCENARIOS.md 기준 추가)
-        ROOT_ALREADY_EXISTS("ROOT_ALREADY_EXISTS", "테넌트에 이미 루트 부서가 존재합니다", 409),
-        CANNOT_MOVE_ROOT("CANNOT_MOVE_ROOT", "루트 부서는 이동할 수 없습니다", 400),
-        CANNOT_DEACTIVATE_ROOT("CANNOT_DEACTIVATE_ROOT", "루트 부서는 비활성화할 수 없습니다", 400),
-        CANNOT_DELETE_ROOT("CANNOT_DELETE_ROOT", "루트 부서는 삭제할 수 없습니다", 400),
+        // 루트 부서 관련 에러
+        ROOT_ALREADY_EXISTS("ROOT_ALREADY_EXISTS", "테넌트에 이미 루트 부서가 존재합니다", HttpStatus.CONFLICT),
+        CANNOT_MOVE_ROOT("CANNOT_MOVE_ROOT", "루트 부서는 이동할 수 없습니다", HttpStatus.BAD_REQUEST),
+        CANNOT_DEACTIVATE_ROOT("CANNOT_DEACTIVATE_ROOT", "루트 부서는 비활성화할 수 없습니다", HttpStatus.BAD_REQUEST),
+        CANNOT_DELETE_ROOT("CANNOT_DELETE_ROOT", "루트 부서는 삭제할 수 없습니다", HttpStatus.BAD_REQUEST),
 
         // 부서 상태 및 검증 에러
-        PARENT_DEPT_INACTIVE("PARENT_DEPT_INACTIVE", "상위 부서가 비활성 상태입니다", 400),
-        CUSTOM_TYPE_NAME_REQUIRED("CUSTOM_TYPE_NAME_REQUIRED", "CUSTOM 타입은 커스텀 타입명이 필수입니다", 400),
-        CODE_CANNOT_BE_CHANGED("CODE_CANNOT_BE_CHANGED", "부서 코드는 변경할 수 없습니다", 400),
-        SAME_PARENT_DEPARTMENT("SAME_PARENT_DEPT", "이미 동일한 상위 부서입니다", 400),
+        PARENT_DEPT_INACTIVE("PARENT_DEPT_INACTIVE", "상위 부서가 비활성 상태입니다", HttpStatus.BAD_REQUEST),
+        CUSTOM_TYPE_NAME_REQUIRED("CUSTOM_TYPE_NAME_REQUIRED", "CUSTOM 타입은 커스텀 타입명이 필수입니다", HttpStatus.BAD_REQUEST),
+        CODE_CANNOT_BE_CHANGED("CODE_CANNOT_BE_CHANGED", "부서 코드는 변경할 수 없습니다", HttpStatus.BAD_REQUEST),
+        SAME_PARENT_DEPARTMENT("SAME_PARENT_DEPT", "이미 동일한 상위 부서입니다", HttpStatus.BAD_REQUEST),
 
-        // 사용자 관련 에러 (EntityNotFoundException 대체)
-        USER_NOT_FOUND("USER_NOT_FOUND", "사용자를 찾을 수 없습니다", 404),
-        USER_INACTIVE("USER_INACTIVE", "비활성화된 사용자입니다", 403),
-        USER_DEPARTMENT_NOT_FOUND("USER_DEPT_NOT_FOUND", "사용자의 소속 부서를 찾을 수 없습니다", 404),
+        // 사용자 관련 에러
+        USER_NOT_FOUND("USER_NOT_FOUND", "사용자를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
+        USER_INACTIVE("USER_INACTIVE", "비활성화된 사용자입니다", HttpStatus.FORBIDDEN),
+        USER_DEPARTMENT_NOT_FOUND("USER_DEPT_NOT_FOUND", "사용자의 소속 부서를 찾을 수 없습니다", HttpStatus.NOT_FOUND),
 
         // 기타 에러
-        INSUFFICIENT_PERMISSION("INSUFFICIENT_PERMISSION", "권한이 없습니다", 403),
-        INVALID_REQUEST("INVALID_REQUEST", "잘못된 요청입니다", 400),
-        INTERNAL_ERROR("INTERNAL_ERROR", "내부 서버 오류가 발생했습니다", 500);
+        INSUFFICIENT_PERMISSION("INSUFFICIENT_PERMISSION", "권한이 없습니다", HttpStatus.FORBIDDEN),
+        INVALID_REQUEST("INVALID_REQUEST", "잘못된 요청입니다", HttpStatus.BAD_REQUEST),
+        INTERNAL_ERROR("INTERNAL_ERROR", "내부 서버 오류가 발생했습니다", HttpStatus.INTERNAL_SERVER_ERROR);
 
         private final String code;
         private final String message;
-        private final int httpStatus;
+        private final HttpStatus httpStatus;
 
-        OrganizationErrorCode(String code, String message, int httpStatus) {
+        OrganizationErrorCode(String code, String message, HttpStatus httpStatus) {
             this.code = code;
             this.message = message;
             this.httpStatus = httpStatus;
-        }
-
-        public String getCode() {
-            return code;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public int getHttpStatus() {
-            return httpStatus;
         }
     }
 }

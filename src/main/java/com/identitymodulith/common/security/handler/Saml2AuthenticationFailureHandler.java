@@ -1,4 +1,4 @@
-package com.identitymodulith.common.security;
+package com.identitymodulith.common.security.handler;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,6 +1,6 @@
 package com.identitymodulith.rbac.infrastructure.persistence.entity;
 
-import com.identitymodulith.rbac.domain.DataScopeLevel;
+import com.identitymodulith.common.domain.DataScopeLevel;
 import com.identitymodulith.rbac.domain.RoleType;
 import jakarta.persistence.*;
 import lombok.*;

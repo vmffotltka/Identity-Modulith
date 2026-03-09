@@ -1,5 +1,6 @@
 package com.identitymodulith.common.security;
 
+import com.identitymodulith.common.security.context.JwtUserContext;
 import com.identitymodulith.rbac.RbacModuleApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

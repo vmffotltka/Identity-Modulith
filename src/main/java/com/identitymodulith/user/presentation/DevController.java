@@ -2,6 +2,7 @@ package com.identitymodulith.user.presentation;
 
 import com.identitymodulith.user.infrastructure.persistence.repository.AgentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,8 +14,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 임시 비밀번호 해시 생성 컨트롤러 (개발용)
+ * 임시 비밀번호 해시 생성 컨트롤러 (개발 환경 전용)
+ *
+ * ⚠️  @Profile("dev") — spring.profiles.active=prod 시 자동 비활성화
  */
+@Profile("dev")
 @RestController
 @RequestMapping("/api/dev")
 @RequiredArgsConstructor

@@ -1,4 +1,4 @@
-package com.identitymodulith.common.security;
+package com.identitymodulith.common.security.principal;
 
 /**
  * AuthPrincipal - 인증 주체 인터페이스
