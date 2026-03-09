@@ -975,7 +975,42 @@ docker run -p 8080:8080 \
 - [CHANGELOG.md](./CHANGELOG.md) - 변경 이력
 - [TEST_PROGRESS_STATUS.md](./TEST_PROGRESS_STATUS.md) - 테스트 진행 현황
 
+### 아키텍처 및 성능
+- [ARCHITECTURE_DIAGRAMS.md](./Docs/ARCHITECTURE_DIAGRAMS.md) - **시스템 아키텍처 다이어그램** 📊
+  - Keycloak 인증/인가 흐름도
+  - 상세 시퀀스 다이어그램
+  - N+1 쿼리 문제 및 해결 비교
+  - 성능 개선 차트 (91% 쿼리 감소, 87% 응답 시간 단축)
+  - Before/After 코드 비교
+- [PERFORMANCE_OPTIMIZATION.md](./Docs/PERFORMANCE_OPTIMIZATION.md) - **성능 최적화 가이드** ⚡
+  - Fetch Join으로 N+1 해결
+  - 11개 쿼리 → 1개 쿼리 (91% 감소)
+  - 응답 시간: 120ms → 15ms (87% 단축)
+
 ### 인증/인가 (Keycloak)
+- [KEYCLOAK_SAML2_INTEGRATION.md](./Docs/KEYCLOAK_SAML2_INTEGRATION.md) - **Keycloak SAML 2.0 연동 (AWS Connect SSO)** ⭐⭐⭐
+  - **현재 구현 방식** (AWS Connect SSO 연동용)
+  - SAML 2.0 IdP 구성
+  - Keycloak SAML Client 설정
+  - SAML Attribute Mapping
+  - Agent 자동 매핑
+  - AWS Connect SSO 연동 가이드
+- [SAML2_VS_OIDC_COMPARISON.md](./Docs/SAML2_VS_OIDC_COMPARISON.md) - **SAML 2.0 vs OIDC 비교** 📊
+  - 프로토콜 상세 비교
+  - 인증 흐름 다이어그램
+  - 토큰 형식 비교 (XML vs JSON)
+  - 사용 사례별 권장
+  - 마이그레이션 가이드
+- [KEYCLOAK_MINIMAL_INTEGRATION.md](./Docs/KEYCLOAK_MINIMAL_INTEGRATION.md) - **Keycloak 최소 연동 (OIDC)** 🔒
+  - OIDC/OAuth 2.0 방식 (참고용)
+  - Keycloak: 인증만 담당 (JWT 발급)
+  - Identity Modulith: 인가 전담 (로컬 RBAC)
+  - JWT → Agent 자동 매핑
+  - CustomPermissionEvaluator 권한 검증
+- [SWAGGER_JWT_GUIDE.md](./Docs/SWAGGER_JWT_GUIDE.md) - **Swagger JWT 인증 사용법** 📘
+  - Swagger에서 JWT 토큰 사용하는 방법
+  - Authorize 버튼 사용법
+  - 토큰 갱신 및 로그아웃
 - [KEYCLOAK_SETUP_GUIDE_PRODUCTION.md](./Docs/KEYCLOAK_SETUP_GUIDE_PRODUCTION.md) - **실제 서버 연동 가이드** 🔥
   - 현재 운영 중인 Keycloak 서버 연동 (http://1.224.162.188:51446)
   - Step-by-Step 설정 가이드
@@ -991,7 +1026,7 @@ docker run -p 8080:8080 \
   - JWT 기반 인증/인가 구현
   - RBAC 동기화 전략 (하이브리드)
   - 커스텀 권한 검증 (PermissionEvaluator)
-  - 3�� 구현 로드맵
+  - 3주 구현 로드맵
 
 ---
 

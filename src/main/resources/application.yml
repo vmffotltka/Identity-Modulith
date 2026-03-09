@@ -53,6 +53,14 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     show-sql: true
+    open-in-view: false            # OSIV(Open Session In View) 비활성화
+
+  # ---------------------------------------------------------------------------
+  # Spring MVC 설정
+  # ---------------------------------------------------------------------------
+  mvc:
+    favicon:
+      enabled: false                # favicon.ico 요청 무시
 
   # ---------------------------------------------------------------------------
   # Flyway 마이그레이션 설정
@@ -74,44 +82,29 @@ spring:
       name: admin                    # Swagger UI 접속 username
       password: admin123             # Swagger UI 접속 password
 
-    # =========================================================================
-    # OAuth 2.0 & Keycloak 설정
-    # =========================================================================
-    oauth2:
-      resourceserver:
-        jwt:
-          # Keycloak의 공개 키 엔드포인트
-          issuer-uri: http://1.224.162.188:51446/realms/identity-system
-          jwk-set-uri: http://1.224.162.188:51446/realms/identity-system/protocol/openid-connect/certs
-
-      client:
-        registration:
-          keycloak:
-            client-id: identity-modulith
-            client-secret: CHANGE_ME  # ⚠️ Keycloak에서 생성한 Client Secret으로 변경 필요
-            authorization-grant-type: authorization_code
-            scope: openid, profile, email
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
-
-        provider:
-          keycloak:
-            issuer-uri: http://1.224.162.188:51446/realms/identity-system
-            user-name-attribute: preferred_username
 
 # =============================================================================
-# Keycloak 연동 설정
+# Keycloak SAML 2.0 연동 설정
 # =============================================================================
 keycloak:
   realm: identity-system
   auth-server-url: http://1.224.162.188:51446
-  resource: identity-modulith
-  public-client: false
-  bearer-only: true
-  ssl-required: none  # 개발 환경 (프로덕션: external)
+  saml:
+    idp-entity-id: http://1.224.162.188:51446/realms/identity-system
+    sp-entity-id: http://localhost:8080/saml/metadata
 
   # CORS 설정
   cors: true
   cors-allowed-origins: http://localhost:3000,http://localhost:8080,http://1.224.162.188:8080
   cors-allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+
+
+# =============================================================================
+# 로깅 설정
+# =============================================================================
+logging:
+  level:
+    com.nexfron.identitymodulith.organization.presentation.com.identitymodulith.organization.presentation.OrganizationExceptionHandler: ERROR
+    org.springframework.web.servlet.resource: ERROR
 
 
