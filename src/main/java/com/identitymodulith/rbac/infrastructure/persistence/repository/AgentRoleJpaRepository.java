@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -148,4 +149,24 @@ public interface AgentRoleJpaRepository extends JpaRepository<AgentRoleJpaEntity
      *  쿼리: DELETE FROM agent_roles WHERE agent_id = ? AND role_id = ?
      */
     void deleteByAgentIdAndRoleId(String agentId, String roleId);
+
+    /**
+     * 상담사의 모든 권한 코드를 단일 3-JOIN 쿼리로 조회합니다. (N+1 완전 해결)
+     *
+     * agent_roles → role_permissions → permissions 를 한 번에 JOIN합니다.
+     *
+     * @param agentId  상담사 ID
+     * @param tenantId 테넌트 ID
+     * @return 권한 코드 목록 (중복 제거)
+     */
+    @Query("""
+        SELECT DISTINCT p.code
+        FROM AgentRoleJpaEntity ar
+        JOIN RolePermissionJpaEntity rp ON ar.roleId = rp.roleId
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        WHERE ar.agentId = :agentId
+          AND p.tenantId = :tenantId
+    """)
+    List<String> findPermissionCodesByAgentIdAndTenant(@Param("agentId") String agentId,
+                                                       @Param("tenantId") String tenantId);
 }

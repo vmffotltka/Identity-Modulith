@@ -6,7 +6,12 @@ import com.identitymodulith.organization.application.port.OrgUserView;
 import com.identitymodulith.common.domain.DataScopeLevel;
 import com.identitymodulith.organization.domain.model.DepartmentType;
 import com.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 import com.identitymodulith.organization.infrastructure.persistence.repository.JpaDepartmentRepository;
 import com.identitymodulith.organization.application.port.OrgUserPort;
 import com.identitymodulith.organization.OrganizationModuleApi;
@@ -59,7 +64,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      */
     @Override
     @Transactional
-    public DepartmentDto.Response createDepartment(
+    public DepartmentResponse createDepartment(
             String tenantId,
             UUID actorUserId,
             String name,
@@ -142,7 +147,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
 
         log.info("[ORG] 부서 생성 완료 - deptId={}", savedDept.getDeptId());
 
-        return DepartmentDto.Response.from(savedDept);
+        return DepartmentResponse.from(savedDept);
     }
 
     /**
@@ -158,7 +163,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      */
     @Override
     @Transactional
-    public DepartmentDto.Response updateDepartment(
+    public DepartmentResponse updateDepartment(
             String tenantId,
             UUID actorUserId,
             String deptId,
@@ -216,7 +221,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
 
         log.info("[ORG] 부서 수정 완료 - deptId={}, name={}", deptId, name);
 
-        return DepartmentDto.Response.from(departmentEntity);
+        return DepartmentResponse.from(departmentEntity);
     }
 
     /**
@@ -562,7 +567,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * @return 조직도 트리 (루트부터)
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> getDepartmentTree(String tenantId) {
+    public List<DepartmentResponse> getDepartmentTree(String tenantId) {
         List<DepartmentEntity> allDepts = departmentRepository.findAllByTenantId(tenantId);
         return buildTree(allDepts);
     }
@@ -576,7 +581,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * @return 권한 범위 내 조직도 트리
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> getDepartmentTreeWithinScope(
+    public List<DepartmentResponse> getDepartmentTreeWithinScope(
             String tenantId,
             UUID actorUserId) {
 
@@ -603,25 +608,25 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * 부서 리스트를 트리 구조 DTO로 변환
      * - ID-DTO 맵 구성 → 부모-자식 관계 연결 → 루트 추출
      */
-    private List<DepartmentDto.Response> buildTree(List<DepartmentEntity> depts) {
+    private List<DepartmentResponse> buildTree(List<DepartmentEntity> depts) {
         // ID -> DTO 맵 구성
-        Map<String, DepartmentDto.Response> dtoMap = depts.stream()
-                .map(DepartmentDto.Response::from)
+        Map<String, DepartmentResponse> dtoMap = depts.stream()
+                .map(DepartmentResponse::from)
                 .collect(Collectors.toMap(
-                        DepartmentDto.Response::getDeptId,
+                        DepartmentResponse::getDeptId,
                         dto -> dto
                 ));
 
-        List<DepartmentDto.Response> roots = new ArrayList<>();
+        List<DepartmentResponse> roots = new ArrayList<>();
 
         // 부모-자식 관계 구성
-        for (DepartmentDto.Response dto : dtoMap.values()) {
+        for (DepartmentResponse dto : dtoMap.values()) {
             String parentId = dto.getParentId();
 
             if (parentId == null) {
                 roots.add(dto);
             } else {
-                DepartmentDto.Response parent = dtoMap.get(parentId);
+                DepartmentResponse parent = dtoMap.get(parentId);
                 if (parent != null) {
                     parent.addChild(dto);
                 } else {
@@ -632,7 +637,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
 
         // orgPath 순서로 정렬
         roots.sort(Comparator.comparing(
-                DepartmentDto.Response::getOrgPath,
+                DepartmentResponse::getOrgPath,
                 Comparator.nullsFirst(String::compareTo)
         ));
 
@@ -643,7 +648,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * 키워드로 부서 검색 (부서명 기준)
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> searchDepartments(String tenantId, String keyword) {
+    public List<DepartmentResponse> searchDepartments(String tenantId, String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return List.of();
         }
@@ -652,8 +657,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 .findByTenantIdAndNameContainingIgnoreCase(tenantId, keyword);
 
         return departmentEntities.stream()
-                .map(DepartmentDto.Response::from)
-                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .map(DepartmentResponse::from)
+                .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
 
@@ -674,7 +679,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * @return 해당 부서 및 모든 하위 부서 목록 (orgPath 순서)
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> getSubtree(String tenantId, String deptId) {
+    public List<DepartmentResponse> getSubtree(String tenantId, String deptId) {
         log.debug("[ORG] 하위 부서 트리 조회 - deptId={}", deptId);
 
         // 부서 조회
@@ -691,8 +696,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         log.debug("[ORG] 하위 부서 트리 조회 완료 - deptId={}, 총 {}개", deptId, subtree.size());
 
         return subtree.stream()
-                .map(DepartmentDto.Response::from)
-                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .map(DepartmentResponse::from)
+                .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
 
@@ -700,7 +705,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * 특정 깊이(depth)의 부서 조회
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> getDepartmentsByDepth(String tenantId, int depth) {
+    public List<DepartmentResponse> getDepartmentsByDepth(String tenantId, int depth) {
         if (depth < 0) {
             throw new IllegalArgumentException("depth는 0 이상이어야 합니다.");
         }
@@ -709,8 +714,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 .findByTenantIdAndDepth(tenantId, depth);
 
         return departmentEntities.stream()
-                .map(DepartmentDto.Response::from)
-                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .map(DepartmentResponse::from)
+                .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
 
@@ -718,7 +723,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * 특정 타입의 부서 조회
      */
     @Transactional(readOnly = true)
-    public List<DepartmentDto.Response> getDepartmentsByType(String tenantId, DepartmentType type) {
+    public List<DepartmentResponse> getDepartmentsByType(String tenantId, DepartmentType type) {
         if (type == null) {
             return List.of();
         }
@@ -727,8 +732,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 .findByTenantIdAndType(tenantId, type);
 
         return departmentEntities.stream()
-                .map(DepartmentDto.Response::from)
-                .sorted(Comparator.comparing(DepartmentDto.Response::getOrgPath))
+                .map(DepartmentResponse::from)
+                .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
 
@@ -737,7 +742,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * - 전체/활성 직원 수, 직속/전체 하위 부서 수
      */
     @Transactional(readOnly = true)
-    public DepartmentDto.Statistics getDepartmentStatistics(String tenantId, String deptId) {
+    public DepartmentStatisticsResponse getDepartmentStatistics(String tenantId, String deptId) {
         // 부서 조회
         DepartmentEntity departmentEntity = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
@@ -761,7 +766,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
                 .filter(dept -> !dept.getDeptId().equals(deptId))
                 .count();
 
-        return DepartmentDto.Statistics.builder()
+        return DepartmentStatisticsResponse.builder()
                 .deptId(departmentEntity.getDeptId())
                 .name(departmentEntity.getName())
                 .type(departmentEntity.getType())
@@ -783,7 +788,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * @return 부서 소속 사용자 정보
      */
     @Transactional(readOnly = true)
-    public DepartmentDto.DepartmentMembers getDepartmentMembers(
+    public DepartmentMembersResponse getDepartmentMembers(
             String tenantId, 
             String deptId, 
             boolean includeSubDepartments) {
@@ -809,17 +814,17 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         }
 
         // 부서별 사용자 조회 (OrgUserPort 사용)
-        List<DepartmentDto.MemberInfo> members = new ArrayList<>();
+        List<DepartmentMembersResponse.MemberInfo> members = new ArrayList<>();
         long activeCount = 0;
         long retiredCount = 0;
 
         for (String targetDeptId : targetDeptIds) {
-            List<DepartmentDto.MemberInfo> deptMembers = 
+            List<DepartmentMembersResponse.MemberInfo> deptMembers = 
                 orgUserPort.getUsersByDepartment(tenantId, targetDeptId);
             
             members.addAll(deptMembers);
             
-            for (DepartmentDto.MemberInfo member : deptMembers) {
+            for (DepartmentMembersResponse.MemberInfo member : deptMembers) {
                 if ("ACTIVE".equals(member.status())) {
                     activeCount++;
                 } else if ("RETIRED".equals(member.status())) {
@@ -828,7 +833,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             }
         }
 
-        return DepartmentDto.DepartmentMembers.builder()
+        return DepartmentMembersResponse.builder()
                 .deptId(deptId)
                 .deptName(departmentEntity.getName())
                 .includeSubDepartments(includeSubDepartments)

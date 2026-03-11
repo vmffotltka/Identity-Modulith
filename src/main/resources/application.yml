@@ -89,6 +89,25 @@ spring:
 # SP Entity ID: http://localhost:8080/saml2/service-provider-metadata/keycloak
 # ACS URL: http://localhost:8080/login/saml2/sso/keycloak
 
+# =============================================================================
+# Keycloak 연동 설정
+# =============================================================================
+keycloak:
+  # SAML IdP 메타데이터 URL
+  saml:
+    idp-metadata-url: http://1.224.162.188:51446/realms/identity-system/protocol/saml/descriptor
+    sp-entity-id: http://localhost:8080/saml2/service-provider-metadata/keycloak
+    acs-url: http://localhost:8080/login/saml2/sso/keycloak
+
+  # Admin REST API (계정 활성화/비활성화용)
+  admin:
+    server-url: http://1.224.162.188:51446
+    realm: identity-system
+    client-id: admin-cli
+    # admin 계정 (운영 환경에서는 환경변수로 오버라이드: KEYCLOAK_ADMIN_USERNAME / KEYCLOAK_ADMIN_PASSWORD)
+    username: admin
+    password: admin
+
 
 # =============================================================================
 # 로깅 설정
@@ -99,5 +118,3 @@ logging:
     com.identitymodulith.common.security: INFO    # SAML 인증 흐름
     org.springframework.web.servlet.resource: ERROR  # 정적 리소스 404 노이즈 제거
     org.hibernate.SQL: WARN                       # SQL 로그 (show-sql 대신 세밀하게 제어)
-
-

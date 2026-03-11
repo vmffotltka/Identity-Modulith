@@ -1,7 +1,11 @@
 package com.identitymodulith.organization.application.port;
 
-import com.identitymodulith.organization.infrastructure.adapter.AgentOrgUserAdapter;
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,7 +17,7 @@ import java.util.UUID;
  * 추상화 계층을 제공합니다.
  *
  * <h2>구현체:</h2>
- * - {@link AgentOrgUserAdapter}
+ * - AgentOrgUserAdapter (infrastructure.adapter 패키지)
  *   User 모듈의 Agent 정보를 Organization 모듈이 필요로 하는 형태로 변환
  *
  * <h2>데이터 타입 표준:</h2>
@@ -111,5 +115,5 @@ public interface OrgUserPort {
      * 사용처:
      * - 부서별 사용자 목록 조회 API
      */
-    List<DepartmentDto.MemberInfo> getUsersByDepartment(String tenantId, String deptId);
+    List<DepartmentMembersResponse.MemberInfo> getUsersByDepartment(String tenantId, String deptId);
 }

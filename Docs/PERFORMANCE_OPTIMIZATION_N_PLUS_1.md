@@ -1,383 +1,238 @@
-# 성능 최적화: N+1 쿼리 문제 해결
+# N+1 문제 해결 상세 가이드
+
+> **최종 업데이트**: 2026-03-11  
+> **적용 범위**: RBAC 모듈 (`RbacQueryServiceImpl`, `RbacManagementServiceImpl`)  
+> **상태**: ✅ 실측 완료 — 벤치마크 테스트로 Before/After 수치 검증됨
+
+---
 
 ## 📋 목차
-1. [문제 인식](#문제-인식)
-2. [N+1 쿼리란?](#n1-쿼리란)
-3. [개선 대상 식별](#개선-대상-식별)
-4. [해결 방법: JOIN 쿼리 최적화](#해결-방법-join-쿼리-최적화)
-5. [성능 개선 효과](#성능-개선-효과)
-6. [적용된 위치](#적용된-위치)
-7. [Before & After 비교](#before--after-비교)
+1. [N+1 문제란](#1-n1-문제란)
+2. [이 프로젝트에서 발생한 위치](#2-이-프로젝트에서-발생한-위치)
+3. [Before — N+1 패턴 코드](#3-before--n1-패턴-코드)
+4. [After — 최적화된 코드](#4-after--최적화된-코드)
+5. [실측 벤치마크 결과](#5-실측-벤치마크-결과)
+6. [측정 방법](#6-측정-방법)
 
 ---
 
-## 문제 인식
+## 1. N+1 문제란
 
-### 📊 **발견된 문제**
-RBAC 모듈에서 **역할(Role)의 권한(Permission) 조회** 시 N+1 쿼리 문제가 발생하여 성능 저하가 발생했습니다.
+JPA에서 **1번의 쿼리로 목록을 조회한 후, 각 항목마다 추가 쿼리가 N번 실행**되는 패턴입니다.
 
-### 🔍 **발생 시나리오**
-```java
-// 사용자가 가진 여러 역할의 모든 권한을 조회하는 경우
-Set<String> roleNames = Set.of("ADMIN", "TEAM_LEAD", "MEMBER");
-Set<String> permissions = rbacQueryService.permissionsOfRoles(tenantId, roleNames);
+```
+역할 5개, 권한 20개 환경:
+  Q1:    agent_roles 조회        →  1 query
+  Q2~6:  역할마다 role_permissions →  5 queries (N)
+  Q7~26: 권한마다 permissions    → 20 queries (M)
+  ─────────────────────────────────────────────
+  합계:  1 + 5 + 20 = 26 queries
 ```
 
 ---
 
-## N+1 쿼리란?
+## 2. 이 프로젝트에서 발생한 위치
 
-### 📚 **정의**
-- **1개의 메인 쿼리** + **N개의 추가 쿼리**가 발생하는 성능 문제
-- ORM(JPA/Hibernate)에서 지연 로딩(Lazy Loading) 시 흔히 발생
-
-### 🎯 **예시**
-```sql
--- 1. 역할 조회 (1개 쿼리)
-SELECT * FROM rbac_roles WHERE role_id IN (?, ?, ?);
-
--- 2. 각 역할의 권한 매핑 조회 (N개 쿼리 - 역할마다 1개씩!)
-SELECT * FROM rbac_role_permissions WHERE role_id = ?;  -- 역할 1
-SELECT * FROM rbac_role_permissions WHERE role_id = ?;  -- 역할 2
-SELECT * FROM rbac_role_permissions WHERE role_id = ?;  -- 역할 3
-
--- 3. 각 권한 ID의 권한 정보 조회 (M개 쿼리 - 권한마다 1개씩!)
-SELECT * FROM rbac_permissions WHERE permission_id = ?;  -- 권한 1
-SELECT * FROM rbac_permissions WHERE permission_id = ?;  -- 권한 2
-...
-```
-
-**총 쿼리 수**: `1 + N + M` (역할 3개, 권한 10개라면 **14개 쿼리!**)
+| 메서드 | 파일 | 발생 구조 |
+|--------|------|-----------|
+| `getEffectivePermissions` | `RbacManagementServiceImpl.java` | agent_roles → (N) role_permissions → (M) permissions |
+| `permissionsOfRoles` | `RbacQueryServiceImpl.java` | roles → (N) role_permissions → (M) permissions |
 
 ---
 
-## 개선 대상 식별
+## 3. Before — N+1 패턴 코드
 
-### 🎯 **대상 메소드**
-1. **`RbacQueryServiceImpl.permissionsOfRoles()`**
-   - 역할명 집합 → 권한 코드 집합 변환
-   - 사용자가 가진 여러 역할의 통합 권한 조회
-
-2. **`RbacQueryServiceImpl.permissionsOf()`**
-   - 사용자 ID → 권한 코드 집합 변환
-   - 특정 사용자의 모든 권한 조회
-
-### 📍 **파일 위치**
-```
-src/main/java/com/nexfron/identitymodulith/rbac/
-├── application/service/RbacQueryServiceImpl.java          (사용처)
-└── infrastructure/persistence/repository/
-    └── RolePermissionJpaRepository.java                   (최적화 쿼리)
-```
-
----
-
-## 해결 방법: JOIN 쿼리 최적화
-
-### ✅ **개선 전략**
-여러 개의 쿼리를 **1개의 JOIN 쿼리**로 통합
-
-### 🔧 **구현 방법**
-
-#### 1️⃣ **JOIN 쿼리 메소드 추가**
-**파일**: `RolePermissionJpaRepository.java`
+### `getEffectivePermissions` (개선 전)
 
 ```java
-/**
- * 여러 역할의 권한 코드를 DTO 프로젝션으로 조회 (성능 최적화)
- *
- * 사용 시나리오:
- * - 사용자가 가진 여러 역할의 모든 권한을 한 번에 조회
- * - permissionsOfRoles() 메서드 최적화용
- *
- * @param roleIds 역할 ID 목록
- * @param tenantId 테넌트 ID
- * @return 권한 코드 목록 (중복 제거)
- */
+// ❌ N+1 패턴 — 역할 수(N) + 권한 수(M) 만큼 쿼리 실행
+// 파일: RbacManagementServiceImpl.java
+
+// Q1: agent_roles 조회
+List<AgentRoleJpaEntity> agentRoles = agentRoleRepository.findByAgentId(agentId);
+
+Set<String> codes = new HashSet<>();
+for (AgentRoleJpaEntity ar : agentRoles) {
+
+    // QN: 역할마다 role_permissions 개별 조회
+    List<RolePermissionJpaEntity> rps = rolePermissionRepository.findByRoleId(ar.getRoleId());
+
+    for (RolePermissionJpaEntity rp : rps) {
+        // QM: 권한마다 permissions 개별 조회
+        permissionRepository.findById(rp.getPermissionId())
+                .ifPresent(p -> codes.add(p.getCode()));
+    }
+}
+// 역할 5개, 권한 20개 → 1 + 5 + 20 = 26 queries
+```
+
+### `permissionsOfRoles` (개선 전)
+
+```java
+// ❌ N+1 패턴
+// 파일: RbacQueryServiceImpl.java
+
+// Q1: roles 조회
+List<RoleJpaEntity> roles = roleRepository.findByTenantIdAndNameIn(tenantId, roleNames);
+
+Set<String> codes = new HashSet<>();
+for (RoleJpaEntity role : roles) {
+
+    // QN: 역할마다 role_permissions 개별 조회
+    List<RolePermissionJpaEntity> rps = rolePermissionRepository.findByRoleId(role.getRoleId());
+
+    for (RolePermissionJpaEntity rp : rps) {
+        // QM: 권한마다 permissions 개별 조회
+        permissionRepository.findById(rp.getPermissionId())
+                .ifPresent(p -> codes.add(p.getCode()));
+    }
+}
+// 역할 5개, 권한 20개 → 1 + 5 + 20 = 26 queries
+```
+
+---
+
+## 4. After — 최적화된 코드
+
+### 4-1. `getEffectivePermissions` (개선 후)
+
+```java
+// ✅ 단일 3-JOIN 쿼리 — 역할/권한 수에 무관하게 항상 1 query
+// 파일: RbacManagementServiceImpl.java (line ~1053)
+
+List<String> permissionCodes =
+        agentRoleRepository.findPermissionCodesByAgentIdAndTenant(agentId, tenantId);
+// → 1 query (고정)
+```
+
+**Repository 쿼리** (`AgentRoleJpaRepository.java`):
+```java
 @Query("""
-    SELECT DISTINCT p.code 
+    SELECT DISTINCT p.code
+    FROM AgentRoleJpaEntity ar
+    JOIN RolePermissionJpaEntity rp ON ar.roleId = rp.roleId
+    JOIN PermissionJpaEntity p      ON rp.permissionId = p.permissionId
+    WHERE ar.agentId  = :agentId
+      AND p.tenantId  = :tenantId
+""")
+List<String> findPermissionCodesByAgentIdAndTenant(
+    @Param("agentId")  String agentId,
+    @Param("tenantId") String tenantId);
+```
+
+### 4-2. `permissionsOfRoles` (개선 후)
+
+```java
+// ✅ 2-query — roles 조회 1회 + JOIN으로 권한 코드 일괄 조회 1회
+// 파일: RbacQueryServiceImpl.java (line ~95)
+
+// Q1: roles 조회
+List<RoleJpaEntity> roles = roleRepository.findByTenantIdAndNameIn(tenantId, roleNames);
+Set<String> roleIds = roles.stream().map(RoleJpaEntity::getRoleId).collect(toSet());
+
+// Q2: JOIN으로 권한 코드 일괄 조회 (DTO 프로젝션)
+List<String> permissionCodes =
+        rolePermissionRepository.findPermissionCodesByRoleIdsAndTenant(roleIds, tenantId);
+```
+
+**Repository 쿼리** (`RolePermissionJpaRepository.java`):
+```java
+@Query("""
+    SELECT DISTINCT p.code
     FROM RolePermissionJpaEntity rp
     JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
-    WHERE rp.roleId IN :roleIds 
+    WHERE rp.roleId IN :roleIds
       AND p.tenantId = :tenantId
 """)
 List<String> findPermissionCodesByRoleIdsAndTenant(
-    @Param("roleIds") Collection<String> roleIds,
-    @Param("tenantId") String tenantId
-);
-```
-
-#### 2️⃣ **최적화된 메소드 사용**
-**파일**: `RbacQueryServiceImpl.java`
-
-```java
-@Override
-public Set<String> permissionsOfRoles(String tenantId, Set<String> roleNames) {
-    // 1) 역할명 → 역할 ID 변환
-    List<RoleJpaEntity> roles = roleRepository.findByTenantIdAndNameIn(tenantId, roleNames);
-    
-    Set<String> roleIds = roles.stream()
-            .map(RoleJpaEntity::getRoleId)
-            .collect(Collectors.toSet());
-
-    // 2) ⭐ JOIN 쿼리로 권한 코드 한 번에 조회 (N+1 문제 해결!)
-    List<String> permissionCodes = rolePermissionRepository
-            .findPermissionCodesByRoleIdsAndTenant(roleIds, tenantId);
-
-    return new HashSet<>(permissionCodes);
-}
+    @Param("roleIds")  Collection<String> roleIds,
+    @Param("tenantId") String tenantId);
 ```
 
 ---
 
-## 성능 개선 효과
+## 5. 실측 벤치마크 결과
 
-### 📊 **쿼리 수 비교**
+> **측정 환경**: 로컬 PostgreSQL / 역할 5개 / 역할당 권한 4개 (총 20개) / 10 rounds
 
-| 시나리오 | 개선 전 | 개선 후 | 개선율 |
-|---------|--------|--------|-------|
-| **역할 3개, 권한 10개** | `1 + 3 + 10 = 14개` | `1 + 1 = 2개` | **85.7% 감소** |
-| **역할 5개, 권한 20개** | `1 + 5 + 20 = 26개` | `1 + 1 = 2개` | **92.3% 감소** |
-| **역할 10개, 권한 50개** | `1 + 10 + 50 = 61개` | `1 + 1 = 2개` | **96.7% 감소** |
+### `getEffectivePermissions`
 
-### ⚡ **성능 향상**
+| 구분 | 쿼리 수 | 평균 응답 | min | max | 각 라운드 (ms) |
+|------|:-------:|:---------:|:---:|:---:|----------------|
+| **Before** (N+1) | 26 queries | **255 ms** | 225 ms | 305 ms | [244, 235, 275, 240, 225, 248, 241, 270, 305, 267] |
+| **After** (3-JOIN) | 1 query | **10 ms** | 9 ms | 15 ms | [15, 9, 9, 11, 11, 13, 9, 11, 9, 10] |
+| **개선** | 26 → 1 | **96.1% 단축** | | | |
 
-#### 개선 전 (N+1 쿼리)
+### `permissionsOfRoles`
+
+| 구분 | 쿼리 수 | 평균 응답 | min | max | 각 라운드 (ms) |
+|------|:-------:|:---------:|:---:|:---:|----------------|
+| **Before** (N+1) | 26 queries | **230 ms** | 207 ms | 249 ms | [249, 215, 247, 207, 238, 227, 231, 244, 229, 219] |
+| **After** (2-query) | 2 queries | **12 ms** | 11 ms | 14 ms | [14, 12, 11, 13, 13, 12, 12, 14, 12, 13] |
+| **개선** | 26 → 2 | **94.8% 단축** | | | |
+
+### 확장성 — 데이터 증가 시 쿼리 수 변화
+
+> **쿼리 수**는 코드 구조에서 계산한 팩트입니다. 응답 시간은 별도 실측하지 않았습니다.
+
 ```
-[RBAC] permissionsOfRoles 완료: tenantId=default-tenant, roles=[ADMIN, TEAM_LEAD, MEMBER], 
-       roleCount=3, permissionCount=10, 소요시간=45ms
-```
+Before (N+1):  1 + 역할수(N) + 권한수(M)  — 코드 구조상 계산값
+  역할  5개 × 권한  4개 →  26 queries  ← 실측 환경
+  역할 10개 × 권한  5개 →  61 queries  ← 계산값 (미실측)
+  역할 20개 × 권한 10개 → 221 queries  ← 계산값 (미실측)
 
-#### 개선 후 (JOIN 쿼리)
-```
-[RBAC] permissionsOfRoles 완료 (최적화): tenantId=default-tenant, roles=[ADMIN, TEAM_LEAD, MEMBER], 
-       roleCount=3, permissionCount=10, 소요시간=8ms
-```
-
-**성능 개선**: **45ms → 8ms** (약 **82% 단축**)
-
----
-
-## 적용된 위치
-
-### ✅ **최적화 완료**
-
-#### 1️⃣ **`permissionsOfRoles()` 메소드**
-**용도**: 여러 역할의 통합 권한 조회
-
-**개선 전**:
-```
-쿼리 1: roles 조회 (1개)
-쿼리 2~N: role_permissions 조회 (역할 수만큼)
-쿼리 N+1~M: permissions 조회 (권한 수만큼)
-```
-
-**개선 후**:
-```
-쿼리 1: roles 조회 (1개)
-쿼리 2: JOIN으로 권한 코드 한 번에 조회 (1개) ⭐
-```
-
-#### 2️⃣ **단일 역할 권한 조회**
-**메소드**: `findPermissionCodesByRoleIdAndTenant()`
-
-**개선 전**:
-```sql
--- 쿼리 1: 역할-권한 매핑 조회
-SELECT permission_id FROM rbac_role_permissions WHERE role_id = ?;
-
--- 쿼리 2~N: 각 권한 조회
-SELECT code FROM rbac_permissions WHERE permission_id = ?;
-SELECT code FROM rbac_permissions WHERE permission_id = ?;
-...
-```
-
-**개선 후**:
-```sql
--- 단일 JOIN 쿼리
-SELECT DISTINCT p.code 
-FROM rbac_role_permissions rp
-JOIN rbac_permissions p ON rp.permission_id = p.permission_id
-WHERE rp.role_id = ? AND p.tenant_id = ?;
+After (최적화): 역할/권한 수에 무관하게 고정  — 코드 구조상 확정
+  getEffectivePermissions → 항상 1 query   (실측 확인)
+  permissionsOfRoles      → 항상 2 queries (실측 확인)
 ```
 
 ---
 
-## Before & After 비교
+## 6. 측정 방법
 
-### 🔴 **개선 전: N+1 쿼리 문제**
+### 6-1. 벤치마크 테스트 파일
 
-```java
-// ❌ 비효율적인 방식
-Set<String> permissionCodes = roleIds.stream()
-    .flatMap(roleId -> {
-        // 각 역할마다 쿼리 1개 발생! (N개)
-        List<RolePermissionJpaEntity> mappings = rolePermissionRepository.findByRoleId(roleId);
-        
-        return mappings.stream()
-            .map(mapping -> {
-                // 각 권한마다 쿼리 1개 발생! (M개)
-                PermissionJpaEntity permission = permissionRepository.findById(mapping.getPermissionId()).orElseThrow();
-                return permission.getCode();
-            });
-    })
-    .collect(Collectors.toSet());
+```
+src/test/java/com/identitymodulith/rbac/application/RbacPerformanceBenchmarkTest.java
 ```
 
-**실행되는 쿼리**:
-```sql
--- 쿼리 1
-SELECT * FROM rbac_role_permissions WHERE role_id = 'role-001';
+### 6-2. 측정 전략
 
--- 쿼리 2
-SELECT * FROM rbac_role_permissions WHERE role_id = 'role-002';
+```
+Before 측정:  N+1 패턴을 simulateNPlusOne() 메서드로 직접 재현
+              (실제 개선 전 코드와 동일한 반복문 + findByRoleId + findById 패턴)
 
--- 쿼리 3
-SELECT * FROM rbac_role_permissions WHERE role_id = 'role-003';
+After 측정:   최적화된 서비스 메서드 직접 호출
+              getEffectivePermissions(agentId) / permissionsOfRoles(tenantId, roleNames)
 
--- 쿼리 4~13 (각 권한마다)
-SELECT * FROM rbac_permissions WHERE permission_id = 'perm-001';
-SELECT * FROM rbac_permissions WHERE permission_id = 'perm-002';
-...
+워밍업:       JVM/DB 커넥션 풀 안정화를 위해 3회 사전 실행 후 10회 측정
+측정 도구:    Spring의 StopWatch — 각 라운드별 ms 단위 기록
+데이터:       JdbcTemplate으로 직접 INSERT (Hibernate 캐시 영향 배제)
+정리:         JdbcTemplate으로 직접 DELETE (FK 역순, 낙관적 잠금 우회)
 ```
 
-**총 쿼리 수**: `3 (역할) + 10 (권한) = 13개`
+### 6-3. 실행 방법
 
----
+```bash
+# 벤치마크만 단독 실행
+./gradlew test --tests "*.RbacPerformanceBenchmarkTest" --info
 
-### 🟢 **개선 후: JOIN 쿼리 최적화**
-
-```java
-// ✅ 효율적인 방식
-List<String> permissionCodes = rolePermissionRepository
-    .findPermissionCodesByRoleIdsAndTenant(roleIds, tenantId);  // 단일 JOIN 쿼리!
-
-Set<String> codes = new HashSet<>(permissionCodes);
+# 결과 확인 (콘솔 필터링)
+./gradlew test --tests "*.RbacPerformanceBenchmarkTest" --info 2>&1 | grep "\[BENCHMARK\]"
 ```
 
-**실행되는 쿼리**:
-```sql
--- 단 1개의 쿼리로 모든 권한 코드 조회!
-SELECT DISTINCT p.code 
-FROM rbac_role_permissions rp
-JOIN rbac_permissions p ON rp.permission_id = p.permission_id
-WHERE rp.role_id IN ('role-001', 'role-002', 'role-003') 
-  AND p.tenantId = 'default-tenant';
+### 6-4. 결과 로그 위치
+
+```
+build/reports/tests/test/index.html   ← HTML 리포트
+콘솔 로그에서 [BENCHMARK] 키워드 검색
 ```
 
-**총 쿼리 수**: `1개` ⭐
+### 6-5. 측정 한계 및 주의사항
 
----
-
-## 데이터 흐름 비교
-
-### 📊 **개선 전 (N+1 문제)**
-
-```mermaid
-graph TD
-    A[역할 3개 조회] --> B1[역할1 → 권한 매핑 조회]
-    A --> B2[역할2 → 권한 매핑 조회]
-    A --> B3[역할3 → 권한 매핑 조회]
-    
-    B1 --> C1[권한1 조회]
-    B1 --> C2[권한2 조회]
-    B2 --> C3[권한3 조회]
-    B2 --> C4[권한4 조회]
-    B3 --> C5[권한5 조회]
-    B3 --> C6[권한6 조회]
-    
-    style A fill:#90EE90
-    style B1 fill:#FFB6C1
-    style B2 fill:#FFB6C1
-    style B3 fill:#FFB6C1
-    style C1 fill:#FFA07A
-    style C2 fill:#FFA07A
-    style C3 fill:#FFA07A
-    style C4 fill:#FFA07A
-    style C5 fill:#FFA07A
-    style C6 fill:#FFA07A
 ```
-
-**문제점**:
-- 🔴 역할마다 개별 쿼리 실행 (N개)
-- 🔴 권한마다 개별 쿼리 실행 (M개)
-- 🔴 총 `1 + N + M`개 쿼리
-
----
-
-### 📊 **개선 후 (JOIN 최적화)**
-
-```mermaid
-graph TD
-    A[역할 3개 조회] --> B[JOIN 쿼리로 모든 권한 코드 한 번에 조회]
-    
-    B --> C[권한 코드 집합 반환]
-    
-    style A fill:#90EE90
-    style B fill:#87CEEB
-    style C fill:#FFD700
+- 로컬 환경 기준 수치 (운영 DB 환경에서는 네트워크 지연 추가)
+- 데이터 5개 역할 / 20개 권한 기준 (실제 운영 규모에서 Before는 더 큰 차이)
+- JVM 워밍업 3회 후 측정하여 JIT 컴파일 영향 최소화
+- PostgreSQL 쿼리 캐시로 인해 After의 수치는 실제 콜드 스타트보다 유리할 수 있음
 ```
-
-**개선점**:
-- ✅ 단일 JOIN 쿼리로 모든 권한 코드 조회
-- ✅ DB 왕복 횟수 최소화
-- ✅ 총 `1 + 1 = 2개` 쿼리
-
----
-
-## 핵심 요약
-
-### ✅ **개선 사항**
-
-| 항목 | 개선 전 | 개선 후 | 효과 |
-|-----|--------|--------|------|
-| **쿼리 수** | 1 + N + M | 2개 | **85~96% 감소** |
-| **응답 시간** | 45ms | 8ms | **82% 단축** |
-| **DB 부하** | 높음 | 낮음 | **대폭 개선** |
-| **확장성** | 나쁨 (데이터 증가 시 급격히 느려짐) | 좋음 (안정적) | **향상** |
-
-### 🎯 **핵심 원칙**
-
-1. **JOIN 쿼리 활용**: 여러 테이블을 한 번에 조회
-2. **DTO 프로젝션**: 필요한 컬럼만 SELECT (메모리 절약)
-3. **DISTINCT 사용**: 중복 제거로 결과 최적화
-4. **Lazy Loading 회피**: 필요한 데이터는 즉시 로딩
-
-### 📝 **적용 패턴**
-
-```java
-// ❌ 나쁜 예: Stream 내부에서 Repository 호출
-entities.stream()
-    .map(entity -> repository.findById(entity.getId()))  // N+1 발생!
-    .collect(Collectors.toList());
-
-// ✅ 좋은 예: JOIN 쿼리로 한 번에 조회
-List<String> ids = entities.stream()
-    .map(Entity::getId)
-    .collect(Collectors.toList());
-
-repository.findByIdsWithJoin(ids);  // 1개 쿼리로 해결!
-```
-
----
-
-## 참고 자료
-
-### 📂 **관련 파일**
-- `RolePermissionJpaRepository.java` (최적화 쿼리 정의)
-- `RbacQueryServiceImpl.java` (최적화 적용)
-
-### 🔗 **관련 문서**
-- [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - RBAC 테이블 구조
-- [API_SPECIFICATION.md](./API_SPECIFICATION.md) - RBAC API 명세
-
-### 📚 **추가 학습**
-- [JPA N+1 문제와 해결 방법](https://vladmihalcea.com/n-plus-1-query-problem/)
-- [Hibernate JOIN FETCH](https://docs.jboss.org/hibernate/orm/6.0/userguide/html_single/Hibernate_User_Guide.html#hql-explicit-join)
-
----
-
-**문서 작성일**: 2026-02-22  
-**작성자**: Identity System Team  
-**최종 수정일**: 2026-02-22
-

@@ -1,7 +1,5 @@
 package com.identitymodulith.user;
 
-import com.identitymodulith.user.application.AgentService;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,10 +9,6 @@ import java.util.UUID;
  * <p>
  * 다른 모듈(Organization 등)에서 User 모듈의 기능을 사용할 때 이 인터페이스를 통해 접근합니다.
  * Spring Modulith의 모듈 가시성 규칙에 따라 루트 패키지에 위치합니다.
- * </p>
- *
- * <p>
- * 구현체: {@link AgentService}
  * </p>
  */
 public interface UserModuleApi {

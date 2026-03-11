@@ -276,24 +276,6 @@ public class AgentService implements
         // JPA dirty checking으로 자동 저장됨
     }
 
-    /**
-     * 퇴사 예정인 상담사들을 자동으로 삭제합니다.
-     * 스케줄러에서 정기적으로 호출되는 배치 작업입니다.
-     * scheduledDeleteAt이 현재 시간 이전인 RETIRED 상담사의 개인정보를 익명화합니다.
-     *
-     * @return 처리된 상담사 수
-     */
-    public int deleteScheduledRetiredAgents() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Agent> agents = DatabaseRetrySupplier.withRetry(
-                () -> agentRepository.findRetiredWithScheduledDelete(now)
-        );
-
-        agents.forEach(Agent::anonymizePersonalInfo);
-        agents.forEach(this::saveAgent);
-
-        return agents.size();
-    }
 
     /**
      * 특정 상담사의 상세 정보를 조회합니다.

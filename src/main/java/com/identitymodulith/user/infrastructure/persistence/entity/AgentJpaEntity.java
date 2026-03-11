@@ -79,11 +79,6 @@ public class AgentJpaEntity {
     @Column(name = "version")
     private Integer version;
 
-    // ========== 임시: 역할 JSON (agent_roles 테이블로 대체 예정) ==========
-    // V1_0_15에서 제거 예정이지만 기존 코드 호환성을 위해 유지
-    @Column(name = "role_id", length = 50)
-    @Deprecated
-    private String roleId;
 
     @PrePersist
     public void prePersist() {

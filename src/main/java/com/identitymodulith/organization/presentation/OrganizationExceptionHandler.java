@@ -1,29 +1,21 @@
 package com.identitymodulith.organization.presentation;
 
 import com.identitymodulith.ApiErrorResponse;
-import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.organization.application.exception.OrganizationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * Organization 모듈 전역 예외 처리
+ * Organization 모듈 전용 예외 처리
  *
- * <h3>로그 레벨 규칙:</h3>
- * <ul>
- *   <li>WARN  - 403/409 권한 부족·충돌 / 비즈니스 규칙 위반</li>
- *   <li>INFO  - 400/404 클라이언트 실수</li>
- *   <li>ERROR - 500 내부 오류 / 예측 불가 예외</li>
- * </ul>
+ * <p>공통 예외(UnauthorizedException, MethodArgumentNotValidException, fallback 등)는
+ * {@link com.identitymodulith.common.exception.CommonExceptionHandler}에서 처리합니다.</p>
  *
- * <h3>응답 형식:</h3>
- * 공통 {@link ApiErrorResponse} 사용 — {timestamp, status, code, message}
+ * <p>DB 무결성 제약 위반은 Organization 전용 부서코드 중복 처리가 있어 여기서 처리합니다.</p>
  */
 @RestControllerAdvice(basePackages = "com.identitymodulith.organization")
 @Slf4j
@@ -48,16 +40,7 @@ public class OrganizationExceptionHandler {
                 .body(ApiErrorResponse.of(status.value(), errorCode.getCode(), e.getMessage()));
     }
 
-    // ── 인증 예외 (organization 컨트롤러에서도 발생 가능) ─────────────────────
-
-    @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<ApiErrorResponse> handleUnauthorizedException(UnauthorizedException e) {
-        log.warn("[Org][Auth] 미인증 요청: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiErrorResponse.of(401, "UNAUTHORIZED", e.getMessage()));
-    }
-
-    // ── DB 무결성 제약 위반 ──────────────────────────────────────────────────
+    // ── DB 무결성 제약 위반 (부서 코드 중복 특수 처리) ──────────────────────
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolationException(
@@ -72,32 +55,7 @@ public class OrganizationExceptionHandler {
         }
 
         log.warn("[Org][DB] 무결성 제약 위반: {}", message);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(400, "INVALID_REQUEST", "데이터 무결성 제약 조건을 위반했습니다"));
-    }
-
-    // ── Bean Validation ──────────────────────────────────────────────────────
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValidException(
-            MethodArgumentNotValidException e) {
-        FieldError fieldError = e.getBindingResult().getFieldError();
-        String message = fieldError != null ? fieldError.getDefaultMessage() : "입력값이 올바르지 않습니다";
-        log.warn("[Org][Validation] {}", message);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(400, "INVALID_INPUT_VALUE", message));
-    }
-
-    // ── 최종 fallback ────────────────────────────────────────────────────────
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleGeneralException(Exception e) {
-        // 정적 리소스 404는 노이즈 방지
-        if (e instanceof org.springframework.web.servlet.resource.NoResourceFoundException) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
-        log.error("[Org][Unexpected] {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of(500, "INTERNAL_ERROR", "서버 오류가 발생했습니다"));
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of(409, "DATA_INTEGRITY_VIOLATION", "데이터 무결성 제약 조건을 위반했습니다"));
     }
 }

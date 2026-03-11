@@ -4,7 +4,12 @@ import com.identitymodulith.organization.application.exception.OrganizationExcep
 import com.identitymodulith.organization.application.exception.OrganizationException.OrganizationErrorCode;
 import com.identitymodulith.organization.domain.model.DepartmentType;
 import com.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -120,7 +125,7 @@ class DepartmentEntityServiceTest {
     @Test
     @DisplayName("Department to DTO 변환")
     void testDepartmentToDto() {
-        DepartmentDto.Response dto = DepartmentDto.Response.from(rootDept);
+        DepartmentResponse dto = DepartmentResponse.from(rootDept);
 
         assertNotNull(dto);
         assertEquals("총무부", dto.getName());

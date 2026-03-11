@@ -1,6 +1,11 @@
 package com.identitymodulith.organization.infrastructure.adapter;
 
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 import com.identitymodulith.organization.application.port.OrgUserPort;
 import com.identitymodulith.organization.application.port.OrgUserView;
 import com.identitymodulith.common.domain.DataScopeLevel;
@@ -171,10 +176,10 @@ public class AgentOrgUserAdapter implements OrgUserPort {
      * @return 부서 소속 사용자 정보 목록
      */
     @Override
-    public List<DepartmentDto.MemberInfo> getUsersByDepartment(String tenantId, String deptId) {
+    public List<DepartmentMembersResponse.MemberInfo> getUsersByDepartment(String tenantId, String deptId) {
         // UserModuleApi를 통해 해당 부서의 모든 상담사 조회
         return userModuleApi.findActiveAgentsByOrganizationId(tenantId, deptId).stream()
-                .map(agent -> new DepartmentDto.MemberInfo(
+                .map(agent -> new DepartmentMembersResponse.MemberInfo(
                         agent.getId().toString(),
                         agent.getLoginId(),
                         agent.getName(),
@@ -200,24 +205,12 @@ public class AgentOrgUserAdapter implements OrgUserPort {
         String departmentPath = null;
 
         if (deptId != null && !deptId.isEmpty()) {
-            departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId())
-                .ifPresent(dept -> {
-                    // departmentName은 직접 설정
-                    // departmentPath는 orgPath에서 각 부서 이름을 조회하여 구성
-                });
-
-            // departmentName 설정
-            departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId())
-                .ifPresent(dept -> {});
-
             java.util.Optional<DepartmentEntity> deptOpt =
                 departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId());
 
             if (deptOpt.isPresent()) {
                 DepartmentEntity dept = deptOpt.get();
                 departmentName = dept.getName();
-
-                // departmentPath 구성: orgPath를 따라 올라가며 이름 수집
                 departmentPath = buildDepartmentPath(dept, info.getTenantId());
             }
         }

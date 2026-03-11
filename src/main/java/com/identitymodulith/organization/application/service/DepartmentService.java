@@ -1,9 +1,15 @@
 package com.identitymodulith.organization.application.service;
 
 import com.identitymodulith.organization.domain.model.DepartmentType;
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -44,7 +50,7 @@ public interface DepartmentService {
      * @param parentId 상위 부서 ID (null이면 루트 부서)
      * @return 생성된 부서 정보
      */
-    DepartmentDto.Response createDepartment(
+    DepartmentResponse createDepartment(
             String tenantId,
             UUID actorUserId,
             String name,
@@ -63,7 +69,7 @@ public interface DepartmentService {
      * @param type 새 부서 타입 (null이면 변경 안 함)
      * @return 수정된 부서 정보
      */
-    DepartmentDto.Response updateDepartment(
+    DepartmentResponse updateDepartment(
             String tenantId,
             UUID actorUserId,
             String deptId,
@@ -149,7 +155,7 @@ public interface DepartmentService {
      * @param deptId   기준 부서 ID
      * @return 해당 부서 및 하위 부서 목록
      */
-    List<DepartmentDto.Response> getSubtree(String tenantId, String deptId);
+    List<DepartmentResponse> getSubtree(String tenantId, String deptId);
 
     /**
      * 전체 조직도 조회 (트리 구조)
@@ -157,7 +163,7 @@ public interface DepartmentService {
      * @param tenantId 테넌트 ID
      * @return 전체 부서 목록 (org_path 정렬)
      */
-    List<DepartmentDto.Response> getDepartmentTree(String tenantId);
+    List<DepartmentResponse> getDepartmentTree(String tenantId);
 
     /**
      * 스코프 기반 조직도 조회
@@ -167,7 +173,7 @@ public interface DepartmentService {
      * @param userId 사용자 ID
      * @return 접근 가능한 부서 목록
      */
-    List<DepartmentDto.Response> getDepartmentTreeWithinScope(String tenantId, UUID userId);
+    List<DepartmentResponse> getDepartmentTreeWithinScope(String tenantId, UUID userId);
 
     /**
      * 부서 검색 (키워드 기반)
@@ -176,7 +182,7 @@ public interface DepartmentService {
      * @param keyword 검색 키워드 (부서명 포함)
      * @return 검색된 부서 목록
      */
-    List<DepartmentDto.Response> searchDepartments(String tenantId, String keyword);
+    List<DepartmentResponse> searchDepartments(String tenantId, String keyword);
 
     /**
      * 특정 깊이(depth)의 부서 조회
@@ -185,7 +191,7 @@ public interface DepartmentService {
      * @param depth 트리 깊이 (0: 루트, 1: 1단계 하위, ...)
      * @return 해당 깊이의 부서 목록
      */
-    List<DepartmentDto.Response> getDepartmentsByDepth(String tenantId, int depth);
+    List<DepartmentResponse> getDepartmentsByDepth(String tenantId, int depth);
 
     /**
      * 특정 타입의 부서 조회
@@ -201,7 +207,7 @@ public interface DepartmentService {
      * @param type 부서 타입 (COMPANY, DIVISION, TEAM, GROUP, CUSTOM)
      * @return 해당 타입의 부서 목록
      */
-    List<DepartmentDto.Response> getDepartmentsByType(String tenantId, DepartmentType type);
+    List<DepartmentResponse> getDepartmentsByType(String tenantId, DepartmentType type);
 
     // ============================================================
     // 부서 통계 및 구성원
@@ -215,7 +221,7 @@ public interface DepartmentService {
      * @param deptId 부서 ID
      * @return 부서 통계 정보
      */
-    DepartmentDto.Statistics getDepartmentStatistics(String tenantId, String deptId);
+    DepartmentStatisticsResponse getDepartmentStatistics(String tenantId, String deptId);
 
     /**
      * 부서 구성원 조회
@@ -225,7 +231,7 @@ public interface DepartmentService {
      * @param includeSubDepts 하위 부서 포함 여부
      * @return 부서 구성원 목록
      */
-    DepartmentDto.DepartmentMembers getDepartmentMembers(
+    DepartmentMembersResponse getDepartmentMembers(
             String tenantId,
             String deptId,
             boolean includeSubDepts);
@@ -248,5 +254,5 @@ public interface DepartmentService {
      * @param userId 사용자 ID
      * @return 접근 가능한 부서 ID 집합
      */
-    java.util.Set<String> getAccessibleDepartmentIds(String tenantId, UUID userId);
+    Set<String> getAccessibleDepartmentIds(String tenantId, UUID userId);
 }

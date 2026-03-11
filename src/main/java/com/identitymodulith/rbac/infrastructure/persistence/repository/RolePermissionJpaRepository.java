@@ -201,6 +201,27 @@ public interface RolePermissionJpaRepository extends JpaRepository<RolePermissio
     List<String> findPermissionCodesByRoleIdsAndTenant(@Param("roleIds") Collection<String> roleIds,
                                                         @Param("tenantId") String tenantId);
 
+    /**
+     * 특정 권한 코드를 가진 역할명을 단일 JOIN 쿼리로 조회합니다. (N+1 해결)
+     *
+     * permission_code → role_permissions → roles 를 한 번에 JOIN합니다.
+     *
+     * @param permissionCode 권한 코드 (예: "user:read")
+     * @param tenantId       테넌트 ID
+     * @return 해당 권한을 가진 역할명 목록 (중복 제거)
+     */
+    @Query("""
+        SELECT DISTINCT r.name
+        FROM RolePermissionJpaEntity rp
+        JOIN PermissionJpaEntity p ON rp.permissionId = p.permissionId
+        JOIN RoleJpaEntity r ON rp.roleId = r.roleId
+        WHERE p.code = :permissionCode
+          AND p.tenantId = :tenantId
+          AND r.tenantId = :tenantId
+    """)
+    List<String> findRoleNamesByPermissionCodeAndTenant(@Param("permissionCode") String permissionCode,
+                                                        @Param("tenantId") String tenantId);
+
     void deleteByRoleId(String roleId);
 
     void deleteByPermissionId(String permissionId);

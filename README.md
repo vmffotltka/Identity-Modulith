@@ -828,7 +828,7 @@ if (!hasPermission(userId, "user:delete")) {
 ## 📚 참고 문서
 
 ### 핵심 문서
-- **[CHANGELOG.md](./CHANGELOG.md)**: 버전별 변경 이력 및 주요 개선 사항
+- **[CHANGELOG.md](Docs/CHANGELOG.md)**: 버전별 변경 이력 및 주요 개선 사항
 - **[DB_COMPREHENSIVE_GUIDE.md](./DB_COMPREHENSIVE_GUIDE.md)**: 데이터베이스 스키마, 테이블 구조, 컬럼 설명, 표준 데이터 형식
 - **[DB_INITIALIZATION_GUIDE.md](./DB_INITIALIZATION_GUIDE.md)**: 데이터베이스 초기화 및 재구축 가이드 ⭐
 - **[V1_0_0_MIGRATION_SPEC.md](./V1_0_0_MIGRATION_SPEC.md)**: V1_0_0 마이그레이션 실행 결과 명세서
@@ -840,10 +840,10 @@ if (!hasPermission(userId, "user:delete")) {
 - **Swagger UI**: `http://localhost:8080/swagger-ui/index.html` (실시간 API 문서 및 테스트)
 
 ### 시나리오 문서
-- **[AGENT_SCENARIOS.md](./Docs/AGENT_SCENARIOS.md)**: 상담사 관리 시나리오 (채용, 역할 변경, 퇴사 등)
-- **[DEPARTMENT_SCENARIOS.md](./Docs/DEPARTMENT_SCENARIOS.md)**: 조직 관리 시나리오 (조직 구조 변경, 권한 관리 등)
-- **[RBAC_SCENARIOS.md](./Docs/RBAC_SCENARIOS.md)**: RBAC 관리 시나리오 (역할/권한 관리 등)
-- **[EVENT_STORMING.md](./Docs/EVENT_STORMING.md)**: 이벤트 스토밍 결과 (도메인 이벤트, 커맨드, 애그리게잇)
+- **[AGENT_SCENARIOS.md](Docs/SCENARIOS/AGENT_SCENARIOS.md)**: 상담사 관리 시나리오 (채용, 역할 변경, 퇴사 등)
+- **[DEPARTMENT_SCENARIOS.md](Docs/SCENARIOS/DEPARTMENT_SCENARIOS.md)**: 조직 관리 시나리오 (조직 구조 변경, 권한 관리 등)
+- **[RBAC_SCENARIOS.md](Docs/SCENARIOS/RBAC_SCENARIOS.md)**: RBAC 관리 시나리오 (역할/권한 관리 등)
+- **[EVENT_STORMING.md](Docs/SCENARIOS/EVENT_STORMING.md)**: 이벤트 스토밍 결과 (도메인 이벤트, 커맨드, 애그리게잇)
 
 ### 아키텍처 문서
 - **[PROJECT_COMPLETION_REPORT.md](./PROJECT_COMPLETION_REPORT.md)**: 프로젝트 완료 보고서 (구현 내용 총정리)
@@ -947,14 +947,14 @@ docker run -p 8080:8080 \
 ## 📚 문서
 
 ### 아키텍처 및 설계
-- [DATABASE_SCHEMA.md](./Docs/DATABASE_SCHEMA.md) - 데이터베이스 스키마 상세 설명
-- [EVENT_STORMING.md](./Docs/EVENT_STORMING.md) - 이벤트 스토밍 결과
+- [DATABASE_SCHEMA.md](Docs/DATABASE/DATABASE_SCHEMA.md) - 데이터베이스 스키마 상세 설명
+- [EVENT_STORMING.md](Docs/SCENARIOS/EVENT_STORMING.md) - 이벤트 스토밍 결과
 - [API_SPECIFICATION.md](./Docs/API_SPECIFICATION.md) - API 명세서
 
 ### 테스트 시나리오
-- [API_TEST_SCENARIOS_ORGANIZATION.md](./API_TEST_SCENARIOS_ORGANIZATION.md) - Organization 모듈 테스트
-- [API_TEST_SCENARIOS_AGENT.md](./API_TEST_SCENARIOS_AGENT.md) - User/Agent 모듈 테스트
-- [API_TEST_SCENARIOS_RBAC.md](./API_TEST_SCENARIOS_RBAC.md) - RBAC 모듈 테스트
+- [API_TEST_SCENARIOS_ORGANIZATION.md](Docs/API_TEST/API_TEST_SCENARIOS_ORGANIZATION.md) - Organization 모듈 테스트
+- [API_TEST_SCENARIOS_AGENT.md](Docs/API_TEST/API_TEST_SCENARIOS_AGENT.md) - User/Agent 모듈 테스트
+- [API_TEST_SCENARIOS_RBAC.md](Docs/API_TEST/API_TEST_SCENARIOS_RBAC.md) - RBAC 모듈 테스트
 
 ### 성능 최적화
 - [PERFORMANCE_QUICK_REFERENCE.md](./Docs/PERFORMANCE_QUICK_REFERENCE.md) - **성능 최적화 빠른 참조** 🚀
@@ -972,7 +972,7 @@ docker run -p 8080:8080 \
   - 개선 전/후 비교 및 데이터 흐름 분석
 
 ### 운영 가이드
-- [CHANGELOG.md](./CHANGELOG.md) - 변경 이력
+- [CHANGELOG.md](Docs/CHANGELOG.md) - 변경 이력
 - [TEST_PROGRESS_STATUS.md](./TEST_PROGRESS_STATUS.md) - 테스트 진행 현황
 
 ### 아키텍처 및 성능

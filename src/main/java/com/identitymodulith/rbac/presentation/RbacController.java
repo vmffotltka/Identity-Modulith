@@ -3,7 +3,8 @@ package com.identitymodulith.rbac.presentation;
 import com.identitymodulith.common.security.context.JwtUserContext;
 import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.rbac.application.service.RbacManagementService;
-import com.identitymodulith.rbac.presentation.dto.RbacDto.*;
+import com.identitymodulith.rbac.presentation.dto.request.*;
+import com.identitymodulith.rbac.presentation.dto.response.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +51,7 @@ public class RbacController {
     @Operation(summary = "모든 역할 조회", description = "시스템에 정의된 모든 역할을 조회합니다.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/roles")
-    public ResponseEntity<List<RoleDto>> getAllRoles() {
+    public ResponseEntity<List<RoleResponse>> getAllRoles() {
         return ResponseEntity.ok(rbacManagementService.getAllRoles());
     }
 
@@ -60,7 +61,7 @@ public class RbacController {
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
     @GetMapping("/roles/{roleName}")
-    public ResponseEntity<RoleDto> getRoleByName(
+    public ResponseEntity<RoleResponse> getRoleByName(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
         return ResponseEntity.ok(rbacManagementService.getRoleByName(roleName));
@@ -73,11 +74,11 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PostMapping("/roles")
-    public ResponseEntity<RoleDto> createRole(
+    public ResponseEntity<RoleResponse> createRole(
             @Valid @RequestBody CreateRoleRequest request) {
         String userId = currentUserId();
         log.info("[RBAC] 역할 생성 - userId={}, name={}", userId, request.name());
-        RoleDto result = rbacManagementService.createRole(request, userId);
+        RoleResponse result = rbacManagementService.createRole(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -88,7 +89,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PatchMapping("/roles/{roleName}")
-    public ResponseEntity<RoleDto> updateRole(
+    public ResponseEntity<RoleResponse> updateRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody UpdateRoleRequest request) {
@@ -103,7 +104,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @DeleteMapping("/roles/{roleName}")
-    public ResponseEntity<RoleDeletionResult> deleteRole(
+    public ResponseEntity<RoleDeletionResponse> deleteRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Parameter(description = "강제 삭제 여부 (true: 사용자가 있어도 삭제)", example = "false")
@@ -119,7 +120,7 @@ public class RbacController {
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
     @GetMapping("/roles/{roleName}/deletion-impact")
-    public ResponseEntity<RoleDeletionImpact> getRoleDeletionImpact(
+    public ResponseEntity<RoleDeletionImpactResponse> getRoleDeletionImpact(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
         return ResponseEntity.ok(rbacManagementService.getRoleDeletionImpact(roleName));
@@ -160,7 +161,7 @@ public class RbacController {
     @Operation(summary = "모든 권한 조회", description = "시스템에 정의된 모든 권한을 조회합니다.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/permissions")
-    public ResponseEntity<List<PermissionDto>> getAllPermissions() {
+    public ResponseEntity<List<PermissionResponse>> getAllPermissions() {
         return ResponseEntity.ok(rbacManagementService.getAllPermissions());
     }
 
@@ -170,7 +171,7 @@ public class RbacController {
             @ApiResponse(responseCode = "404", description = "권한을 찾을 수 없음")
     })
     @GetMapping("/permissions/{code}")
-    public ResponseEntity<PermissionDto> getPermissionByCode(
+    public ResponseEntity<PermissionResponse> getPermissionByCode(
             @Parameter(description = "권한 코드", example = "user:manage", required = true)
             @PathVariable String code) {
         return ResponseEntity.ok(rbacManagementService.getPermissionByCode(code));
@@ -183,7 +184,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PostMapping("/permissions")
-    public ResponseEntity<PermissionDto> createPermission(
+    public ResponseEntity<PermissionResponse> createPermission(
             @Valid @RequestBody CreatePermissionRequest request) {
         String userId = currentUserId();
         log.info("[RBAC] 권한 생성 - userId={}, code={}", userId, request.code());
@@ -198,7 +199,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PatchMapping("/permissions/{code}")
-    public ResponseEntity<PermissionDto> updatePermission(
+    public ResponseEntity<PermissionResponse> updatePermission(
             @Parameter(description = "권한 코드", example = "user:create", required = true)
             @PathVariable String code,
             @Valid @RequestBody UpdatePermissionRequest request) {
@@ -232,7 +233,7 @@ public class RbacController {
             @ApiResponse(responseCode = "404", description = "역할을 찾을 수 없음")
     })
     @GetMapping("/roles/{roleName}/permissions")
-    public ResponseEntity<Set<PermissionDto>> getPermissionsByRole(
+    public ResponseEntity<Set<PermissionResponse>> getPermissionsByRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName) {
         return ResponseEntity.ok(rbacManagementService.getPermissionsByRole(roleName));
@@ -278,7 +279,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @PostMapping("/roles/{roleName}/permissions/batch")
-    public ResponseEntity<BatchAssignmentResult> batchAssignPermissionsToRole(
+    public ResponseEntity<BatchAssignmentResponse> batchAssignPermissionsToRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody BatchPermissionRequest request) {
@@ -292,7 +293,7 @@ public class RbacController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (ADMIN 권한 필요)")
     })
     @DeleteMapping("/roles/{roleName}/permissions/batch")
-    public ResponseEntity<BatchAssignmentResult> batchRevokePermissionsFromRole(
+    public ResponseEntity<BatchAssignmentResponse> batchRevokePermissionsFromRole(
             @Parameter(description = "역할명", example = "ADMIN", required = true)
             @PathVariable String roleName,
             @Valid @RequestBody BatchPermissionRequest request) {

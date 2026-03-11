@@ -9,14 +9,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * RBAC 모듈 전역 예외 처리
+ * RBAC 모듈 전용 예외 처리
  *
- * <h3>로그 레벨 규칙:</h3>
- * <ul>
- *   <li>WARN  - 403 권한 부족, 409 충돌</li>
- *   <li>INFO  - 404 리소스 없음, 400 잘못된 요청</li>
- *   <li>ERROR - 500 내부 오류 / 예측 불가 예외</li>
- * </ul>
+ * <p>공통 예외(UnauthorizedException, MethodArgumentNotValidException, fallback 등)는
+ * {@link com.identitymodulith.common.exception.CommonExceptionHandler}에서 처리합니다.</p>
  */
 @RestControllerAdvice(basePackages = "com.identitymodulith.rbac")
 @Slf4j
@@ -54,24 +50,5 @@ public class RbacExceptionHandler {
 
         return ResponseEntity.status(status)
                 .body(ApiErrorResponse.of(status.value(), errorCode.getCode(), e.getMessage()));
-    }
-
-    /**
-     * 예기치 않은 일반 예외 처리
-     *
-     * RbacException이 아닌 모든 예외를 처리합니다.
-     * 클라이언트에는 상세한 에러 정보를 노출하지 않고,
-     * 일반적인 내부 서버 오류 메시지만 반환합니다.
-     *
-     * 로깅은 Spring의 기본 예외 처리 메커니즘에 의해 자동으로 수행됩니다.
-     *
-     * @param e 발생한 예외
-     * @return 클라이언트에 반환할 ResponseEntity (500 상태 코드 + 일반 오류 메시지)
-     */
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleGeneralException(Exception e) {
-        log.error("[RBAC][Unexpected] {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of(500, "INTERNAL_ERROR", "서버 오류가 발생했습니다"));
     }
 }

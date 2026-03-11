@@ -4,6 +4,7 @@ import com.identitymodulith.common.security.filter.SamlSecurityContextFilter;
 import com.identitymodulith.common.security.handler.Saml2AuthenticationFailureHandler;
 import com.identitymodulith.common.security.handler.Saml2AuthenticationSuccessHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
@@ -38,6 +39,15 @@ import java.util.List;
 @Slf4j
 public class Saml2SecurityConfig {
 
+    @Value("${keycloak.saml.idp-metadata-url}")
+    private String idpMetadataUrl;
+
+    @Value("${keycloak.saml.sp-entity-id}")
+    private String spEntityId;
+
+    @Value("${keycloak.saml.acs-url}")
+    private String acsUrl;
+
     /**
      * RelyingPartyRegistrationRepository Bean - SAML SP 설정
      * Keycloak IdP 메타데이터에서 설정 로드
@@ -48,19 +58,17 @@ public class Saml2SecurityConfig {
             log.info("====================================");
             log.info("SAML 2.0 RelyingPartyRegistration 초기화 시작");
             log.info("====================================");
+            log.info("Keycloak IdP 메타데이터 URL: {}", idpMetadataUrl);
 
-            String metadataUrl = "http://1.224.162.188:51446/realms/identity-system/protocol/saml/descriptor";
-            log.info("Keycloak IdP 메타데이터 URL: {}", metadataUrl);
+            String sloUrl = acsUrl.replaceFirst("/login/saml2/sso/", "/logout/saml2/slo");
 
-            // Keycloak IdP 메타데이터에서 설정 로드 후 서명 비활성화
             RelyingPartyRegistration registration = RelyingPartyRegistrations
-                .fromMetadataLocation(metadataUrl)
+                .fromMetadataLocation(idpMetadataUrl)
                 .registrationId("keycloak")
-                .entityId("http://localhost:8080/saml2/service-provider-metadata/keycloak")
-                .assertionConsumerServiceLocation("http://localhost:8080/login/saml2/sso/keycloak")
-                .singleLogoutServiceLocation("http://localhost:8080/logout/saml2/slo")
-                // AuthnRequest 서명 비활성화 (Keycloak에서 Client Signature Required: OFF 설정과 일치)
-                .signingX509Credentials(credentials -> credentials.clear())
+                .entityId(spEntityId)
+                .assertionConsumerServiceLocation(acsUrl)
+                .singleLogoutServiceLocation(sloUrl)
+                .signingX509Credentials(c -> c.clear())
                 .assertingPartyMetadata(party -> party
                     .wantAuthnRequestsSigned(false)
                 )
@@ -68,29 +76,19 @@ public class Saml2SecurityConfig {
 
             log.info("✅ SAML 2.0 RelyingPartyRegistration 초기화 성공");
             log.info("- Registration ID: keycloak");
-            log.info("- Entity ID: http://localhost:8080/saml2/service-provider-metadata/keycloak");
-            log.info("- ACS URL: http://localhost:8080/login/saml2/sso/keycloak");
-            log.info("- SLO URL: http://localhost:8080/logout/saml2/slo");
+            log.info("- Entity ID: {}", spEntityId);
+            log.info("- ACS URL: {}", acsUrl);
+            log.info("- SLO URL: {}", sloUrl);
             log.info("- IdP Entity ID: {}", registration.getAssertingPartyMetadata().getEntityId());
-            log.info("- AuthnRequest Signing: DISABLED (서명 안 함)");
-            log.info("- Assertion Encryption: DISABLED (암호화 안 함)");
-            log.info("====================================");
-            log.info("📝 Keycloak 클라이언트 필수 설정:");
-            log.info("   1. Client ID: http://localhost:8080/saml2/service-provider-metadata/keycloak");
-            log.info("   2. Valid Redirect URIs: http://localhost:8080/login/saml2/sso/keycloak");
-            log.info("   3. ⚠️  Client Signature Required: OFF  (매우 중요!)");
-            log.info("   4. ⚠️  Encrypt Assertions: OFF");
-            log.info("   5. ⚠️  Sign Documents: OFF");
-            log.info("   6. ⚠️  Sign Assertions: ON  (IdP가 assertion만 서명)");
-            log.info("   7. Force POST Binding: OFF");
-            log.info("   8. Front Channel Logout: ON");
+            log.info("- AuthnRequest Signing: DISABLED");
+            log.info("- Assertion Encryption: DISABLED");
             log.info("====================================");
 
             return new InMemoryRelyingPartyRegistrationRepository(registration);
 
         } catch (Exception e) {
             log.error("❌ SAML 2.0 RelyingPartyRegistration 초기화 실패!", e);
-            log.error("Keycloak 서버 연결을 확인하세요: http://1.224.162.188:51446");
+            log.error("Keycloak 서버 연결을 확인하세요: {}", idpMetadataUrl);
             throw new RuntimeException("SAML 2.0 설정 초기화 실패", e);
         }
     }

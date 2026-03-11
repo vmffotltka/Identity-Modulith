@@ -1,5 +1,134 @@
 # 📋 프로젝트 변경 이력 (Changelog)
 
+## 🎯 v4.0.0 - 2026-03-11
+
+### ✨ 주요 개선 사항
+
+#### 1️⃣ **Keycloak SAML 연동 완성**
+- ✅ **SAML 2.0 인증 흐름 구현**: Keycloak → SP(Spring Boot) SSO
+- ✅ **Saml2AuthenticationSuccessHandler**: 인증 성공 시 로컬 DB Agent 매핑
+- ✅ **Saml2AuthenticationFailureHandler**: 인증 실패 시 상세 로그 + 리디렉션
+- ✅ **SamlSecurityContextFilter**: SAML 세션 → JwtUserContext 동기화
+- ✅ **V3_0_0__Add_Keycloak_Test_Accounts.sql**: `test.admin` 계정 DB 자동 등록
+- ✅ **AuthnRequest 서명**: DISABLED (Keycloak 호환)
+- ✅ **Assertion 암호화**: DISABLED (Keycloak 호환)
+- ✅ **Sign Assertions**: ON (IdP가 assertion만 서명)
+
+#### 2️⃣ **전체 패키지 구조 리팩터링**
+- ✅ **common/security 하위 디렉터리 정리**
+  - `context/`: TenantContextHolder, JwtUserContext
+  - `filter/`: SamlSecurityContextFilter
+  - `handler/`: Saml2AuthenticationSuccessHandler, Saml2AuthenticationFailureHandler
+  - `principal/`: AuthPrincipal
+- ✅ **불필요 파일 삭제**: 중복 클래스, 테스트 전용 파일 정리
+- ✅ **DepartmentController 한글 깨짐 수정**: BOM 제거 (UTF-8 without BOM)
+
+#### 3️⃣ **User 모듈 UseCase 파일 병합 완료 확인**
+- ✅ `AgentService`가 11개 UseCase 인터페이스 전부 구현 확인
+- ✅ UseCase 인터페이스 파일 분리 유지 (헥사고날 아키텍처 의도 보존)
+
+#### 4️⃣ **DTO 구조 통일 — 세 모듈 전체**
+- ✅ **RBAC 모듈**: `rbac/presentation/dto/request/`, `response/` 분리 완료
+- ✅ **Organization 모듈**: `organization/presentation/dto/request/`, `response/` 분리 완료
+- ✅ **User 모듈**: 기존 분리 구조 유지
+- ✅ **공통 에러 응답**: `ApiErrorResponse`로 세 모듈 완전 통일
+
+#### 5️⃣ **공통 예외 처리 계층 완성**
+- ✅ **CommonExceptionHandler** 추가: `@Slf4j` 누락 수정, 전역 fallback 처리
+- ✅ **GlobalExceptionHandler** (User): `@Slf4j` 정상화
+- ✅ **RbacExceptionHandler**: `RbacErrorCode.AGENT_NOT_FOUND` 오류 수정
+- ✅ **OrganizationExceptionHandler**: 부서코드 중복 별도 처리
+- ✅ **HttpStatus 통일**: 모든 핸들러 동일 응답 코드 체계 적용
+
+#### 6️⃣ **보안 관련 클래스 `@Slf4j` 수정**
+- ✅ `Saml2SecurityConfig` — `log` 필드 누락으로 컴파일 오류 수정
+- ✅ `SamlTestController` — `@Slf4j` 추가
+- ✅ `Saml2AuthenticationSuccessHandler` — `@Slf4j` 추가
+- ✅ `Saml2AuthenticationFailureHandler` — `@Slf4j` 추가
+- ✅ `SamlSecurityContextFilter` — `@Slf4j` 추가
+- ✅ `CustomPermissionEvaluator` — `@Slf4j` 추가
+- ✅ `JwtUserContext` — `@Slf4j` 추가
+- ✅ `TenantContextHolder` (context 패키지) — `@Slf4j` 추가
+
+#### 7️⃣ **`AgentExternalInfo` record 변환**
+- ✅ Lombok `@Builder` 대신 Java record + builder 패턴으로 변경
+- ✅ `isActive()`, `getId()`, `getName()`, `getTenantId()`, `getLoginId()` 메서드 접근 정상화
+
+#### 8️⃣ **중복 클래스 제거**
+- ✅ `AgentMapper` 중복 선언 오류 수정
+- ✅ `GlobalExceptionHandler` 중복 선언 오류 수정
+
+#### 9️⃣ **N+1 성능 벤치마크 테스트 안정화**
+- ✅ `RbacPerformanceBenchmarkTest`: 외래 키 위반, 낙관적 잠금 오류 수정
+- ✅ JdbcTemplate 직접 INSERT/DELETE로 Hibernate 캐시 영향 배제
+- ✅ 테스트 격리: `@AfterEach`에서 FK 역순 정리
+
+#### 🔟 **RBAC 테스트 DTO 정합성 수정**
+- ✅ `RbacManagementServiceImplTest`: `CreateRoleRequest`, `CreatePermissionRequest` import 경로 수정
+- ✅ `RbacAgentRoleManagementTest`: `assignRole()` NPE 수정
+- ✅ `RoleResponse` record 생성자 불일치 수정
+
+### 📊 N+1 성능 최적화 실측 결과
+
+| 메서드 | Before | After | 개선율 | 쿼리 변화 |
+|--------|:------:|:-----:|:------:|:---------:|
+| `getEffectivePermissions` | **255 ms** | **10 ms** | **96.1% ↓** | 26 → 1 |
+| `permissionsOfRoles` | **230 ms** | **12 ms** | **94.8% ↓** | 26 → 2 |
+
+> 측정 환경: 로컬 PostgreSQL / 역할 5개 / 역할당 권한 4개 (총 20개) / 워밍업 3회 + 측정 10회
+
+### 🐛 버그 수정
+
+- 🐛 `Saml2SecurityConfig.signingX509Credentials(List::clear)` — 메서드 레퍼런스 타입 불일치 수정
+- 🐛 `AgentExternalInfo.isActive()` 미존재 — record 변환으로 해결
+- 🐛 `rbac_agent_roles` FK 위반 (벤치마크 테스트) — `user_agents` 먼저 삽입하도록 순서 수정
+- 🐛 `DepartmentController.java` BOM 문자 `\ufeff` 제거
+- 🐛 `X-User-Id` 헤더 — SecurityContext에서 직접 추출하도록 Controller 개선
+- 🐛 `RbacErrorCode.AGENT_NOT_FOUND` 미존재 → `USER_NOT_FOUND`로 교체
+
+### 📁 추가/수정된 파일
+
+**추가 (10개)**:
+```
+common/exception/CommonExceptionHandler.java
+common/security/context/JwtUserContext.java
+common/security/context/TenantContextHolder.java (context 패키지로 이동)
+common/security/filter/SamlSecurityContextFilter.java
+common/security/handler/Saml2AuthenticationSuccessHandler.java
+common/security/handler/Saml2AuthenticationFailureHandler.java
+common/security/principal/AuthPrincipal.java
+Docs/ARCHITECTURE_DDD_MODULITH.md (신규 작성)
+Docs/EXCEPTION_AND_LOGGING.md (신규 작성)
+Docs/PERFORMANCE_OPTIMIZATION_N_PLUS_1.md (신규 작성)
+Docs/PERFORMANCE_OPTIMIZATION.md (신규 작성)
+```
+
+**수정 (20개)**:
+```
+Saml2SecurityConfig.java — @Slf4j 추가, signingX509Credentials 수정
+SamlTestController.java — @Slf4j 추가
+Saml2AuthenticationSuccessHandler.java — @Slf4j 추가, AgentExternalInfo 호환
+AgentExternalInfo.java — record 패턴으로 변환
+AgentMapper.java — 중복 제거
+GlobalExceptionHandler.java — @Slf4j 추가, 중복 제거
+CommonExceptionHandler.java — @Slf4j 추가
+RbacExceptionHandler.java — AGENT_NOT_FOUND → USER_NOT_FOUND
+DepartmentController.java — BOM 제거, X-User-Id 제거
+RbacController.java — BatchPermissionRequest import 추가
+RbacManagementServiceImpl.java — RoleResponse 생성자 수정
+RbacManagementServiceImplTest.java — DTO 경로 수정
+RbacAgentRoleManagementTest.java — NPE 수정
+RbacPerformanceBenchmarkTest.java — FK/낙관적 잠금 수정
+V3_0_0__Add_Keycloak_Test_Accounts.sql — 신규 추가
+Docs/CHANGELOG.md — v4.0.0 추가
+Docs/DATABASE/DATABASE_SCHEMA.md — V2 스키마 기준으로 전면 업데이트
+Docs/ARCHITECTURE_DDD_MODULITH.md — 최신 패키지 구조 반영
+Docs/EXCEPTION_AND_LOGGING.md — 최신 구현 반영
+Docs/PERFORMANCE_OPTIMIZATION_N_PLUS_1.md — 실측 결과 반영
+```
+
+---
+
 ## 🎯 v3.1.0 - 2026-02-10
 
 ### ✨ 주요 개선 사항

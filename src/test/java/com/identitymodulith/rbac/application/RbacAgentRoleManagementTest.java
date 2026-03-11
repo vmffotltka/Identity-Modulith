@@ -2,11 +2,15 @@ package com.identitymodulith.rbac.application;
 
 import com.identitymodulith.rbac.application.exception.RbacException;
 import com.identitymodulith.rbac.application.service.RbacManagementServiceImpl;
+import com.identitymodulith.rbac.application.port.AgentValidationPort;
+import com.identitymodulith.rbac.application.service.RbacQueryService;
 import com.identitymodulith.rbac.domain.RoleType;
 import com.identitymodulith.rbac.infrastructure.persistence.entity.AgentRoleJpaEntity;
 import com.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
+import com.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
+import com.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,8 +43,19 @@ class RbacAgentRoleManagementTest {
     private RoleJpaRepository roleRepository;
 
     @Mock
+    private PermissionJpaRepository permissionRepository;
+
+    @Mock
+    private RolePermissionJpaRepository rolePermissionRepository;
+
+    @Mock
     private AgentRoleJpaRepository agentRoleRepository;
 
+    @Mock
+    private RbacQueryService rbacQueryService;
+
+    @Mock
+    private AgentValidationPort agentValidationPort;
 
     @Mock
     private SecurityContext securityContext;
@@ -58,13 +73,20 @@ class RbacAgentRoleManagementTest {
 
     @BeforeEach
     void setup() {
-
         // SecurityContext 설정 (TenantContextHolder가 인식할 수 있는 형식)
         SecurityContextHolder.setContext(securityContext);
         lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
         // "tenantId:userId" 형식으로 설정
         lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":test-user");
+
+        // assignRoleToAgent 내부 POSITION 역할 교체 로직에서 호출
+        lenient().when(agentRoleRepository.findByAgentId(agentId))
+                .thenReturn(java.util.List.of());
+
+        // agentValidationPort - 활성 상담사로 응답 (역할 할당 허용)
+        lenient().when(agentValidationPort.isActiveAgent(agentId))
+                .thenReturn(true);
     }
 
     // ============================================================
@@ -80,12 +102,12 @@ class RbacAgentRoleManagementTest {
                 .tenantId(tenantId)
                 .name(roleName)
                 .type(RoleType.POSITION)
+                .isActive(true)
                 .createdAt(LocalDateTime.now())
                 .build();
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        // ✅ P0: existsByAgentIdAndRoleId 제거 (DB 제약으로 동시성 제어)
         when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenReturn(new AgentRoleJpaEntity());
 
@@ -118,6 +140,7 @@ class RbacAgentRoleManagementTest {
                 .tenantId(tenantId)
                 .name(roleName)
                 .type(RoleType.POSITION)
+                .isActive(true)
                 .build();
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
@@ -298,13 +321,12 @@ class RbacAgentRoleManagementTest {
                 .tenantId(tenantId)
                 .name(roleName)
                 .type(RoleType.POSITION)
+                .isActive(true)
                 .build();
 
-        lenient().when(roleRepository.findByTenantIdAndName(tenantId, roleName))
+        when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        lenient().when(agentRoleRepository.existsByAgentIdAndRoleId(agentId, roleId))
-                .thenReturn(false);
-        lenient().when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
+        when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenReturn(new AgentRoleJpaEntity());
 
         // When

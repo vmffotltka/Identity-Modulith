@@ -12,6 +12,10 @@ import com.identitymodulith.rbac.infrastructure.persistence.repository.AgentRole
 import com.identitymodulith.rbac.infrastructure.persistence.repository.PermissionJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RolePermissionJpaRepository;
+import com.identitymodulith.rbac.presentation.dto.request.*;
+import com.identitymodulith.rbac.presentation.dto.response.*;
+import com.identitymodulith.rbac.application.service.RbacQueryService;
+import com.identitymodulith.rbac.application.port.AgentValidationPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,6 +64,11 @@ class RbacManagementServiceImplTest {
     @Mock
     private AgentRoleJpaRepository agentRoleRepository;
 
+    @Mock
+    private RbacQueryService rbacQueryService;
+
+    @Mock
+    private AgentValidationPort agentValidationPort;
 
     @Mock
     private SecurityContext securityContext;
@@ -83,6 +92,19 @@ class RbacManagementServiceImplTest {
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
         // TenantContextHolder가 인식하는 "tenantId:userId" 형식
         lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
+
+        // ADMIN 권한 체크 공통 Mock (checkAdminPermission 내부 로직)
+        RoleJpaEntity adminRole = RoleJpaEntity.builder()
+                .roleId("admin-role-id")
+                .name("ADMIN")
+                .type(RoleType.POSITION)
+                .build();
+        lenient().when(agentRoleRepository.findByAgentId(userId))
+                .thenReturn(java.util.List.of(
+                        AgentRoleJpaEntity.builder().roleId("admin-role-id").build()
+                ));
+        lenient().when(roleRepository.findById("admin-role-id"))
+                .thenReturn(Optional.of(adminRole));
     }
 
     // ============================================================
@@ -155,24 +177,8 @@ class RbacManagementServiceImplTest {
     @DisplayName("역할 생성 - 성공")
     void testCreateRole_Success() {
         // Given
-        var request = new RbacManagementService.CreateRoleRequest("NEW_ROLE", RoleType.POSITION, "새로운 역할 설명");
+        var request = new CreateRoleRequest("NEW_ROLE", RoleType.POSITION, "새로운 역할 설명");
 
-        // ADMIN 권한 검증을 위한 Mock 설정
-        RoleJpaEntity adminRole = RoleJpaEntity.builder()
-                .roleId("admin-role-id")
-                .name("ADMIN")
-                .type(RoleType.POSITION)
-                .build();
-
-        when(agentRoleRepository.findByAgentId(userId))
-                .thenReturn(java.util.List.of(
-                    AgentRoleJpaEntity.builder()
-                        .roleId("admin-role-id")
-                        .build()
-                ));
-
-        when(roleRepository.findById("admin-role-id"))
-                .thenReturn(Optional.of(adminRole));
 
         when(roleRepository.existsByTenantIdAndName(tenantId, "NEW_ROLE"))
                 .thenReturn(false);
@@ -201,24 +207,8 @@ class RbacManagementServiceImplTest {
     @DisplayName("역할 생성 - 실패 (중복 역할명)")
     void testCreateRole_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreateRoleRequest("ADMIN", RoleType.POSITION, "관리자 역할");
+        var request = new CreateRoleRequest("ADMIN", RoleType.POSITION, "관리자 역할");
 
-        // ADMIN 권한 검증을 위한 Mock 설정
-        RoleJpaEntity adminRole = RoleJpaEntity.builder()
-                .roleId("admin-role-id")
-                .name("ADMIN")
-                .type(RoleType.POSITION)
-                .build();
-
-        when(agentRoleRepository.findByAgentId(userId))
-                .thenReturn(java.util.List.of(
-                    AgentRoleJpaEntity.builder()
-                        .roleId("admin-role-id")
-                        .build()
-                ));
-
-        when(roleRepository.findById("admin-role-id"))
-                .thenReturn(Optional.of(adminRole));
 
         when(roleRepository.existsByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(true);
@@ -243,6 +233,10 @@ class RbacManagementServiceImplTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, "ADMIN"))
                 .thenReturn(Optional.of(role));
+        when(agentRoleRepository.findByRoleId(roleId))
+                .thenReturn(java.util.List.of());
+        when(rolePermissionRepository.findByRoleId(roleId))
+                .thenReturn(java.util.List.of());
 
         // When
         rbacManagementService.deleteRole("ADMIN", false, userId);
@@ -283,7 +277,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 성공")
     void testCreatePermission_Success() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest(
+        var request = new CreatePermissionRequest(
             "user:manage",
             "사용자 관리",
             "사용자 관리 권한",
@@ -292,7 +286,7 @@ class RbacManagementServiceImplTest {
             "manage"
         );
 
-        lenient().when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
+        when(permissionRepository.existsByTenantIdAndCode(tenantId, "user:manage"))
                 .thenReturn(false);
 
         PermissionJpaEntity savedPermission = PermissionJpaEntity.builder()
@@ -304,7 +298,7 @@ class RbacManagementServiceImplTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        lenient().when(permissionRepository.save(any(PermissionJpaEntity.class)))
+        when(permissionRepository.save(any(PermissionJpaEntity.class)))
                 .thenReturn(savedPermission);
 
         // When
@@ -319,7 +313,7 @@ class RbacManagementServiceImplTest {
     @DisplayName("권한 생성 - 실패 (중복 권한)")
     void testCreatePermission_Duplicate() {
         // Given
-        var request = new RbacManagementService.CreatePermissionRequest(
+        var request = new CreatePermissionRequest(
             "user:create",
             "사용자 생성",
             "사용자 생성 권한",

@@ -1,10 +1,26 @@
-# Database Schema - 데이터베이스 스키마 설계 (v3.0)
+# Database Schema - 데이터베이스 스키마 설계 (v4.0)
 
 Identity Modulith의 실제 구현된 데이터베이스 스키마 정의
 
 > ✅ **이 문서는 실제 구현을 반영합니다**  
-> 기준: `V1_0_0__Complete_Init.sql` (2026-02-05)  
-> 프로젝트의 실제 엔티티 구조 및 시나리오 문서와 완전히 일치합니다.
+> 기준: `V2_0_0__Fixed_Schema.sql` + `V3_0_0__Add_Keycloak_Test_Accounts.sql` (2026-03-11)  
+> 프로젝트의 실제 엔티티 구조 및 마이그레이션 파일과 완전히 일치합니다.
+
+---
+
+## ⚠️ v3.0 → v4.0 주요 스키마 변경 사항
+
+| 구분 | v3.0 (구) | v4.0 (현재) |
+|------|-----------|------------|
+| 부서 PK | VARCHAR(50) | VARCHAR(36) (UUID) |
+| 부서 FK 컬럼 | `parent_dept_id` | `parent_id` |
+| 부서 상태 | `is_active BOOLEAN` | `status VARCHAR(20)` ('ACTIVE'/'INACTIVE') |
+| 사용자-역할 테이블 | `user_agent_roles` | `rbac_agent_roles` |
+| 역할-권한 PK | 복합 PK `(role_id, permission_id)` | `BIGSERIAL id` (자동증가) |
+| 사용자-역할 PK | 복합 PK `(agent_id, role_id)` | `BIGSERIAL id` (자동증가) |
+| 역할 data_scope 컬럼 | `data_scope` | `data_scope_level` |
+| 사용자 login_id UNIQUE | `(tenant_id, login_id)` | 단순 `UNIQUE` |
+| Keycloak 계정 | - | `test.admin` (V3 마이그레이션) |
 
 ---
 
@@ -24,12 +40,13 @@ Identity Modulith의 실제 구현된 데이터베이스 스키마 정의
 - user_agents           (User 모듈 - Agent 테이블)
 - org_departments       (Organization 모듈 - Department 테이블)
 - rbac_roles            (RBAC 모듈 - Role 테이블)
+- rbac_agent_roles      (RBAC 모듈 - 사용자-역할 매핑 테이블)
 ```
 
 ### 1.3 ID 전략
-- **모든 PK**: VARCHAR(50) (UUID 형식, 애플리케이션 생성)
+- **도메인 엔티티 PK**: VARCHAR(36) (UUID 형식, 애플리케이션 생성)
+- **매핑 테이블 PK**: BIGSERIAL (자동증가, 시퀀스)
 - **UUID 생성**: Java `UUID.randomUUID().toString()`
-- **형식 예시**: `agent-admin-001`, `dept-root-001`, `role-admin-001`
 - **장점**: 분산 환경 안전, 예측 불가능, 멀티테넌시 친화적
 
 ### 1.4 공통 컬럼
@@ -38,6 +55,7 @@ Identity Modulith의 실제 구현된 데이터베이스 스키마 정의
 tenant_id       VARCHAR(50)  NOT NULL    -- Multi-tenancy 지원
 created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+version         INTEGER/BIGINT DEFAULT 0  -- 낙관적 잠금 (JPA @Version)
 ```
 
 ---
@@ -48,12 +66,12 @@ updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 
 | # | 테이블명 | 모듈 | 설명 | PK | FK |
 |---|---------|------|------|----|----|
-| 1 | **org_departments** | Organization | 조직/부서 (트리) | dept_id | parent_dept_id → self |
-| 2 | **user_agents** | User | 사용자/상담사 | agent_id | dept_id → org_departments |
-| 3 | **rbac_roles** | RBAC | 역할 정의 | role_id | - |
-| 4 | **rbac_permissions** | RBAC | 권한 정의 | permission_id | - |
-| 5 | **rbac_role_permissions** | RBAC | 역할-권한 M:N | (role_id, permission_id) | → roles, permissions |
-| 6 | **user_agent_roles** | RBAC | 사용자-역할 M:N | (agent_id, role_id) | → user_agents, roles |
+| 1 | **org_departments** | Organization | 조직/부서 (트리) | dept_id (UUID) | parent_id → self |
+| 2 | **user_agents** | User | 사용자/상담사 | agent_id (UUID) | dept_id → org_departments |
+| 3 | **rbac_roles** | RBAC | 역할 정의 | role_id (UUID) | - |
+| 4 | **rbac_permissions** | RBAC | 권한 정의 | permission_id (UUID) | - |
+| 5 | **rbac_role_permissions** | RBAC | 역할-권한 M:N | id (BIGSERIAL) | → roles, permissions |
+| 6 | **rbac_agent_roles** | RBAC | 사용자-역할 M:N | id (BIGSERIAL) | → user_agents, roles |
 
 ---
 
@@ -61,49 +79,57 @@ updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Identity Modulith ERD (v3.0)                        │
+│                         Identity Modulith ERD (v4.0)                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────┐         ┌─────────────────┐                           │
 │  │  user_agents    │         │org_departments  │                           │
 │  ├─────────────────┤         ├─────────────────┤                           │
-│  │ PK agent_id (V) │    ┌───▶│ PK dept_id (V)  │◀──┐                       │
+│  │ PK agent_id(V36)│    ┌───▶│ PK dept_id (V36)│◀──┐                       │
 │  │    tenant_id    │    │    │    tenant_id    │   │                       │
 │  │    login_id (U) │    │    │    name         │   │ self-ref              │
 │  │    password     │    │    │    type         │   │ (parent)              │
-│  │    name         │    │    │ FK parent_dept  │───┘                       │
+│  │    name         │    │    │ FK parent_id    │───┘                       │
 │  │ FK dept_id      │────┘    │    org_path (M) │                           │
 │  │    status       │         │    depth        │                           │
-│  │    version      │         │    is_active    │                           │
+│  │    version      │         │    status       │  (ACTIVE/INACTIVE)        │
 │  └────────┬────────┘         └─────────────────┘                           │
 │           │                                                                 │
-│           │ M:N                                                             │
+│           │ M:N (rbac_agent_roles)                                          │
 │           ▼                                                                 │
 │  ┌─────────────────┐         ┌─────────────────┐                           │
-│  │user_agent_roles │         │   rbac_roles    │                           │
+│  │rbac_agent_roles │         │   rbac_roles    │                           │
 │  ├─────────────────┤         ├─────────────────┤                           │
-│  │ FK agent_id     │────────▶│ PK role_id (V)  │◀──┐                       │
-│  │ FK role_id      │────────▶│    tenant_id    │   │                       │
-│  │    assigned_at  │         │    name (UK)    │   │                       │
-│  └─────────────────┘         │    type         │   │                       │
-│                              │    data_scope   │   │                       │
+│  │ PK id (BIGSERIAL│         │ PK role_id (V36)│◀──┐                       │
+│  │ FK agent_id     │────────▶│    tenant_id    │   │                       │
+│  │ FK role_id      │────────▶│    name (UK)    │   │                       │
+│  │    assigned_at  │         │    type         │   │                       │
+│  └─────────────────┘         │    data_scope_  │   │                       │
+│                              │      level      │   │                       │
 │                              │    is_active    │   │                       │
 │                              └────────┬────────┘   │                       │
 │                                       │            │                       │
 │                                       │ M:N        │                       │
 │                                       ▼            │                       │
-│  ┌─────────────────┐         ┌─────────────────┐   │                       │
-│  │rbac_permissions │         │rbac_role_perms  │   │                       │
-│  ├─────────────────┤         ├─────────────────┤   │                       │
-│  │ PK permission_id│◀────────│ FK role_id      │───┘                       │
-│  │    tenant_id    │◀────────│ FK permission_id│                           │
-│  │    code (UK)    │         │    assigned_at  │                           │
-│  │    category     │         └─────────────────┘                           │
-│  └─────────────────┘                                                       │
+│  ┌─────────────────┐    ┌───────────────────────┐  │                       │
+│  │rbac_permissions │    │  rbac_role_permissions│  │                       │
+│  ├─────────────────┤    ├───────────────────────┤  │                       │
+│  │ PK permission_id│◀───│ PK id (BIGSERIAL)     │  │                       │
+│  │    tenant_id    │◀───│ FK role_id            │──┘                       │
+│  │    code (UK)    │    │ FK permission_id      │                           │
+│  │    category     │    │    assigned_at        │                           │
+│  └─────────────────┘    └───────────────────────┘                           │
 │                                                                             │
-│  (V) = VARCHAR(50)                                                          │
-│  (U) = UNIQUE with tenant_id                                                │
-│  (M) = Materialized Path                                                    │
+│  (V36) = VARCHAR(36) — UUID                                                 │
+│  (U)   = UNIQUE                                                             │
+│  (M)   = Materialized Path                                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+│                                                                             │
+│  (V36) = VARCHAR(36) — UUID                                                 │
+│  (U)   = UNIQUE                                                             │
+│  (M)   = Materialized Path                                                  │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -116,62 +142,50 @@ updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 
 **목적**: 조직 계층 구조 관리 (Materialized Path 패턴)
 
-**DDL**:
+**DDL** (V2_0_0__Fixed_Schema.sql 기준):
 ```sql
-CREATE TABLE IF NOT EXISTS org_departments (
-    -- 식별자
-    dept_id             VARCHAR(50)     PRIMARY KEY,
+CREATE TABLE org_departments (
+    dept_id             VARCHAR(36)     PRIMARY KEY,
     tenant_id           VARCHAR(50)     NOT NULL,
-    
-    -- 기본 정보
-    name                VARCHAR(100)    NOT NULL,
-    type                VARCHAR(20)     NOT NULL,          -- COMPANY, DIVISION, TEAM, GROUP, CUSTOM
-    custom_type_name    VARCHAR(50),                       -- type=CUSTOM일 때만
-    
-    -- 계층 구조 (Materialized Path)
-    parent_dept_id      VARCHAR(50),                       -- FK → self, NULL=루트
-    org_path            TEXT            NOT NULL,          -- 예: /dept-root/dept-child/
+    parent_id           VARCHAR(36),
+    org_path            TEXT            NOT NULL,
     depth               INTEGER         NOT NULL DEFAULT 0,
-    display_order       INTEGER         NOT NULL DEFAULT 0,
-    
-    -- 추가 정보
-    manager_id          VARCHAR(50),                       -- 부서장 ID
-    description         TEXT,
-    
-    -- 상태
-    is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
-    
-    -- 감사
+    name                VARCHAR(100)    NOT NULL,
+    type                VARCHAR(20),                       -- COMPANY, DIVISION, TEAM, GROUP, CUSTOM
+    code                VARCHAR(30)     NOT NULL,
+    custom_type_name    VARCHAR(50),
+    status              VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
+    deactivated_at      TIMESTAMP,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by          VARCHAR(50),
-    updated_by          VARCHAR(50),
-    
-    -- 제약조건
-    CONSTRAINT fk_parent_dept FOREIGN KEY (parent_dept_id)
+    created_by          VARCHAR(36),
+    updated_by          VARCHAR(36),
+    version             BIGINT          DEFAULT 0,
+
+    CONSTRAINT fk_dept_parent FOREIGN KEY (parent_id)
         REFERENCES org_departments(dept_id) ON DELETE RESTRICT,
+    CONSTRAINT uk_dept_tenant_code UNIQUE (tenant_id, code),
     CONSTRAINT chk_dept_type CHECK (type IN ('COMPANY', 'DIVISION', 'TEAM', 'GROUP', 'CUSTOM')),
-    CONSTRAINT chk_custom_type CHECK (
-        (type = 'CUSTOM' AND custom_type_name IS NOT NULL) OR
-        (type != 'CUSTOM')
-    )
+    CONSTRAINT chk_dept_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
 
--- 인덱스
-CREATE INDEX IF NOT EXISTS idx_dept_tenant ON org_departments(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_dept_parent ON org_departments(parent_dept_id);
-CREATE INDEX IF NOT EXISTS idx_dept_org_path ON org_departments(org_path);
-CREATE INDEX IF NOT EXISTS idx_dept_active ON org_departments(is_active);
+CREATE INDEX idx_dept_tenant ON org_departments(tenant_id);
+CREATE INDEX idx_dept_parent ON org_departments(parent_id);
+CREATE INDEX idx_dept_org_path ON org_departments(org_path);
+CREATE INDEX idx_dept_status ON org_departments(status);
 ```
 
 **컬럼 설명**:
 
 | 컬럼명 | 타입 | NULL | 설명 | 예시 |
 |--------|------|------|------|------|
-| dept_id | VARCHAR(50) | ✖ | 부서 ID (PK) | `dept-root-001` |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(100) | ✖ | 부서명 | `넥스프론`, `고객서비스본부` |
-| type | VARCHAR(20) | ✖ | 부서 타입 | `COMPANY`, `DIVISION`, `TEAM` |
+| dept_id | VARCHAR(36) | ✖ | 부서 ID (PK, UUID) | `00000000-0000-0000-0000-000000000001` |
+| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `default-tenant` |
+| parent_id | VARCHAR(36) | ✓ | 상위 부서 ID (FK → self) | NULL=루트 |
+| org_path | TEXT | ✖ | 조직 경로 | `/{uuid1}/{uuid2}` |
+| depth | INTEGER | ✖ | 트리 깊이 | 0(루트), 1, 2... |
+| name | VARCHAR(100) | ✖ | 부서명 | `넥스프론`, `개발본부` |
+| type | VARCHAR(20) | ✓ | 부서 타입 | `COMPANY`, `DIVISION`, `TEAM` |
 | custom_type_name | VARCHAR(50) | ✓ | 사용자 정의 타입 | `센터`, `지사` (type=CUSTOM) |
 | parent_dept_id | VARCHAR(50) | ✓ | 상위 부서 ID (FK) | NULL=루트, UUID=하위 |
 | org_path | TEXT | ✖ | 조직 경로 | `/dept-root-001/dept-div-001/` |
@@ -223,111 +237,82 @@ VALUES
 
 **목적**: 시스템 사용자 정보 관리
 
-**DDL**:
+**DDL** (V2_0_0__Fixed_Schema.sql 기준):
 ```sql
-CREATE TABLE IF NOT EXISTS user_agents (
-    -- 식별자
-    agent_id            VARCHAR(50)     PRIMARY KEY,
+CREATE TABLE user_agents (
+    agent_id            VARCHAR(36)     PRIMARY KEY,
     tenant_id           VARCHAR(50)     NOT NULL,
-    login_id            VARCHAR(50)     NOT NULL,
-    
-    -- 인증
+    login_id            VARCHAR(100)    NOT NULL UNIQUE,
     password            VARCHAR(255)    NOT NULL,          -- BCrypt 해시
-    password_must_change BOOLEAN        NOT NULL DEFAULT FALSE,
-    
-    -- 기본 정보
+    password_must_change BOOLEAN        DEFAULT FALSE,
     name                VARCHAR(100)    NOT NULL,
-    employee_id         VARCHAR(50),                       -- 사원번호
-    email               VARCHAR(100),
+    employee_id         VARCHAR(30),
+    email               VARCHAR(255),
     phone               VARCHAR(20),
-    
-    -- 조직
-    dept_id             VARCHAR(50),                       -- FK → org_departments
-    
-    -- 상태
-    status              VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE, SUSPENDED, RETIRED
-    
-    -- 상태 추적
+    dept_id             VARCHAR(36),                       -- FK → org_departments
+    status              VARCHAR(20)     DEFAULT 'ACTIVE',
     suspended_at        TIMESTAMP,
     retired_at          TIMESTAMP,
-    scheduled_delete_at TIMESTAMP,                         -- 예약 삭제 일시 (RETIRED 후 90일)
-    
-    -- 감사
+    scheduled_delete_at TIMESTAMP,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by          VARCHAR(50),
-    updated_by          VARCHAR(50),
-    suspended_by        VARCHAR(50),
-    retired_by          VARCHAR(50),
-    
-    -- 낙관적 잠금
-    version             BIGINT          NOT NULL DEFAULT 0,
-    
-    -- 제약조건
-    CONSTRAINT uk_agent_tenant_login UNIQUE (tenant_id, login_id),
-    CONSTRAINT chk_agent_status CHECK (status IN ('ACTIVE', 'SUSPENDED', 'RETIRED')),
+    created_by          VARCHAR(36),
+    updated_by          VARCHAR(36),
+    version             INTEGER         DEFAULT 0,
+    role_id             VARCHAR(50),                       -- 레거시 컬럼 (rbac_agent_roles 우선)
+
     CONSTRAINT fk_agent_dept FOREIGN KEY (dept_id)
-        REFERENCES org_departments(dept_id) ON DELETE SET NULL
+        REFERENCES org_departments(dept_id) ON DELETE SET NULL,
+    CONSTRAINT chk_agent_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'RETIRED'))
 );
 
--- 인덱스
-CREATE INDEX IF NOT EXISTS idx_agent_tenant ON user_agents(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_agent_login ON user_agents(login_id);
-CREATE INDEX IF NOT EXISTS idx_agent_dept ON user_agents(dept_id);
-CREATE INDEX IF NOT EXISTS idx_agent_status ON user_agents(status);
-CREATE INDEX IF NOT EXISTS idx_agent_scheduled_delete ON user_agents(scheduled_delete_at)
-    WHERE scheduled_delete_at IS NOT NULL;
+CREATE INDEX idx_agent_tenant ON user_agents(tenant_id);
+CREATE INDEX idx_agent_dept ON user_agents(dept_id);
+CREATE INDEX idx_agent_status ON user_agents(status);
+CREATE INDEX idx_agent_login_id ON user_agents(login_id);
 ```
+
+> ⚠️ **주의**: V2 스키마의 `chk_agent_status`에는 `INACTIVE`가 포함되어 있으나 도메인 로직상 `AgentStatus` enum은 `ACTIVE`, `SUSPENDED`, `RETIRED` 3가지만 사용합니다.
 
 **컬럼 설명**:
 
 | 컬럼명 | 타입 | NULL | 설명 | 예시 |
 |--------|------|------|------|------|
-| agent_id | VARCHAR(50) | ✖ | 사용자 ID (PK) | `agent-admin-001` |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| login_id | VARCHAR(50) | ✖ | 로그인 ID (UK) | `admin`, `agent01` |
+| agent_id | VARCHAR(36) | ✖ | 사용자 ID (PK, UUID) | `10000000-0000-0000-0000-000000000001` |
+| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `default-tenant` |
+| login_id | VARCHAR(100) | ✖ | 로그인 ID (UNIQUE) | `admin`, `test.admin` |
 | password | VARCHAR(255) | ✖ | 비밀번호 (BCrypt) | `$2a$10$...` |
-| password_must_change | BOOLEAN | ✖ | 비밀번호 변경 필요 | FALSE |
-| name | VARCHAR(100) | ✖ | 사용자명 | `관리자`, `홍길동` |
-| employee_id | VARCHAR(50) | ✓ | 사원번호 | `EMP001` |
-| email | VARCHAR(100) | ✓ | 이메일 | `admin@nexfron.com` |
+| password_must_change | BOOLEAN | ✓ | 비밀번호 변경 필요 여부 | FALSE |
+| name | VARCHAR(100) | ✖ | 사용자명 | `시스템관리자`, `테스트관리자` |
+| employee_id | VARCHAR(30) | ✓ | 사원번호 | `EMP-0001` |
+| email | VARCHAR(255) | ✓ | 이메일 | `admin@nexfron.com` |
 | phone | VARCHAR(20) | ✓ | 전화번호 | `010-1234-5678` |
-| dept_id | VARCHAR(50) | ✓ | 소속 부서 ID | org_departments(dept_id) |
-| status | VARCHAR(20) | ✖ | 상태 | ACTIVE, SUSPENDED, RETIRED |
-| suspended_at | TIMESTAMP | ✓ | 정지 일시 | `2025-12-31 23:59:59` |
-| retired_at | TIMESTAMP | ✓ | 퇴사 일시 | `2025-12-31 23:59:59` |
-| scheduled_delete_at | TIMESTAMP | ✓ | 삭제 예정 일시 | 퇴사 후 90일 |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-02-05 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
-| created_by | VARCHAR(50) | ✓ | 생성자 ID | Agent ID |
-| updated_by | VARCHAR(50) | ✓ | 수정자 ID | Agent ID |
-| suspended_by | VARCHAR(50) | ✓ | 정지 처리자 ID | Agent ID |
-| retired_by | VARCHAR(50) | ✓ | 퇴사 처리자 ID | Agent ID |
-| version | BIGINT | ✖ | 낙관적 잠금 버전 | 0 (기본값) |
+| dept_id | VARCHAR(36) | ✓ | 소속 부서 ID | org_departments(dept_id) |
+| status | VARCHAR(20) | ✓ | 상태 | `ACTIVE`, `SUSPENDED`, `RETIRED` |
+| suspended_at | TIMESTAMP | ✓ | 정지 일시 | `2026-03-11 15:00:00` |
+| retired_at | TIMESTAMP | ✓ | 퇴사 일시 | `2026-03-11 15:00:00` |
+| scheduled_delete_at | TIMESTAMP | ✓ | 삭제 예정 일시 | 퇴사 후 N일 |
+| version | INTEGER | ✓ | 낙관적 잠금 버전 | 0 |
 
 **AgentStatus Enum**:
 ```java
 public enum AgentStatus {
     ACTIVE,     // 활성 (정상 근무)
     SUSPENDED,  // 정지 (임시 차단)
-    RETIRED     // 퇴사 (종료)
+    RETIRED     // 퇴사 (종료, 복구 불가)
 }
 ```
 
 **비밀번호 표준**:
-- **알고리즘**: BCrypt
-- **강도**: 10 rounds
-- **형식**: `$2a$10$` (60자)
-- **테스트 비밀번호**: `password123`
-- **해시**: `$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy`
+- **알고리즘**: BCrypt (`$2a$10$` 형식, 10 rounds)
+- **테스트 비밀번호**: `Admin123!`
+- **해시 예시**: `$2a$10$N9qo8uLOickgx2ZMRZoMye1J8fqohVhEhHZqXzSJCy6P6RBLhxaYm`
 
-**샘플 데이터 (3개)**:
+**기본 계정 (V2 + V3 마이그레이션)**:
 ```sql
-INSERT INTO user_agents (agent_id, tenant_id, login_id, password, name, employee_id, email, phone, dept_id, status, password_must_change)
-VALUES
-    ('agent-admin-001', 'tenant-001', 'admin', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '관리자', 'EMP001', 'admin@nexfron.com', '010-1234-5678', 'dept-root-001', 'ACTIVE', FALSE),
-    ('agent-lead-001', 'tenant-001', 'teamlead01', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '김팀장', 'EMP002', 'teamlead@nexfron.com', '010-2345-6789', 'dept-div-001', 'ACTIVE', FALSE),
-    ('agent-001', 'tenant-001', 'agent01', '$2a$10$8K1p/a0dL3.W6ba/xH88su7pUdyJNgI3Jy0FsYqKOdw7tWpVKSzSy', '홍길동', 'EMP003', 'agent01@nexfron.com', '010-3456-7890', 'dept-team-001', 'ACTIVE', FALSE);
+-- V2: admin, dev.lead, dev.member
+-- V3: test.admin (Keycloak SAML 연동용)
+-- login_id: test.admin / email: admin@example.com / SAML 인증 사용
 ```
 
 ---
@@ -338,52 +323,51 @@ VALUES
 
 **목적**: 역할 정의 및 관리
 
-**DDL**:
+**DDL** (V2_0_0__Fixed_Schema.sql 기준):
 ```sql
-CREATE TABLE IF NOT EXISTS rbac_roles (
-    role_id             VARCHAR(50)     PRIMARY KEY,
+CREATE TABLE rbac_roles (
+    role_id             VARCHAR(36)     PRIMARY KEY,
     tenant_id           VARCHAR(50)     NOT NULL,
-    name                VARCHAR(50)     NOT NULL,
-    type                VARCHAR(20)     NOT NULL,          -- POSITION, CHANNEL
-    data_scope          VARCHAR(20),                       -- ADMIN, TEAM_LEAD, MEMBER (POSITION일 때만)
+    name                VARCHAR(100)    NOT NULL,
+    type                VARCHAR(20)     NOT NULL,          -- POSITION, CHANNEL, SKILL, CUSTOM
+    data_scope_level    VARCHAR(20),                       -- ADMIN, TEAM_LEAD, MEMBER (POSITION일 때)
     description         VARCHAR(255),
     is_active           BOOLEAN         NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    CONSTRAINT uk_role_tenant_name UNIQUE (tenant_id, name),
-    CONSTRAINT chk_role_type CHECK (type IN ('POSITION', 'CHANNEL')),
-    CONSTRAINT chk_role_data_scope CHECK (
-        (type = 'POSITION' AND data_scope IN ('ADMIN', 'TEAM_LEAD', 'MEMBER')) OR
-        (type = 'CHANNEL' AND data_scope IS NULL)
-    )
+    created_by          VARCHAR(36),
+    updated_by          VARCHAR(36),
+    version             INTEGER         DEFAULT 0,
+
+    CONSTRAINT uk_roles_tenant_name UNIQUE (tenant_id, name),
+    CONSTRAINT chk_role_type CHECK (type IN ('POSITION', 'CHANNEL', 'SKILL', 'CUSTOM')),
+    CONSTRAINT chk_data_scope CHECK (data_scope_level IN ('ADMIN', 'TEAM_LEAD', 'MEMBER', 'CUSTOM'))
 );
 
--- 인덱스
-CREATE INDEX IF NOT EXISTS idx_role_tenant ON rbac_roles(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_role_type ON rbac_roles(type);
-CREATE INDEX IF NOT EXISTS idx_role_active ON rbac_roles(is_active);
+CREATE INDEX idx_role_tenant ON rbac_roles(tenant_id);
+CREATE INDEX idx_role_type ON rbac_roles(type);
 ```
 
 **컬럼 설명**:
 
 | 컬럼명 | 타입 | NULL | 설명 | 예시 |
 |--------|------|------|------|------|
-| role_id | VARCHAR(50) | ✖ | 역할 ID (PK) | `role-admin-001` |
-| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `tenant-001` |
-| name | VARCHAR(50) | ✖ | 역할명 (UK) | `ADMIN`, `TEAM_LEAD`, `INBOUND_AGENT` |
+| role_id | VARCHAR(36) | ✖ | 역할 ID (PK, UUID) | `20000000-0000-0000-0000-000000000001` |
+| tenant_id | VARCHAR(50) | ✖ | 테넌트 ID | `default-tenant` |
+| name | VARCHAR(100) | ✖ | 역할명 (UK) | `ADMIN`, `TEAM_LEAD`, `MEMBER` |
 | type | VARCHAR(20) | ✖ | 역할 타입 | `POSITION`, `CHANNEL` |
-| data_scope | VARCHAR(20) | ✓ | 데이터 스코프 | `ADMIN`, `TEAM_LEAD`, `MEMBER` (POSITION만) |
-| description | VARCHAR(255) | ✓ | 역할 설명 | `시스템 관리자 (전체 조직 접근)` |
-| is_active | BOOLEAN | ✖ | 활성화 상태 | TRUE, FALSE |
-| created_at | TIMESTAMP | ✖ | 생성 일시 | `2026-02-05 10:00:00` |
-| updated_at | TIMESTAMP | ✖ | 수정 일시 | `2026-02-05 15:00:00` |
+| data_scope_level | VARCHAR(20) | ✓ | 데이터 스코프 | `ADMIN`, `TEAM_LEAD`, `MEMBER` |
+| description | VARCHAR(255) | ✓ | 역할 설명 | `시스템 관리자` |
+| is_active | BOOLEAN | ✖ | 활성화 상태 | TRUE |
+| version | INTEGER | ✓ | 낙관적 잠금 버전 | 0 |
 
 **RoleType Enum**:
 ```java
 public enum RoleType {
-    POSITION,   // 직급 (ADMIN, TEAM_LEAD, AGENT)
-    CHANNEL     // 채널 (INBOUND_AGENT, CHAT_AGENT 등)
+    POSITION,   // 직급 (ADMIN, TEAM_LEAD, MEMBER)
+    CHANNEL,    // 채널
+    SKILL,      // 스킬
+    CUSTOM      // 사용자 정의
 }
 ```
 
@@ -396,23 +380,14 @@ public enum DataScopeLevel {
 }
 ```
 
-**초기 역할 (8개)**:
+**초기 역할 (V2 실제 데이터)**:
 ```sql
--- POSITION 역할 (3개)
-INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope, description, is_active)
+-- admin_role_id = '20000000-0000-0000-0000-000000000001'
+INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope_level, is_active)
 VALUES
-    ('role-admin-001', 'tenant-001', 'ADMIN', 'POSITION', 'ADMIN', '시스템 관리자 (전체 조직 접근)', TRUE),
-    ('role-teamlead-001', 'tenant-001', 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', '팀장 (본인 팀 + 하위 부서 접근)', TRUE),
-    ('role-agent-001', 'tenant-001', 'AGENT', 'POSITION', 'MEMBER', '일반 상담사 (본인 팀만 접근)', TRUE);
-
--- CHANNEL 역할 (5개)
-INSERT INTO rbac_roles (role_id, tenant_id, name, type, data_scope, description, is_active)
-VALUES
-    ('role-ch-inbound', 'tenant-001', 'INBOUND_AGENT', 'CHANNEL', NULL, '인바운드 전화 상담', TRUE),
-    ('role-ch-outbound', 'tenant-001', 'OUTBOUND_AGENT', 'CHANNEL', NULL, '아웃바운드 전화 상담', TRUE),
-    ('role-ch-chat', 'tenant-001', 'CHAT_AGENT', 'CHANNEL', NULL, '채팅 상담', TRUE),
-    ('role-ch-email', 'tenant-001', 'EMAIL_AGENT', 'CHANNEL', NULL, '이메일 상담', TRUE),
-    ('role-ch-multi', 'tenant-001', 'MULTI_CHANNEL_AGENT', 'CHANNEL', NULL, '멀티채널 상담 (모든 채널)', TRUE);
+    ('20000000-0000-0000-0000-000000000001', 'default-tenant', 'ADMIN', 'POSITION', 'ADMIN', TRUE),
+    ('20000000-0000-0000-0000-000000000002', 'default-tenant', 'TEAM_LEAD', 'POSITION', 'TEAM_LEAD', TRUE),
+    ('20000000-0000-0000-0000-000000000003', 'default-tenant', 'MEMBER', 'POSITION', 'MEMBER', TRUE);
 ```
 
 ---
@@ -524,80 +499,67 @@ VALUES
 
 **목적**: 역할과 권한의 M:N 관계
 
-**DDL**:
+**DDL** (V2_0_0__Fixed_Schema.sql 기준):
 ```sql
-CREATE TABLE IF NOT EXISTS rbac_role_permissions (
-    role_id             VARCHAR(50)     NOT NULL,
-    permission_id       VARCHAR(50)     NOT NULL,
+CREATE TABLE rbac_role_permissions (
+    id                  BIGSERIAL       PRIMARY KEY,
+    role_id             VARCHAR(36)     NOT NULL,
+    permission_id       VARCHAR(36)     NOT NULL,
     assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    assigned_by         VARCHAR(50),
-    
-    PRIMARY KEY (role_id, permission_id),
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by          VARCHAR(36),
+
     CONSTRAINT fk_rp_role FOREIGN KEY (role_id)
         REFERENCES rbac_roles(role_id) ON DELETE CASCADE,
     CONSTRAINT fk_rp_permission FOREIGN KEY (permission_id)
-        REFERENCES rbac_permissions(permission_id) ON DELETE CASCADE
+        REFERENCES rbac_permissions(permission_id) ON DELETE CASCADE,
+    CONSTRAINT uk_role_permission UNIQUE (role_id, permission_id)
 );
 
--- 인덱스
-CREATE INDEX IF NOT EXISTS idx_rp_role ON rbac_role_permissions(role_id);
-CREATE INDEX IF NOT EXISTS idx_rp_permission ON rbac_role_permissions(permission_id);
+CREATE INDEX idx_rp_role ON rbac_role_permissions(role_id);
+CREATE INDEX idx_rp_permission ON rbac_role_permissions(permission_id);
 ```
-
-**초기 매핑 (약 60개)**:
-
-| 역할 | 할당 권한 | 개수 |
-|------|----------|------|
-| ADMIN | 모든 권한 (SELECT 자동) | 31개 |
-| TEAM_LEAD | agent:read, agent:update, agent:transfer, dept:read, role:read, permission:read | 6개 |
-| AGENT | agent:read, dept:read, role:read | 3개 |
-| INBOUND_AGENT | channel:inbound:* | 3개 |
-| OUTBOUND_AGENT | channel:outbound:* | 2개 |
-| CHAT_AGENT | channel:chat:* | 3개 |
-| EMAIL_AGENT | channel:email:* | 2개 |
-| MULTI_CHANNEL_AGENT | 모든 CHANNEL 권한 (SELECT 자동) | 10개 |
 
 ---
 
-### 6.4 user_agent_roles (사용자-역할 매핑)
+### 6.4 rbac_agent_roles (사용자-역할 매핑)
 
 **목적**: 사용자와 역할의 M:N 관계
 
-**DDL**:
+> ⚠️ **v3 → v4 변경**: 테이블명 `user_agent_roles` → `rbac_agent_roles`
+
+**DDL** (V2_0_0__Fixed_Schema.sql 기준):
 ```sql
-CREATE TABLE IF NOT EXISTS user_agent_roles (
-    agent_id            VARCHAR(50)     NOT NULL,
-    role_id             VARCHAR(50)     NOT NULL,
+CREATE TABLE rbac_agent_roles (
+    id                  BIGSERIAL       PRIMARY KEY,
+    agent_id            VARCHAR(36)     NOT NULL,
+    role_id             VARCHAR(36)     NOT NULL,
     assigned_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    assigned_by         VARCHAR(50),
-    
-    PRIMARY KEY (agent_id, role_id),
-    CONSTRAINT fk_ar_agent FOREIGN KEY (agent_id)
+    created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by          VARCHAR(36),
+
+    CONSTRAINT fk_agent_roles_agent FOREIGN KEY (agent_id)
         REFERENCES user_agents(agent_id) ON DELETE CASCADE,
-    CONSTRAINT fk_ar_role FOREIGN KEY (role_id)
-        REFERENCES rbac_roles(role_id) ON DELETE CASCADE
+    CONSTRAINT fk_agent_roles_role FOREIGN KEY (role_id)
+        REFERENCES rbac_roles(role_id) ON DELETE CASCADE,
+    CONSTRAINT uk_agent_roles UNIQUE (agent_id, role_id)
 );
 
--- 인덱스
-CREATE INDEX IF NOT EXISTS idx_ar_agent ON user_agent_roles(agent_id);
-CREATE INDEX IF NOT EXISTS idx_ar_role ON user_agent_roles(role_id);
+CREATE INDEX idx_agent_roles_agent ON rbac_agent_roles(agent_id);
+CREATE INDEX idx_agent_roles_role ON rbac_agent_roles(role_id);
 ```
 
-**초기 매핑 (6개)**:
+**초기 매핑 (V2 실제 데이터)**:
 ```sql
-INSERT INTO user_agent_roles (agent_id, role_id)
+-- admin → ADMIN 역할
+-- dev.lead → TEAM_LEAD 역할
+-- dev.member → MEMBER 역할
+-- test.admin → ADMIN 역할 (V3 마이그레이션)
+INSERT INTO rbac_agent_roles (agent_id, role_id, assigned_at, created_at)
 VALUES
-    -- 관리자: ADMIN만
-    ('agent-admin-001', 'role-admin-001'),
-    
-    -- 팀장: TEAM_LEAD + INBOUND_AGENT
-    ('agent-lead-001', 'role-teamlead-001'),
-    ('agent-lead-001', 'role-ch-inbound'),
-    
-    -- 일반 상담사: AGENT + INBOUND_AGENT + CHAT_AGENT (멀티채널)
-    ('agent-001', 'role-agent-001'),
-    ('agent-001', 'role-ch-inbound'),
-    ('agent-001', 'role-ch-chat');
+    ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', NOW(), NOW()),
+    ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', NOW(), NOW()),
+    ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000003', NOW(), NOW());
 ```
 
 ---
@@ -655,15 +617,23 @@ INBOUND_AGENT, OUTBOUND_AGENT, CHAT_AGENT, EMAIL_AGENT, MULTI_CHANNEL_AGENT
 | 테이블 | 컬럼 | 참조 | ON DELETE | 이유 |
 |--------|------|------|-----------|------|
 | user_agents | dept_id | org_departments | SET NULL | 부서 삭제 시 사용자는 유지 (부서 미배정 상태) |
-| org_departments | parent_dept_id | org_departments | RESTRICT | 하위 부서가 있으면 삭제 불가 |
-| user_agent_roles | agent_id | user_agents | CASCADE | 사용자 삭제 시 역할 매핑도 삭제 |
-| user_agent_roles | role_id | rbac_roles | CASCADE | 역할 삭제 시 매핑도 삭제 |
+| org_departments | parent_id | org_departments | RESTRICT | 하위 부서가 있으면 삭제 불가 |
+| rbac_agent_roles | agent_id | user_agents | CASCADE | 사용자 삭제 시 역할 매핑도 삭제 |
+| rbac_agent_roles | role_id | rbac_roles | CASCADE | 역할 삭제 시 매핑도 삭제 |
 | rbac_role_permissions | role_id | rbac_roles | CASCADE | 역할 삭제 시 매핑도 삭제 |
 | rbac_role_permissions | permission_id | rbac_permissions | CASCADE | 권한 삭제 시 매핑도 삭제 |
 
 ---
 
 ## 9. 마이그레이션 순서
+
+### Flyway 마이그레이션 이력
+
+| 버전 | 파일 | 설명 | 적용 일시 |
+|------|------|------|----------|
+| V1 | V1_0_0__Complete_Schema_With_Code.sql | 초기 스키마 (구버전) | 2026-02-05 |
+| V2 | V2_0_0__Fixed_Schema.sql | 실제 엔티티 기준 전면 재작성 | 2026-02-06 |
+| V3 | V3_0_0__Add_Keycloak_Test_Accounts.sql | Keycloak test.admin 계정 추가 | 2026-03-11 |
 
 **테이블 생성 순서** (FK 의존성 고려):
 ```
@@ -672,17 +642,18 @@ INBOUND_AGENT, OUTBOUND_AGENT, CHAT_AGENT, EMAIL_AGENT, MULTI_CHANNEL_AGENT
 3. org_departments       (self-referential, 부모 먼저 생성)
 4. user_agents           (org_departments 참조)
 5. rbac_role_permissions (rbac_roles, rbac_permissions 참조)
-6. user_agent_roles      (user_agents, rbac_roles 참조)
+6. rbac_agent_roles      (user_agents, rbac_roles 참조)
 ```
 
 **초기 데이터 삽입 순서**:
 ```
-1. rbac_roles            (8개 역할)
-2. rbac_permissions      (31개 권한)
-3. rbac_role_permissions (역할-권한 매핑)
-4. org_departments       (4개 부서, 계층 순서대로)
-5. user_agents           (3개 사용자)
-6. user_agent_roles      (6개 사용자-역할 매핑)
+1. org_departments       (5개 부서: 넥스프론, 개발본부, 영업본부, 백엔드팀, 프론트엔드팀)
+2. user_agents           (3개 사용자: admin, dev.lead, dev.member)
+3. rbac_roles            (3개 역할: ADMIN, TEAM_LEAD, MEMBER)
+4. rbac_permissions      (10개 권한: user:*, org:*, rbac:*, report:*)
+5. rbac_role_permissions (ADMIN: 전체, TEAM_LEAD: 조회+보고, MEMBER: 조회+보고)
+6. rbac_agent_roles      (admin→ADMIN, dev.lead→TEAM_LEAD, dev.member→MEMBER)
+7. [V3] test.admin       (Keycloak SAML 연동 계정, ADMIN 역할)
 ```
 
 ---
@@ -807,73 +778,87 @@ CUSTOM    → 센터(customTypeName='센터'), 지사(customTypeName='지사')
 
 ---
 
-## 13. 완전한 초기 데이터 세트
+## 13. 실제 초기 데이터 세트 (V2 + V3)
 
 ### 13.1 테이블별 데이터 개수
 
 | 테이블 | 초기 건수 | 설명 |
 |--------|----------|------|
-| org_departments | 4개 | 3단계 트리 (1-1-2) |
-| user_agents | 3개 | admin, teamlead01, agent01 |
-| rbac_roles | 8개 | POSITION 3개 + CHANNEL 5개 |
-| rbac_permissions | 31개 | AGENT:9, DEPT:6, RBAC:6, CHANNEL:10 |
-| rbac_role_permissions | 약 60개 | 역할별 권한 매핑 |
-| user_agent_roles | 6개 | 사용자별 역할 할당 |
+| org_departments | 5개 | 3단계 트리 (넥스프론 → 개발/영업본부 → 백엔드/프론트팀) |
+| user_agents | 4개 | admin, dev.lead, dev.member + test.admin (V3) |
+| rbac_roles | 3개 | ADMIN, TEAM_LEAD, MEMBER |
+| rbac_permissions | 10개 | user:4, org:3, rbac:1, report:2 |
+| rbac_role_permissions | 약 17개 | ADMIN:10, TEAM_LEAD:4, MEMBER:3 |
+| rbac_agent_roles | 4개 | 각 사용자에게 1개씩 + test.admin ADMIN |
 
 ### 13.2 사용자 상세
 
 #### admin (관리자)
 ```
-- agent_id: agent-admin-001
+- agent_id: 10000000-0000-0000-0000-000000000001
 - login_id: admin
-- password: password123
-- name: 관리자
-- dept: 넥스프론 (dept-root-001)
+- password: Admin123! (BCrypt)
+- name: 시스템관리자
+- dept: 넥스프론 (company)
 - roles: [ADMIN]
-- permissions: 31개 (모든 권한)
+- 용도: 로컬 기본 관리자 계정
 ```
 
-#### teamlead01 (팀장)
+#### dev.lead (팀장)
 ```
-- agent_id: agent-lead-001
-- login_id: teamlead01
-- password: password123
+- agent_id: 10000000-0000-0000-0000-000000000002
+- login_id: dev.lead
+- password: Admin123! (BCrypt)
 - name: 김팀장
-- dept: 고객서비스본부 (dept-div-001)
-- roles: [TEAM_LEAD, INBOUND_AGENT]
-- permissions: 6개 (관리) + 3개 (인바운드) = 9개
+- dept: 백엔드팀
+- roles: [TEAM_LEAD]
 ```
 
-#### agent01 (일반 상담사)
+#### dev.member (일반 사용자)
 ```
-- agent_id: agent-001
-- login_id: agent01
-- password: password123
-- name: 홍길동
-- dept: 인바운드팀 (dept-team-001)
-- roles: [AGENT, INBOUND_AGENT, CHAT_AGENT]
-- permissions: 3개 (기본) + 3개 (인바운드) + 3개 (채팅) = 9개
+- agent_id: 10000000-0000-0000-0000-000000000003
+- login_id: dev.member
+- password: Admin123! (BCrypt)
+- name: 이개발
+- dept: 백엔드팀
+- roles: [MEMBER]
 ```
+
+#### test.admin (Keycloak SAML 연동 계정) — V3 추가
+```
+- agent_id: 10000000-0000-0000-0000-000000000010
+- login_id: test.admin
+- password: Admin123! (BCrypt, 로컬 로그인용 — SAML 로그인 시 미사용)
+- name: 테스트관리자
+- email: admin@example.com
+- dept: 넥스프론 (company)
+- roles: [ADMIN]
+- Keycloak username: test.admin
+- 용도: SAML SSO 통합 테스트
+```
+
+---
 
 ---
 
 ## 14. 참고 문서
 
 ### 시나리오 문서 (표준 데이터 기준)
-- **[RBAC_SCENARIOS.md](./RBAC_SCENARIOS.md)**: 역할/권한 시나리오, 2차원 역할 체계
-- **[DEPARTMENT_SCENARIOS.md](./DEPARTMENT_SCENARIOS.md)**: 조직 관리 시나리오, 트리 구조 규칙
-- **[AGENT_SCENARIOS.md](./AGENT_SCENARIOS.md)**: 상담사 관리 시나리오, 라이프사이클
+- **[RBAC_SCENARIOS.md](../SCENARIOS/RBAC_SCENARIOS.md)**: 역할/권한 시나리오, 2차원 역할 체계
+- **[DEPARTMENT_SCENARIOS.md](../SCENARIOS/DEPARTMENT_SCENARIOS.md)**: 조직 관리 시나리오, 트리 구조 규칙
+- **[AGENT_SCENARIOS.md](../SCENARIOS/AGENT_SCENARIOS.md)**: 상담사 관리 시나리오, 라이프사이클
 
 ### 구현 문서
-- **[V1_0_0__Complete_Init.sql](../src/main/resources/db/migration/V1_0_0__Complete_Init.sql)**: 실제 마이그레이션 스크립트
-- **[DB_COMPREHENSIVE_GUIDE.md](../DB_COMPREHENSIVE_GUIDE.md)**: 상세 DB 가이드
-- **[DATABASE_SCHEMA_COMPARISON.md](../DATABASE_SCHEMA_COMPARISON.md)**: 구버전과의 차이점 분석
+- **[V2_0_0__Fixed_Schema.sql](../../src/main/resources/db/migration/V2_0_0__Fixed_Schema.sql)**: 실제 마이그레이션 스크립트 (현재 기준)
+- **[V3_0_0__Add_Keycloak_Test_Accounts.sql](../../src/main/resources/db/migration/V3_0_0__Add_Keycloak_Test_Accounts.sql)**: Keycloak test.admin 계정 추가
+- **[ARCHITECTURE_DDD_MODULITH.md](../ARCHITECTURE_DDD_MODULITH.md)**: 전체 아키텍처 설명
+- **[EXCEPTION_AND_LOGGING.md](../EXCEPTION_AND_LOGGING.md)**: 예외 처리 및 로깅 구조
 
 ---
 
-**문서 버전**: 3.0  
-**최종 수정**: 2026-02-05  
-**기준**: V1_0_0__Complete_Init.sql (실제 구현)  
+**문서 버전**: 4.0  
+**최종 수정**: 2026-03-11  
+**기준**: V2_0_0__Fixed_Schema.sql + V3_0_0__Add_Keycloak_Test_Accounts.sql  
 **엔티티 일치**: ✅ AgentJpaEntity, DepartmentEntity, RoleJpaEntity  
 **시나리오 일치**: ✅ RBAC_SCENARIOS, DEPARTMENT_SCENARIOS, AGENT_SCENARIOS  
-**상태**: ✅ 실제 구현과 100% 일치
+**상태**: ✅ 실제 구현과 100% 일치 (V2 스키마 기준)

@@ -5,7 +5,12 @@ import com.identitymodulith.common.security.context.TenantContextHolder;
 import com.identitymodulith.common.security.context.UnauthorizedException;
 import com.identitymodulith.organization.application.service.DepartmentService;
 import com.identitymodulith.organization.domain.model.DepartmentType;
-import com.identitymodulith.organization.presentation.dto.DepartmentDto;
+import com.identitymodulith.organization.presentation.dto.request.CreateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.MoveDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.request.UpdateDepartmentRequest;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
+import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -72,10 +77,10 @@ public class DepartmentController {
             @ApiResponse(responseCode = "403", description = "권한 없음")
     })
     @PostMapping
-    public ResponseEntity<DepartmentDto.Response> createDepartment(
-            @Valid @RequestBody DepartmentDto.CreateRequest request) {
+    public ResponseEntity<DepartmentResponse> createDepartment(
+            @Valid @RequestBody CreateDepartmentRequest request) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        DepartmentDto.Response response = departmentService.createDepartment(
+        DepartmentResponse response = departmentService.createDepartment(
                 tenantId, currentUserId(),
                 request.getName(), request.getType(),
                 request.getCode(), request.getCustomTypeName(), request.getParentId()
@@ -101,12 +106,12 @@ public class DepartmentController {
             @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
     })
     @PatchMapping("/{deptId}")
-    public ResponseEntity<DepartmentDto.Response> updateDepartment(
+    public ResponseEntity<DepartmentResponse> updateDepartment(
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId,
-            @Valid @RequestBody DepartmentDto.UpdateRequest request) {
+            @Valid @RequestBody UpdateDepartmentRequest request) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
-        DepartmentDto.Response response = departmentService.updateDepartment(
+        DepartmentResponse response = departmentService.updateDepartment(
                 tenantId, currentUserId(), deptId, request.getName(), request.getType()
         );
         return ResponseEntity.ok(response);
@@ -128,7 +133,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "403", description = "권한 없음 (관리자만)")
     })
     @GetMapping
-    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTree() {
+    public ResponseEntity<List<DepartmentResponse>> getDepartmentTree() {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         return ResponseEntity.ok(departmentService.getDepartmentTree(tenantId));
     }
@@ -145,7 +150,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "400", description = "잘못된 요청")
     })
     @GetMapping("/search")
-    public ResponseEntity<List<DepartmentDto.Response>> searchDepartments(
+    public ResponseEntity<List<DepartmentResponse>> searchDepartments(
             @Parameter(description = "검색 키워드", example = "개발", required = true)
             @RequestParam String keyword) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
@@ -165,7 +170,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "404", description = "부서 없음")
     })
     @GetMapping("/{deptId}/subtree")
-    public ResponseEntity<List<DepartmentDto.Response>> getSubtree(
+    public ResponseEntity<List<DepartmentResponse>> getSubtree(
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
@@ -185,7 +190,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "400", description = "잘못된 요청")
     })
     @GetMapping("/by-depth")
-    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByDepth(
+    public ResponseEntity<List<DepartmentResponse>> getDepartmentsByDepth(
             @Parameter(description = "부서 깊이", example = "0", required = true)
             @RequestParam int depth) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
@@ -204,7 +209,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "400", description = "잘못된 요청")
     })
     @GetMapping("/by-type")
-    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentsByType(
+    public ResponseEntity<List<DepartmentResponse>> getDepartmentsByType(
             @Parameter(description = "부서 타입", example = "TEAM", required = true)
             @RequestParam DepartmentType type) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
@@ -223,7 +228,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
     })
     @GetMapping("/{deptId}/statistics")
-    public ResponseEntity<DepartmentDto.Statistics> getDepartmentStatistics(
+    public ResponseEntity<DepartmentStatisticsResponse> getDepartmentStatistics(
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
@@ -243,7 +248,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "404", description = "부서를 찾을 수 없음")
     })
     @GetMapping("/{deptId}/members")
-    public ResponseEntity<DepartmentDto.DepartmentMembers> getDepartmentMembers(
+    public ResponseEntity<DepartmentMembersResponse> getDepartmentMembers(
             @Parameter(description = "부서 ID (UUID)", required = true)
             @PathVariable String deptId,
             @Parameter(description = "하위 부서 포함 여부", example = "true")
@@ -274,7 +279,7 @@ public class DepartmentController {
             @ApiResponse(responseCode = "404", description = "사용자 정보 없음")
     })
     @GetMapping("/scoped")
-    public ResponseEntity<List<DepartmentDto.Response>> getDepartmentTreeWithinScope() {
+    public ResponseEntity<List<DepartmentResponse>> getDepartmentTreeWithinScope() {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         return ResponseEntity.ok(
                 departmentService.getDepartmentTreeWithinScope(tenantId, currentUserId()));
@@ -307,7 +312,7 @@ public class DepartmentController {
     public ResponseEntity<Void> moveDepartment(
             @Parameter(description = "이동할 부서 ID (UUID)", required = true)
             @PathVariable String deptId,
-            @RequestBody DepartmentDto.MoveRequest request) {
+            @RequestBody MoveDepartmentRequest request) {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         departmentService.moveDepartment(tenantId, currentUserId(), deptId, request.getNewParentId());
         return ResponseEntity.noContent().build();
