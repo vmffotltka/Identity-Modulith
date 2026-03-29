@@ -1,8 +1,11 @@
 # N+1 문제 해결 상세 가이드
 
-> **최종 업데이트**: 2026-03-11  
+> **최종 업데이트**: 2026-03-29  
 > **적용 범위**: RBAC 모듈 (`RbacQueryServiceImpl`, `RbacManagementServiceImpl`)  
 > **상태**: ✅ 실측 완료 — 벤치마크 테스트로 Before/After 수치 검증됨
+
+> 이 문서는 RBAC N+1 최적화 전용입니다.  
+> Organization(부서 parent Fetch Join) 성능 결과는 `Docs/PERFORMANCE_OPTIMIZATION.md`를 참고하세요.
 
 ---
 
@@ -36,6 +39,7 @@ JPA에서 **1번의 쿼리로 목록을 조회한 후, 각 항목마다 추가 �
 | 메서드 | 파일 | 발생 구조 |
 |--------|------|-----------|
 | `getEffectivePermissions` | `RbacManagementServiceImpl.java` | agent_roles → (N) role_permissions → (M) permissions |
+| `permissionsOf` | `RbacQueryServiceImpl.java` | agent_roles → (N) role_permissions → (M) permissions |
 | `permissionsOfRoles` | `RbacQueryServiceImpl.java` | roles → (N) role_permissions → (M) permissions |
 
 ---
@@ -88,6 +92,24 @@ for (RoleJpaEntity role : roles) {
     }
 }
 // 역할 5개, 권한 20개 → 1 + 5 + 20 = 26 queries
+```
+
+### `permissionsOf` (개선 전)
+
+```java
+// ❌ N+1 패턴
+// 파일: RbacQueryServiceImpl.java
+
+// Q1: agent_roles에서 roleId 목록 조회
+Set<String> roleIds = agentRoleRepository.findRoleIdsByAgentId(agentId.toString());
+
+// QN + QM: roleId마다 permissions 엔티티 조회 후 code 추출
+Set<String> permissionCodes = roleIds.stream()
+        .flatMap(roleId -> rolePermissionRepository
+                .findPermissionsByRoleIdAndTenant(roleId, tenantId)
+                .stream()
+                .map(PermissionJpaEntity::getCode))
+        .collect(Collectors.toSet());
 ```
 
 ---
@@ -149,6 +171,25 @@ List<String> findPermissionCodesByRoleIdsAndTenant(
     @Param("tenantId") String tenantId);
 ```
 
+### 4-3. `permissionsOf` (개선 후)
+
+```java
+// ✅ 1-query — agent_roles → role_permissions → permissions 단일 JOIN
+// 파일: RbacQueryServiceImpl.java (line ~170)
+
+// Q1: 스칼라 프로젝션으로 권한 코드만 조회
+List<String> permissionCodes = agentRoleRepository
+        .findPermissionCodesByAgentIdAndTenant(agentId.toString(), tenantId);
+
+// 중복 제거
+Set<String> codes = new HashSet<>(permissionCodes);
+```
+
+**핵심 포인트**
+- 기존: roleId별 반복 조회 + `PermissionJpaEntity` 전체 로딩 후 `code`만 사용 (N+1)
+- 개선: `List<String>` 스칼라 프로젝션으로 필요한 컬럼(`p.code`)만 조회
+- 효과: 쿼리 수 고정(1 query), 불필요한 엔티티 로딩 제거
+
 ---
 
 ## 5. 실측 벤치마크 결과
@@ -183,6 +224,7 @@ Before (N+1):  1 + 역할수(N) + 권한수(M)  — 코드 구조상 계산값
 
 After (최적화): 역할/권한 수에 무관하게 고정  — 코드 구조상 확정
   getEffectivePermissions → 항상 1 query   (실측 확인)
+  permissionsOf         → 항상 1 query   (구조 확인, 별도 실측 미포함)
   permissionsOfRoles      → 항상 2 queries (실측 확인)
 ```
 
@@ -204,6 +246,7 @@ Before 측정:  N+1 패턴을 simulateNPlusOne() 메서드로 직접 재현
 
 After 측정:   최적화된 서비스 메서드 직접 호출
               getEffectivePermissions(agentId) / permissionsOfRoles(tenantId, roleNames)
+              * permissionsOf(tenantId, agentId)는 구조 검증 완료, 본 문서의 실측 표에는 미포함
 
 워밍업:       JVM/DB 커넥션 풀 안정화를 위해 3회 사전 실행 후 10회 측정
 측정 도구:    Spring의 StopWatch — 각 라운드별 ms 단위 기록

@@ -10,6 +10,8 @@ import com.identitymodulith.rbac.infrastructure.persistence.entity.RolePermissio
 import com.identitymodulith.rbac.infrastructure.persistence.repository.*;
 import com.identitymodulith.user.infrastructure.persistence.entity.AgentJpaEntity;
 import com.identitymodulith.user.infrastructure.persistence.repository.AgentJpaRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,11 +42,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ./gradlew test --tests "*.RbacPerformanceBenchmarkTest" --info
  * </pre>
  * 콘솔에서 [BENCHMARK] 키워드로 결과 확인
+ *
+ * <h2>주의</h2>
+ * 이 테스트는 수동으로 실행할 때만 사용합니다. CI/CD에서는 @Disabled로 비활성화됩니다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("RBAC N+1 최적화 성능 벤치마크")
+@Disabled("수동 벤치마크 테스트 - CI/CD에서는 실행하지 않음")
 class RbacPerformanceBenchmarkTest {
 
     private static final Logger log = LoggerFactory.getLogger(RbacPerformanceBenchmarkTest.class);
@@ -58,6 +64,9 @@ class RbacPerformanceBenchmarkTest {
     @Autowired private AgentRoleJpaRepository      agentRoleRepository;
     @Autowired private AgentJpaRepository          agentJpaRepository;
     @Autowired private JdbcTemplate                jdbc; // Hibernate 캐시 우회용 직접 SQL
+
+    @PersistenceContext
+    private EntityManager entityManager; // JDBC 직접 삽입 후 JPA 1차 캐시 초기화용
 
     // ── 벤치마크 파라미터 ────────────────────────────────────────────────────
     private static final String TENANT_ID     = "benchmark-tenant";
@@ -145,6 +154,10 @@ class RbacPerformanceBenchmarkTest {
         }
 
         log.info("[BENCHMARK] 데이터 생성 완료");
+
+        // JDBC 직접 삽입 후 JPA 1차 캐시 초기화 — simulateNPlusOne()의 JPA Repository 조회가
+        // 캐시가 아닌 DB에서 새 데이터를 읽도록 보장
+        entityManager.clear();
     }
 
     @AfterEach

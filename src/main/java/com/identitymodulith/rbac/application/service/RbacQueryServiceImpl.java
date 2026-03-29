@@ -1,6 +1,5 @@
 package com.identitymodulith.rbac.application.service;
 
-import com.identitymodulith.rbac.infrastructure.persistence.entity.PermissionJpaEntity;
 import com.identitymodulith.rbac.infrastructure.persistence.entity.RoleJpaEntity;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.AgentRoleJpaRepository;
 import com.identitymodulith.rbac.infrastructure.persistence.repository.RoleJpaRepository;
@@ -126,21 +125,8 @@ public class RbacQueryServiceImpl implements RbacQueryService {
     /**
      * 특정 에이전트(사용자)가 보유한 모든 권한 코드 조회
      *
-     * <h3>동작 흐름 (3-JOIN):</h3>
-     * <ol>
-     *   <li><b>Step 1</b>: agent_roles 테이블에서 agentId의 모든 roleId 조회
-     *       <br/>쿼리: SELECT role_id FROM agent_roles WHERE agent_id = ?
-     *       <br/>예: agentId="user-123" → roleIds=["role-001", "role-002"]
-     *   </li>
-     *   <li><b>Step 2</b>: role_permissions 테이블에서 해당 roleId들의 permissionId 조회
-     *       <br/>쿼리: SELECT DISTINCT permission_id FROM role_permissions WHERE role_id IN (?, ?)
-     *       <br/>예: roleIds=["role-001", "role-002"] → permissionIds=["perm-001", "perm-002", "perm-003"]
-     *   </li>
-     *   <li><b>Step 3</b>: permissions 테이블에서 permissionId들의 code 조회
-     *       <br/>쿼리: SELECT code FROM permissions WHERE permission_id IN (?, ?, ?)
-     *       <br/>예: permissionIds=[...] → codes=["user:create", "user:read", "org:view"]
-     *   </li>
-     * </ol>
+     * <h3>동작 흐름 (3-JOIN 단일 조회):</h3>
+     * agent_roles → role_permissions → permissions 를 단일 JOIN 쿼리로 조회합니다.
      *
      * <h3>권한 조회 SQL (conceptual):</h3>
      * <pre>
@@ -179,37 +165,21 @@ public class RbacQueryServiceImpl implements RbacQueryService {
         }
         long startTime = System.currentTimeMillis();
 
-        // ========== Step 1: 에이전트의 모든 역할 ID 조회 ==========
-        // agent_roles 테이블에서 agentId와 매핑된 모든 role_id 추출
-        // 쿼리: SELECT role_id FROM agent_roles WHERE agent_id = ?
-        Set<String> roleIds = agentRoleRepository.findRoleIdsByAgentId(agentId.toString());
+        // 단일 3-JOIN 쿼리로 권한 코드만 조회 (N+1 및 불필요한 엔티티 로딩 제거)
+        List<String> permissionCodes = agentRoleRepository
+                .findPermissionCodesByAgentIdAndTenant(agentId.toString(), tenantId);
 
-        log.trace("[RBAC] Step 1 완료: agentId={}, 할당된 역할 수={}", agentId, roleIds.size());
-
-        // 할당된 역할이 없으면 권한도 없음
-        if (roleIds.isEmpty()) {
-            log.debug("[RBAC 권한 조회] 사용자에게 할당된 역할이 없음: agentId={}, tenantId={}", agentId, tenantId);
+        if (permissionCodes.isEmpty()) {
+            log.debug("[RBAC 권한 조회] 사용자에게 매핑된 권한이 없음: agentId={}, tenantId={}", agentId, tenantId);
             return Set.of();
         }
 
-        // ========== Step 2,3: 역할의 권한 조회 및 코드 추출 ==========
-        // 각 role_id에 대해 권한을 조회하고 권한 코드를 추출하여 합집합으로 모두 합치기
-        // 쿼리: SELECT DISTINCT p.code FROM permissions p
-        //       WHERE p.permission_id IN (SELECT rp.permission_id FROM role_permissions rp WHERE rp.role_id IN (...))
-        Set<String> permissionCodes = roleIds.stream()
-                .flatMap(roleId -> {
-                    // 각 역할의 권한 엔티티 조회 (테넌트 격리)
-                    var permissions = rolePermissionRepository.findPermissionsByRoleIdAndTenant(roleId, tenantId);
-                    log.trace("[RBAC] roleId={} 권한 수: {}", roleId, permissions.size());
-                    return permissions.stream()
-                            .map(PermissionJpaEntity::getCode);
-                })
-                .collect(Collectors.toSet());
+        Set<String> codes = new HashSet<>(permissionCodes);
 
         long duration = System.currentTimeMillis() - startTime;
-        log.info("[RBAC 권한 조회 완료] agentId={}, tenantId={}, 역할 수={}, 권한 수={}, 소요시간={}ms",
-                agentId, tenantId, roleIds.size(), permissionCodes.size(), duration);
+        log.info("[RBAC 권한 조회 완료] agentId={}, tenantId={}, 권한 수={}, 소요시간={}ms",
+                agentId, tenantId, codes.size(), duration);
 
-        return permissionCodes;
+        return codes;
     }
 }

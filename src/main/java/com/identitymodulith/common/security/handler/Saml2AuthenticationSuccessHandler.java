@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -45,11 +46,14 @@ public class Saml2AuthenticationSuccessHandler extends SavedRequestAwareAuthenti
     private final UserModuleApi userModuleApi;
     private final RbacModuleApi rbacModuleApi;
 
+    @Value("${app.frontend.login-success-url:http://localhost:3000}")
+    private String loginSuccessUrl;
+
     public Saml2AuthenticationSuccessHandler(UserModuleApi userModuleApi, RbacModuleApi rbacModuleApi) {
         this.userModuleApi = userModuleApi;
         this.rbacModuleApi = rbacModuleApi;
-        setDefaultTargetUrl("/");
-        setAlwaysUseDefaultTargetUrl(false); // SavedRequest를 우선 사용
+        // 기본값은 프론트엔드 URL - @Value 주입 전에는 빈 문자열이므로 onAuthenticationSuccess에서 동적 설정
+        setAlwaysUseDefaultTargetUrl(true); // 항상 프론트엔드로 리디렉션
     }
 
     @Override
@@ -57,6 +61,9 @@ public class Saml2AuthenticationSuccessHandler extends SavedRequestAwareAuthenti
             HttpServletRequest request,
             HttpServletResponse response,
             Authentication authentication) throws ServletException, IOException {
+
+        // @Value 주입 후 동적으로 설정
+        setDefaultTargetUrl(loginSuccessUrl);
 
         log.info("====================================");
         log.info("✅ SAML 2.0 인증 성공!");
@@ -81,7 +88,7 @@ public class Saml2AuthenticationSuccessHandler extends SavedRequestAwareAuthenti
                 log.warn("  1. DB agent 테이블에 login_id='{}' 확인", username);
                 log.warn("  2. /api/agents POST 로 Agent 생성 후 재시도");
                 log.warn("====================================");
-                response.sendRedirect("/login?error=not_registered");
+                response.sendRedirect(loginSuccessUrl + "?error=not_registered");
                 return;
             }
 
@@ -90,7 +97,7 @@ public class Saml2AuthenticationSuccessHandler extends SavedRequestAwareAuthenti
             // ─── 2. 비활성 Agent 차단 ────────────────────────────────────────
             if (!agent.isActive()) {
                 log.warn("⚠️  비활성 Agent 로그인 시도 차단: loginId={}, agentId={}", username, agent.getId());
-                response.sendRedirect("/login?error=inactive");
+                response.sendRedirect(loginSuccessUrl + "?error=inactive");
                 return;
             }
 
@@ -140,7 +147,7 @@ public class Saml2AuthenticationSuccessHandler extends SavedRequestAwareAuthenti
             log.info("====================================");
         }
 
-        log.info("🔀 리디렉션: targetUrl={}", getDefaultTargetUrl());
+        log.info("🔀 프론트엔드 리디렉션: targetUrl={}", loginSuccessUrl);
         super.onAuthenticationSuccess(request, response, authentication);
     }
 }

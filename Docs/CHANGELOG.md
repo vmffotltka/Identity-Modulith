@@ -1,5 +1,25 @@
 # 📋 프로젝트 변경 이력 (Changelog)
 
+## 🎯 v4.0.1 - 2026-03-29
+
+### ✨ 주요 개선 사항
+
+#### 1️⃣ **Organization Fetch Join 성능 평가 정리**
+- ✅ `JpaDepartmentRepository`에 parent Fetch Join 조회 메서드 6종 적용
+- ✅ `DepartmentServiceImpl`, `AgentOrgUserAdapter`의 부서 조회 경로 Fetch Join 전환
+- ✅ `DepartmentFetchJoinBenchmarkTest`로 LAZY vs FETCH JOIN 비교 로그 정리
+
+#### 2️⃣ **벤치마크 회귀 기준 안정화**
+- ✅ `DepartmentFetchJoinBenchmarkTest` 단정 로직을 "after < before"에서
+  "쿼리 역행 금지(after <= before) + 쿼리 예산(after <= 2)"으로 조정
+- ✅ 소규모/parent 공유 데이터셋에서 발생 가능한 동률(1 vs 1) 케이스를 정상 시나리오로 반영
+
+#### 3️⃣ **성능 문서 보강**
+- ✅ `Docs/PERFORMANCE_OPTIMIZATION.md`에 Organization Fetch Join 결과/해석 추가
+- ✅ `Docs/PERFORMANCE_OPTIMIZATION_N_PLUS_1.md`에 RBAC 전용 범위 명시 및 교차 참조 추가
+
+---
+
 ## 🎯 v4.0.0 - 2026-03-11
 
 ### ✨ 주요 개선 사항

@@ -206,7 +206,7 @@ public class AgentOrgUserAdapter implements OrgUserPort {
 
         if (deptId != null && !deptId.isEmpty()) {
             java.util.Optional<DepartmentEntity> deptOpt =
-                departmentRepository.findByDeptIdAndTenantId(deptId, info.getTenantId());
+                departmentRepository.findByDeptIdAndTenantIdWithParent(deptId, info.getTenantId());
 
             if (deptOpt.isPresent()) {
                 DepartmentEntity dept = deptOpt.get();
@@ -248,7 +248,7 @@ public class AgentOrgUserAdapter implements OrgUserPort {
 
             if (current.getParent() != null) {
                 String parentId = current.getParent().getDeptId();
-                current = departmentRepository.findByDeptIdAndTenantId(parentId, tenantId)
+                current = departmentRepository.findByDeptIdAndTenantIdWithParent(parentId, tenantId)
                     .orElse(null);
             } else {
                 break;

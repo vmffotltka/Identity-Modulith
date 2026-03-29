@@ -12,6 +12,7 @@ import com.identitymodulith.organization.presentation.dto.request.UpdateDepartme
 import com.identitymodulith.organization.presentation.dto.response.DepartmentMembersResponse;
 import com.identitymodulith.organization.presentation.dto.response.DepartmentResponse;
 import com.identitymodulith.organization.presentation.dto.response.DepartmentStatisticsResponse;
+import com.identitymodulith.organization.infrastructure.persistence.repository.DepartmentListProjection;
 import com.identitymodulith.organization.infrastructure.persistence.repository.JpaDepartmentRepository;
 import com.identitymodulith.organization.application.port.OrgUserPort;
 import com.identitymodulith.organization.OrganizationModuleApi;
@@ -391,7 +392,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         log.info("[ORG] 부서 삭제 요청 - deptId={}", deptId);
 
         // 부서 조회
-        DepartmentEntity dept = departmentRepository.findByDeptIdAndTenantId(deptId, tenantId)
+        DepartmentEntity dept = departmentRepository.findByDeptIdAndTenantIdWithParent(deptId, tenantId)
                 .orElseThrow(() -> new OrganizationException(
                         OrganizationErrorCode.DEPARTMENT_NOT_FOUND
                 ));
@@ -568,7 +569,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      */
     @Transactional(readOnly = true)
     public List<DepartmentResponse> getDepartmentTree(String tenantId) {
-        List<DepartmentEntity> allDepts = departmentRepository.findAllByTenantId(tenantId);
+        List<DepartmentListProjection> allDepts = departmentRepository.findAllProjectedByTenantId(tenantId);
         return buildTree(allDepts);
     }
 
@@ -595,11 +596,8 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             return Collections.emptyList();
         }
 
-        // 접근 가능한 부서만 필터링
-        List<DepartmentEntity> allDepts = departmentRepository.findAllByTenantId(tenantId);
-        List<DepartmentEntity> scopedDepts = allDepts.stream()
-                .filter(d -> scopeDeptIds.contains(d.getDeptId()))
-                .toList();
+        List<DepartmentListProjection> scopedDepts = departmentRepository
+                .findProjectedByTenantIdAndDeptIdIn(tenantId, scopeDeptIds);
 
         return buildTree(scopedDepts);
     }
@@ -608,10 +606,10 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
      * 부서 리스트를 트리 구조 DTO로 변환
      * - ID-DTO 맵 구성 → 부모-자식 관계 연결 → 루트 추출
      */
-    private List<DepartmentResponse> buildTree(List<DepartmentEntity> depts) {
+    private List<DepartmentResponse> buildTree(List<DepartmentListProjection> depts) {
         // ID -> DTO 맵 구성
         Map<String, DepartmentResponse> dtoMap = depts.stream()
-                .map(DepartmentResponse::from)
+                .map(this::toDepartmentResponse)
                 .collect(Collectors.toMap(
                         DepartmentResponse::getDeptId,
                         dto -> dto
@@ -653,11 +651,11 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             return List.of();
         }
 
-        List<DepartmentEntity> departmentEntities = departmentRepository
-                .findByTenantIdAndNameContainingIgnoreCase(tenantId, keyword);
+        List<DepartmentListProjection> departmentRows = departmentRepository
+                .findProjectedByTenantIdAndNameContainingIgnoreCase(tenantId, keyword);
 
-        return departmentEntities.stream()
-                .map(DepartmentResponse::from)
+        return departmentRows.stream()
+                .map(this::toDepartmentResponse)
                 .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
@@ -690,13 +688,13 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
 
         // orgPath 기반 하위 부서 조회 (자신 포함)
         String pathPrefix = dept.getOrgPath();
-        List<DepartmentEntity> subtree = departmentRepository
-                .findByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix);
+        List<DepartmentListProjection> subtree = departmentRepository
+                .findProjectedByTenantIdAndOrgPathStartsWith(tenantId, pathPrefix);
 
         log.debug("[ORG] 하위 부서 트리 조회 완료 - deptId={}, 총 {}개", deptId, subtree.size());
 
         return subtree.stream()
-                .map(DepartmentResponse::from)
+                .map(this::toDepartmentResponse)
                 .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
@@ -710,11 +708,11 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             throw new IllegalArgumentException("depth는 0 이상이어야 합니다.");
         }
 
-        List<DepartmentEntity> departmentEntities = departmentRepository
-                .findByTenantIdAndDepth(tenantId, depth);
+        List<DepartmentListProjection> departmentRows = departmentRepository
+                .findProjectedByTenantIdAndDepth(tenantId, depth);
 
-        return departmentEntities.stream()
-                .map(DepartmentResponse::from)
+        return departmentRows.stream()
+                .map(this::toDepartmentResponse)
                 .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
     }
@@ -728,13 +726,25 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
             return List.of();
         }
 
-        List<DepartmentEntity> departmentEntities = departmentRepository
-                .findByTenantIdAndType(tenantId, type);
+        List<DepartmentListProjection> departmentRows = departmentRepository
+                .findProjectedByTenantIdAndType(tenantId, type);
 
-        return departmentEntities.stream()
-                .map(DepartmentResponse::from)
+        return departmentRows.stream()
+                .map(this::toDepartmentResponse)
                 .sorted(Comparator.comparing(DepartmentResponse::getOrgPath))
                 .toList();
+    }
+
+    private DepartmentResponse toDepartmentResponse(DepartmentListProjection row) {
+        return DepartmentResponse.builder()
+                .deptId(row.getDeptId())
+                .name(row.getName())
+                .type(row.getType())
+                .orgPath(row.getOrgPath())
+                .depth(row.getDepth())
+                .parentId(row.getParentId())
+                .status(row.getStatus())
+                .build();
     }
 
     /**
@@ -754,7 +764,7 @@ public class DepartmentServiceImpl implements DepartmentService, OrganizationMod
         long activeEmployees = orgUserPort.countActiveEmployeesByDepartment(tenantId, deptId);
 
         // 직속 하위 부서 수
-        long childDeptCount = departmentRepository.findAllByTenantId(tenantId).stream()
+        long childDeptCount = departmentRepository.findAllByTenantIdWithParent(tenantId).stream()
                 .filter(dept -> dept.getParent() != null
                         && dept.getParent().getDeptId().equals(deptId))
                 .count();

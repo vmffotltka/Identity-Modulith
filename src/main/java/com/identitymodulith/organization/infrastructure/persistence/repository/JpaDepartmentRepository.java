@@ -3,9 +3,12 @@ package com.identitymodulith.organization.infrastructure.persistence.repository;
 import com.identitymodulith.organization.domain.model.DepartmentType;
 import com.identitymodulith.organization.infrastructure.persistence.entity.DepartmentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * JpaDepartmentRepository
@@ -30,6 +33,105 @@ import java.util.Optional;
  */
 public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity, String> {
 
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+    """)
+    List<DepartmentListProjection> findAllProjectedByTenantId(@Param("tenantId") String tenantId);
+
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+          AND LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+    """)
+    List<DepartmentListProjection> findProjectedByTenantIdAndNameContainingIgnoreCase(
+            @Param("tenantId") String tenantId,
+            @Param("keyword") String keyword);
+
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+          AND d.orgPath LIKE CONCAT(:orgPathPrefix, '%')
+    """)
+    List<DepartmentListProjection> findProjectedByTenantIdAndOrgPathStartsWith(
+            @Param("tenantId") String tenantId,
+            @Param("orgPathPrefix") String orgPathPrefix);
+
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+          AND d.depth = :depth
+    """)
+    List<DepartmentListProjection> findProjectedByTenantIdAndDepth(
+            @Param("tenantId") String tenantId,
+            @Param("depth") Integer depth);
+
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+          AND d.type = :type
+    """)
+    List<DepartmentListProjection> findProjectedByTenantIdAndType(
+            @Param("tenantId") String tenantId,
+            @Param("type") DepartmentType type);
+
+    @Query("""
+        SELECT d.deptId AS deptId,
+               d.name AS name,
+               d.type AS type,
+               d.orgPath AS orgPath,
+               d.depth AS depth,
+               p.deptId AS parentId,
+               d.status AS status
+        FROM DepartmentEntity d
+        LEFT JOIN d.parent p
+        WHERE d.tenantId = :tenantId
+          AND d.deptId IN :deptIds
+    """)
+    List<DepartmentListProjection> findProjectedByTenantIdAndDeptIdIn(
+            @Param("tenantId") String tenantId,
+            @Param("deptIds") Set<String> deptIds);
+
     /**
      * [트리 탐색]
      * 특정 테넌트에서 orgPath prefix 로 시작하는 모든 하위 부서 조회
@@ -49,6 +151,19 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
     List<DepartmentEntity> findByTenantIdAndOrgPathStartsWith(String tenantId, String orgPathPrefix);
 
     /**
+     * parent를 Fetch Join으로 함께 조회 (DTO 변환 시 parent 접근 N+1 완화)
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.tenantId = :tenantId
+          AND d.orgPath LIKE CONCAT(:orgPathPrefix, '%')
+    """)
+    List<DepartmentEntity> findByTenantIdAndOrgPathStartsWithWithParent(
+            @Param("tenantId") String tenantId,
+            @Param("orgPathPrefix") String orgPathPrefix);
+
+    /**
      * 특정 테넌트의 전체 부서 목록 조회
      *
      * 사용처:
@@ -62,6 +177,16 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
      * - 데이터 규모가 커지면 IN 조회로 대체 고려
      */
     List<DepartmentEntity> findAllByTenantId(String tenantId);
+
+    /**
+     * parent를 Fetch Join으로 함께 조회 (조직도 트리 조회용)
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.tenantId = :tenantId
+    """)
+    List<DepartmentEntity> findAllByTenantIdWithParent(@Param("tenantId") String tenantId);
 
     /**
      * 특정 부서를 parent로 가지는 하위 부서 존재 여부
@@ -88,6 +213,19 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
      */
     Optional<DepartmentEntity> findByDeptIdAndTenantId(String deptId, String tenantId);
 
+    /**
+     * 단건 조회 + parent Fetch Join
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.deptId = :deptId
+          AND d.tenantId = :tenantId
+    """)
+    Optional<DepartmentEntity> findByDeptIdAndTenantIdWithParent(
+            @Param("deptId") String deptId,
+            @Param("tenantId") String tenantId);
+
 
     /**
      * [부서 검색]
@@ -104,6 +242,19 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
     List<DepartmentEntity> findByTenantIdAndNameContainingIgnoreCase(String tenantId, String keyword);
 
     /**
+     * 부서명 검색 + parent Fetch Join
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.tenantId = :tenantId
+          AND LOWER(d.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+    """)
+    List<DepartmentEntity> findByTenantIdAndNameContainingIgnoreCaseWithParent(
+            @Param("tenantId") String tenantId,
+            @Param("keyword") String keyword);
+
+    /**
      * [부서 검색]
      * 특정 깊이(depth)의 부서 조회
      *
@@ -118,6 +269,19 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
     List<DepartmentEntity> findByTenantIdAndDepth(String tenantId, Integer depth);
 
     /**
+     * 깊이 조회 + parent Fetch Join
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.tenantId = :tenantId
+          AND d.depth = :depth
+    """)
+    List<DepartmentEntity> findByTenantIdAndDepthWithParent(
+            @Param("tenantId") String tenantId,
+            @Param("depth") Integer depth);
+
+    /**
      * [부서 검색]
      * 특정 타입의 부서 조회
      *
@@ -130,4 +294,17 @@ public interface JpaDepartmentRepository extends JpaRepository<DepartmentEntity,
      * @return 해당 타입의 부서 리스트
      */
     List<DepartmentEntity> findByTenantIdAndType(String tenantId, DepartmentType type);
+
+    /**
+     * 타입 조회 + parent Fetch Join
+     */
+    @Query("""
+        SELECT d FROM DepartmentEntity d
+        LEFT JOIN FETCH d.parent
+        WHERE d.tenantId = :tenantId
+          AND d.type = :type
+    """)
+    List<DepartmentEntity> findByTenantIdAndTypeWithParent(
+            @Param("tenantId") String tenantId,
+            @Param("type") DepartmentType type);
 }

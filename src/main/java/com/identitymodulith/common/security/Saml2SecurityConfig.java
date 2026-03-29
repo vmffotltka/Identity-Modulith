@@ -48,6 +48,12 @@ public class Saml2SecurityConfig {
     @Value("${keycloak.saml.acs-url}")
     private String acsUrl;
 
+    @Value("${app.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
+
+    @Value("${app.frontend.logout-success-url:http://localhost:3000/login}")
+    private String logoutSuccessUrl;
+
     /**
      * RelyingPartyRegistrationRepository Bean - SAML SP 설정
      * Keycloak IdP 메타데이터에서 설정 로드
@@ -148,7 +154,7 @@ public class Saml2SecurityConfig {
             // 일반 로그아웃 설정
             .logout(logout -> logout
                 .logoutUrl("/logout")
-                .logoutSuccessUrl("/?logout=success")
+                .logoutSuccessUrl(logoutSuccessUrl)
                 .invalidateHttpSession(true)
                 .deleteCookies("JSESSIONID")
                 .permitAll()
@@ -167,14 +173,21 @@ public class Saml2SecurityConfig {
 
     /**
      * CORS 설정
+     * 프론트엔드 서버(app.frontend.url)와 localhost 개발 환경, AWS Connect를 허용합니다.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        // 프론트엔드 URL + 개발 환경 localhost 패턴 + AWS Connect 허용
+        configuration.setAllowedOrigins(List.of(
+            frontendUrl,               // ex) http://localhost:3000
+            "http://localhost:3000",   // 명시적 개발 환경
+            "http://127.0.0.1:3000",
+            "https://ssotest.my.connect.aws"  // AWS Connect CCP 임베드용
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowCredentials(true);  // 쿠키(JSESSIONID) 전송 허용
         configuration.setMaxAge(3600L);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
 

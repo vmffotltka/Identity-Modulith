@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SAML Response 디코더</title>
+<style>
+  body { font-family: monospace; padding: 20px; }
+  textarea { width: 100%; height: 150px; }
+  pre { background: #f5f5f5; padding: 15px; overflow-x: auto; white-space: pre-wrap; }
+  .highlight { background: yellow; font-weight: bold; }
+  button { padding: 10px 20px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+  .error { color: red; }
+  .section { margin: 20px 0; border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+  h3 { margin-top: 0; color: #333; }
+</style>
+</head>
+<body>
+<h2>SAML Response 디코더 (로컬 전용)</h2>
+<p>F12 → Network → <strong>signin.aws.amazon.com/saml/acs/SAMLSPRVBBPMKPBWD7EUYL</strong> POST 요청 → Payload → SAMLResponse 값 붙여넣기</p>
+
+<textarea id="samlInput" placeholder="SAMLResponse 값을 여기에 붙여넣으세요 (URL 인코딩된 값 그대로 OK)"></textarea>
+<br>
+<button onclick="decode()">디코딩</button>
+
+<div id="result"></div>
+
+<script>
+function decode() {
+  const input = document.getElementById('samlInput').value.trim();
+  const resultDiv = document.getElementById('result');
+
+  try {
+    // URL 디코딩 후 Base64 디코딩
+    let base64 = input;
+
+    // URL 인코딩 되어있으면 디코딩
+    if (input.includes('%')) {
+      base64 = decodeURIComponent(input);
+    }
+
+    // Base64 디코딩
+    const decoded = atob(base64);
+
+    // XML 파싱 시도
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(decoded, 'text/xml');
+
+    // NameID 추출
+    const nameIdElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'NameID');
+    const nameId = nameIdElements.length > 0 ? nameIdElements[0].textContent : '찾을 수 없음';
+
+    // Status 추출
+    const statusElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:protocol', 'StatusCode');
+    const status = statusElements.length > 0 ? statusElements[0].getAttribute('Value') : '찾을 수 없음';
+
+    // Issuer 추출
+    const issuerElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'Issuer');
+    const issuer = issuerElements.length > 0 ? issuerElements[0].textContent : '찾을 수 없음';
+
+    // Destination 추출
+    const responseElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:protocol', 'Response');
+    const destination = responseElements.length > 0 ? responseElements[0].getAttribute('Destination') : '찾을 수 없음';
+
+    // Conditions 추출
+    const conditionsElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'Conditions');
+    const notBefore = conditionsElements.length > 0 ? conditionsElements[0].getAttribute('NotBefore') : '찾을 수 없음';
+    const notOnOrAfter = conditionsElements.length > 0 ? conditionsElements[0].getAttribute('NotOnOrAfter') : '찾을 수 없음';
+
+    // Audience 추출
+    const audienceElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'Audience');
+    const audience = audienceElements.length > 0 ? audienceElements[0].textContent : '찾을 수 없음';
+
+    // Attributes 추출
+    const attrElements = xmlDoc.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'Attribute');
+    let attributes = '';
+    for (let attr of attrElements) {
+      const name = attr.getAttribute('Name');
+      const values = attr.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'AttributeValue');
+      const valueList = Array.from(values).map(v => v.textContent).join(', ');
+      attributes += `  ${name} = ${valueList}\n`;
+    }
+
+    // AWS IAM SAML 필수 Attributes 추출
+    const attrMap = {};
+    for (let attr of attrElements) {
+      const name = attr.getAttribute('Name');
+      const values = attr.getElementsByTagNameNS('urn:oasis:names:tc:SAML:2.0:assertion', 'AttributeValue');
+      attrMap[name] = Array.from(values).map(v => v.textContent);
+    }
+
+    const roleArn = attrMap['https://aws.amazon.com/SAML/Attributes/Role'] || [];
+    const roleSessionName = attrMap['https://aws.amazon.com/SAML/Attributes/RoleSessionName'] || [];
+
+    const roleArnOk = roleArn.length > 0;
+    const roleSessionNameOk = roleSessionName.length > 0;
+    const destinationOk = destination.includes('signin.aws.amazon.com/saml/acs/');
+    const audienceOk = audience === 'urn:amazon:webservices';
+
+    // 결과 출력
+    resultDiv.innerHTML = `
+      <div class="section">
+        <h3>🔍 핵심 정보</h3>
+        <p><strong>NameID:</strong> <span class="highlight">${nameId}</span></p>
+        <p><strong>Status:</strong> ${status}</p>
+        <p><strong>Issuer (IdP):</strong> ${issuer}</p>
+        <p><strong>Destination (ACS URL):</strong> ${destination} ${destinationOk ? '✅' : '❌'}</p>
+        <p><strong>Audience (SP Entity ID):</strong> ${audience} ${audienceOk ? '✅' : '❌ urn:amazon:webservices 이어야 함'}</p>
+        <p><strong>유효 시간:</strong> ${notBefore} ~ ${notOnOrAfter}</p>
+      </div>
+
+      <div class="section">
+        <h3>🎯 AWS IAM SAML 필수 항목 체크</h3>
+        <p>${roleArnOk ? '✅' : '❌'} <strong>Role ARN:</strong> ${roleArn.join('<br>') || '없음 → Keycloak Hardcoded attribute Mapper 확인!'}</p>
+        <p>${roleSessionNameOk ? '✅' : '❌'} <strong>RoleSessionName:</strong> ${roleSessionName.join(', ') || '없음 → Keycloak User Property Mapper 확인!'}</p>
+        <br>
+        <p><strong>Role ARN 형식 확인:</strong></p>
+        ${roleArn.map(r => {
+          const parts = r.split(',');
+          const hasRole = parts.some(p => p.trim().includes(':role/'));
+          const hasProvider = parts.some(p => p.trim().includes(':saml-provider/'));
+          return `<p style="margin-left:20px">
+            ${r}<br>
+            ${hasRole ? '✅ Role ARN 포함' : '❌ Role ARN 없음'} /
+            ${hasProvider ? '✅ SAML Provider ARN 포함' : '❌ SAML Provider ARN 없음'}
+          </p>`;
+        }).join('') || '<p style="margin-left:20px">없음</p>'}
+      </div>
+
+      <div class="section">
+        <h3>📋 전체 SAML Attributes</h3>
+        <pre>${attributes || '없음'}</pre>
+      </div>
+
+      <div class="section">
+        <h3>📄 전체 XML</h3>
+        <pre>${decoded.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+      </div>
+    `;
+
+  } catch (e) {
+    resultDiv.innerHTML = `<p class="error">디코딩 실패: ${e.message}</p>
+    <p>SAMLResponse 값만 붙여넣으세요 (SAMLResponse= 제외)</p>`;
+  }
+}
+</script>
+</body>
+</html>
+

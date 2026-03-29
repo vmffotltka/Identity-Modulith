@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -172,6 +173,44 @@ class RbacQueryServiceImplTest {
             verify(roleRepository, never()).findByTenantIdAndNameIn(anyString(), anySet());
         }
         
+    }
+
+    @Nested
+    @DisplayName("사용자 권한 조회 테스트")
+    class PermissionsOfAgentTests {
+
+        @Test
+        @DisplayName("단일 JOIN 조회 결과를 Set으로 중복 제거해 반환한다")
+        void permissionsOf_UsesJoinProjectionAndDeduplicates() {
+            // Given
+            UUID agentId = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+            when(agentRoleRepository.findPermissionCodesByAgentIdAndTenant(agentId.toString(), TENANT_ID))
+                    .thenReturn(List.of("user:read", "user:read", "org:view"));
+
+            // When
+            Set<String> permissions = rbacQueryService.permissionsOf(TENANT_ID, agentId);
+
+            // Then
+            assertThat(permissions).containsExactlyInAnyOrder("user:read", "org:view");
+            verify(agentRoleRepository, times(1))
+                    .findPermissionCodesByAgentIdAndTenant(agentId.toString(), TENANT_ID);
+            verify(rolePermissionRepository, never()).findPermissionsByRoleIdAndTenant(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("tenantId 또는 agentId가 유효하지 않으면 빈 Set을 반환한다")
+        void permissionsOf_WithInvalidInput_ReturnsEmptySet() {
+            // When
+            Set<String> result1 = rbacQueryService.permissionsOf(null, UUID.randomUUID());
+            Set<String> result2 = rbacQueryService.permissionsOf("   ", UUID.randomUUID());
+            Set<String> result3 = rbacQueryService.permissionsOf(TENANT_ID, null);
+
+            // Then
+            assertThat(result1).isEmpty();
+            assertThat(result2).isEmpty();
+            assertThat(result3).isEmpty();
+            verifyNoInteractions(agentRoleRepository);
+        }
     }
 }
 
