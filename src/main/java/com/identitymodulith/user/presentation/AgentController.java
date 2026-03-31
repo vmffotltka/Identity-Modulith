@@ -39,16 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * 상담사(Agent) 관리 REST API Controller
- *
- * DDD 원칙을 준수하여 RBAC 모듈과의 직접 의존을 제거하고
- * Port/Adapter 패턴을 통해 간접적으로 연동합니다.
- *
- * 인증 방식: SAML 2.0 (Keycloak) - SecurityContext에서 자동 추출
- * - tenantId: TenantContextHolder.getCurrentTenantId()
- * - userId:   JwtUserContext.getCurrentUserId()
- */
+/** 상담사 관리 API. */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/agents")
@@ -68,16 +59,14 @@ public class AgentController {
     private final SuspendAgentUseCase suspendAgentUseCase;
     private final ActivateAgentUseCase activateAgentUseCase;
     private final TransferAgentUseCase transferAgentUseCase;
-    private final RbacPort rbacPort;  // Port 인터페이스 사용 (DDD 원칙)
+    private final RbacPort rbacPort;
 
-    // ─── SecurityContext 헬퍼 ─────────────────────────────────────────────────
-
-    /** SAML 인증 사용자의 tenantId 추출 */
+    /** 인증 컨텍스트에서 tenantId를 읽는다. */
     private String currentTenantId() {
         return TenantContextHolder.getCurrentTenantId();
     }
 
-    /** SAML 인증 사용자의 UUID 추출 */
+    /** 인증 컨텍스트에서 userId를 읽는다. */
     private UUID currentUserId() {
         String userId = JwtUserContext.getCurrentUserId();
         if (userId == null) {
@@ -85,8 +74,6 @@ public class AgentController {
         }
         return UUID.fromString(userId);
     }
-
-    // ─── 상담사 생성 ──────────────────────────────────────────────────────────
 
     @PostMapping
     @Operation(
@@ -109,7 +96,7 @@ public class AgentController {
                 .collect(Collectors.toSet());
 
         CreateAgentCommand command = CreateAgentCommand.builder()
-                .tenantId(currentTenantId())   // ← SecurityContext에서 자동 추출
+                .tenantId(currentTenantId())
                 .loginId(request.getLoginId())
                 .name(request.getName())
                 .organizationId(request.getOrganizationId())
@@ -129,8 +116,6 @@ public class AgentController {
                 .build());
     }
 
-    // ─── 아이디 중복 체크 ─────────────────────────────────────────────────────
-
     @GetMapping("/check-login-id")
     @Operation(summary = "로그인 아이디 중복 체크",
         description = "상담사 생성 전 로그인 아이디의 사용 가능 여부를 확인합니다.")
@@ -143,8 +128,6 @@ public class AgentController {
         @RequestParam String loginId) {
         return ResponseEntity.ok(Map.of("isUnique", checkLoginIdUseCase.isLoginIdUnique(loginId)));
     }
-
-    // ─── 상담사 단건 조회 ─────────────────────────────────────────────────────
 
     @GetMapping("/{agentId}")
     @Operation(summary = "상담사 단건 조회",
@@ -159,8 +142,6 @@ public class AgentController {
         @PathVariable UUID agentId) {
         return ResponseEntity.ok(AgentResponse.from(getAgentUseCase.getAgent(agentId)));
     }
-
-    // ─── 상담사 목록 조회 ─────────────────────────────────────────────────────
 
     @GetMapping
     @Operation(summary = "상담사 목록 조회",
@@ -182,7 +163,7 @@ public class AgentController {
             @RequestParam(defaultValue = "false") boolean includeRetired) {
 
         AgentSearchCriteria criteria = AgentSearchCriteria.builder()
-                .tenantId(currentTenantId())   // ← SecurityContext에서 자동 추출
+                .tenantId(currentTenantId())
                 .organizationId(organizationId)
                 .status(status)
                 .nameKeyword(nameKeyword)
@@ -193,8 +174,6 @@ public class AgentController {
         return ResponseEntity.ok(getAgentUseCase.getAgents(criteria).stream()
                 .map(AgentResponse::from).toList());
     }
-
-    // ─── 상담사 정보 수정 ─────────────────────────────────────────────────────
 
     @PatchMapping("/{agentId}")
     @Operation(summary = "상담사 정보 수정",
@@ -212,15 +191,13 @@ public class AgentController {
         UpdateAgentCommand command = UpdateAgentCommand.builder()
                 .tenantId(currentTenantId())
                 .agentId(agentId)
-                .actorId(currentUserId())      // ← SecurityContext에서 자동 추출
+                .actorId(currentUserId())
                 .name(request.getName())
                 .build();
 
         updateAgentUseCase.updateAgent(command);
         return ResponseEntity.noContent().build();
     }
-
-    // ─── 상담사 조직 이동 ─────────────────────────────────────────────────────
 
     @PatchMapping("/{agentId}/organization")
     @Operation(summary = "상담사 조직 이동",
@@ -238,8 +215,6 @@ public class AgentController {
         updateAgentUseCase.transferOrganization(currentTenantId(), agentId, currentUserId(), request.getOrganizationId());
         return ResponseEntity.noContent().build();
     }
-
-    // ─── 비밀번호 초기화 (관리자용) ───────────────────────────────────────────
 
     @PostMapping("/{agentId}/reset-password")
     @Operation(summary = "비밀번호 초기화",
@@ -261,8 +236,6 @@ public class AgentController {
                 .tempPassword(result.getTempPassword())
                 .build());
     }
-
-    // ─── 비밀번호 변경 (본인용) ───────────────────────────────────────────────
 
     @PostMapping("/{agentId}/change-password")
     @Operation(summary = "비밀번호 변경",
@@ -296,8 +269,6 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    // ─── 내 비밀번호 변경 (/me) ───────────────────────────────────────────────
-
     @PostMapping("/me/change-password")
     @Operation(summary = "내 비밀번호 변경",
         description = "현재 로그인한 상담사가 자신의 비밀번호를 변경합니다.")
@@ -328,8 +299,6 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    // ─── 상담사 정지 ──────────────────────────────────────────────────────────
-
     @PostMapping("/{agentId}/suspend")
     @Operation(summary = "상담사 정지",
         description = "상담사를 정지 상태로 변경합니다. ADMIN 권한 필요.")
@@ -350,8 +319,6 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    // ─── 상담사 활성화 ────────────────────────────────────────────────────────
-
     @PostMapping("/{agentId}/activate")
     @Operation(summary = "상담사 활성화",
         description = "정지된 상담사를 활성화 상태로 복구합니다. ADMIN 권한 필요.")
@@ -371,8 +338,6 @@ public class AgentController {
                 .build());
         return ResponseEntity.noContent().build();
     }
-
-    // ─── 상담사 퇴사 처리 ─────────────────────────────────────────────────────
 
     @DeleteMapping("/{agentId}")
     @Operation(summary = "상담사 퇴사 처리",
@@ -395,7 +360,6 @@ public class AgentController {
         return ResponseEntity.noContent().build();
     }
 
-    // ─── 상담사 부서 이동 ─────────────────────────────────────────────────────
 
     @PostMapping("/{agentId}/transfer")
     @Operation(summary = "상담사 부서 이동",

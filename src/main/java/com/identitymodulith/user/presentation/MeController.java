@@ -25,9 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * 현재 로그인한 사용자 정보 API
- */
+/** 현재 로그인 사용자 정보 API. */
 @Slf4j
 @RestController
 @RequestMapping("/api/me")
@@ -38,12 +36,6 @@ public class MeController {
     private final GetAgentUseCase getAgentUseCase;
     private final RbacModuleApi rbacModuleApi;
 
-    /**
-     * 현재 로그인한 사용자의 상세 정보 조회
-     * - Agent 기본 정보 (이름, 이메일, 소속 부서 등)
-     * - 보유 권한 목록
-     * - 면허 정보
-     */
     @GetMapping
     @Operation(
         summary = "내 정보 조회",
@@ -61,18 +53,15 @@ public class MeController {
 
         String tenantId = TenantContextHolder.getCurrentTenantId();
 
-        // Agent 기본 정보
         AgentResponse agentInfo = AgentResponse.from(
             getAgentUseCase.getAgent(UUID.fromString(userId))
         );
 
-        // SecurityContext에서 현재 부여된 권한 목록 추출
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         Set<String> authorities = auth.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
 
-        // RBAC에서 역할 목록 추출
         Set<String> roles = rbacModuleApi.getRolesByAgentId(userId).stream()
                 .map(RbacModuleApi.RoleInfo::getName)
                 .collect(Collectors.toSet());
@@ -91,10 +80,7 @@ public class MeController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * 로그인 상태 확인 (경량 엔드포인트)
-     * 인증 세션 유효성 체크용으로 사용
-     */
+    /** 인증 상태를 200 응답으로 반환한다. */
     @GetMapping("/status")
     @Operation(
         summary = "로그인 상태 확인",

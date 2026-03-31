@@ -9,19 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/**
- * Organization 모듈 전용 예외 처리
- *
- * <p>공통 예외(UnauthorizedException, MethodArgumentNotValidException, fallback 등)는
- * {@link com.identitymodulith.common.exception.CommonExceptionHandler}에서 처리합니다.</p>
- *
- * <p>DB 무결성 제약 위반은 Organization 전용 부서코드 중복 처리가 있어 여기서 처리합니다.</p>
- */
+/** Organization 모듈 전용 예외 매핑 핸들러. */
 @RestControllerAdvice(basePackages = "com.identitymodulith.organization")
 @Slf4j
 public class OrganizationExceptionHandler {
-
-    // ── 조직 비즈니스 예외 ───────────────────────────────────────────────────
 
     @ExceptionHandler(OrganizationException.class)
     public ResponseEntity<ApiErrorResponse> handleOrganizationException(OrganizationException e) {
@@ -40,7 +31,6 @@ public class OrganizationExceptionHandler {
                 .body(ApiErrorResponse.of(status.value(), errorCode.getCode(), e.getMessage()));
     }
 
-    // ── DB 무결성 제약 위반 (부서 코드 중복 특수 처리) ──────────────────────
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolationException(

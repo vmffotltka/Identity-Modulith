@@ -24,15 +24,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-/**
- * Keycloak SAML 2.0 연동 Spring Security 설정
- *
- * AWS Connect SSO 연동을 위한 SAML 2.0 IdP 구성
- *
- * 순환 참조 방지:
- * - Saml2AuthenticationSuccessHandler, Saml2AuthenticationFailureHandler, CustomPermissionEvaluator
- *   를 필드 주입 대신 @Bean 메서드 파라미터로 받아 Spring이 알아서 주입
- */
+/** Keycloak SAML 2.0 기반 보안 설정. */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -54,16 +46,9 @@ public class Saml2SecurityConfig {
     @Value("${app.frontend.logout-success-url:http://localhost:3000/login}")
     private String logoutSuccessUrl;
 
-    /**
-     * RelyingPartyRegistrationRepository Bean - SAML SP 설정
-     * Keycloak IdP 메타데이터에서 설정 로드
-     */
     @Bean
     public RelyingPartyRegistrationRepository relyingPartyRegistrationRepository() {
         try {
-            log.info("====================================");
-            log.info("SAML 2.0 RelyingPartyRegistration 초기화 시작");
-            log.info("====================================");
             log.info("Keycloak IdP 메타데이터 URL: {}", idpMetadataUrl);
 
             String sloUrl = acsUrl.replaceFirst("/login/saml2/sso/", "/logout/saml2/slo");
@@ -80,31 +65,18 @@ public class Saml2SecurityConfig {
                 )
                 .build();
 
-            log.info("✅ SAML 2.0 RelyingPartyRegistration 초기화 성공");
-            log.info("- Registration ID: keycloak");
-            log.info("- Entity ID: {}", spEntityId);
-            log.info("- ACS URL: {}", acsUrl);
-            log.info("- SLO URL: {}", sloUrl);
-            log.info("- IdP Entity ID: {}", registration.getAssertingPartyMetadata().getEntityId());
-            log.info("- AuthnRequest Signing: DISABLED");
-            log.info("- Assertion Encryption: DISABLED");
-            log.info("====================================");
+            log.info("SAML RelyingPartyRegistration 초기화 완료 - entityId={}, acsUrl={}", spEntityId, acsUrl);
 
             return new InMemoryRelyingPartyRegistrationRepository(registration);
 
         } catch (Exception e) {
-            log.error("❌ SAML 2.0 RelyingPartyRegistration 초기화 실패!", e);
+            log.error("SAML RelyingPartyRegistration 초기화 실패", e);
             log.error("Keycloak 서버 연결을 확인하세요: {}", idpMetadataUrl);
             throw new RuntimeException("SAML 2.0 설정 초기화 실패", e);
         }
     }
 
-    /**
-     * Security Filter Chain 설정
-     *
-     * 핸들러와 필터를 파라미터로 받아 순환 참조를 방지합니다.
-     * - SamlSecurityContextFilter: 매 요청마다 JwtUserContext ThreadLocal 동기화
-     */
+    /** Security filter chain 설정. */
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -113,10 +85,9 @@ public class Saml2SecurityConfig {
             SamlSecurityContextFilter samlSecurityContextFilter) throws Exception {
 
         http
-            // CORS 설정
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-            // CSRF 설정: SAML 엔드포인트는 CSRF 검증 제외
+            // SAML 엔드포인트는 브라우저 리다이렉트 플로우 특성상 CSRF 검증에서 제외한다.
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                     "/saml2/**",
@@ -125,7 +96,6 @@ public class Saml2SecurityConfig {
                 )
             )
 
-            // 인증/인가 규칙
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/",
@@ -140,18 +110,16 @@ public class Saml2SecurityConfig {
                     "/.well-known/**"
                 ).permitAll()
                 .requestMatchers("/saml-info").authenticated()
-                .requestMatchers("/api/me/status").permitAll()   // 로그인 상태 확인은 누구나 가능
+                .requestMatchers("/api/me/status").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
             )
 
-            // SAML 2.0 로그인 설정
             .saml2Login(saml2 -> saml2
                 .successHandler(saml2AuthenticationSuccessHandler)
                 .failureHandler(saml2AuthenticationFailureHandler)
             )
 
-            // 일반 로그아웃 설정
             .logout(logout -> logout
                 .logoutUrl("/logout")
                 .logoutSuccessUrl(logoutSuccessUrl)
@@ -160,34 +128,28 @@ public class Saml2SecurityConfig {
                 .permitAll()
             )
 
-            // SAML 2.0 로그아웃 설정
             .saml2Logout(saml2Logout -> saml2Logout
                 .logoutUrl("/saml2/logout")
             )
 
-            // JwtUserContext ThreadLocal 동기화 필터 등록
             .addFilterAfter(samlSecurityContextFilter, SecurityContextHolderAwareRequestFilter.class);
 
         return http.build();
     }
 
-    /**
-     * CORS 설정
-     * 프론트엔드 서버(app.frontend.url)와 localhost 개발 환경, AWS Connect를 허용합니다.
-     */
+    /** CORS 설정. */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // 프론트엔드 URL + 개발 환경 localhost 패턴 + AWS Connect 허용
         configuration.setAllowedOrigins(List.of(
-            frontendUrl,               // ex) http://localhost:3000
-            "http://localhost:3000",   // 명시적 개발 환경
+            frontendUrl,
+            "http://localhost:3000",
             "http://127.0.0.1:3000",
-            "https://ssotest.my.connect.aws"  // AWS Connect CCP 임베드용
+            "https://ssotest.my.connect.aws"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);  // 쿠키(JSESSIONID) 전송 허용
+        configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
 
@@ -196,10 +158,7 @@ public class Saml2SecurityConfig {
         return source;
     }
 
-    /**
-     * Method Security Expression Handler 설정
-     * CustomPermissionEvaluator를 파라미터로 받아 순환 참조를 방지합니다.
-     */
+    /** Method security expression handler 설정. */
     @Bean
     public MethodSecurityExpressionHandler methodSecurityExpressionHandler(
             CustomPermissionEvaluator customPermissionEvaluator) {

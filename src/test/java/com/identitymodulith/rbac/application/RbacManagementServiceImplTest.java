@@ -35,19 +35,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/**
- * RbacManagementServiceImpl 단위 테스트
- *
- * <h2>테스트 범위:</h2>
- * - 역할(Role) CRUD 기능
- * - 권한(Permission) CRUD 기능
- * - 역할-권한 관계 관리
- * - 예외 처리
- * - 데이터 무결성
- *
- * @author Test Team
- * @version 1.0
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RBAC 관리 서비스 단위 테스트")
 class RbacManagementServiceImplTest {
@@ -86,14 +73,11 @@ class RbacManagementServiceImplTest {
 
     @BeforeEach
     void setup() {
-        // SecurityContext 설정 - "tenantId:userId" 형식으로 Principal 설정
         SecurityContextHolder.setContext(securityContext);
         lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
-        // TenantContextHolder가 인식하는 "tenantId:userId" 형식
         lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":" + userId);
 
-        // ADMIN 권한 체크 공통 Mock (checkAdminPermission 내부 로직)
         RoleJpaEntity adminRole = RoleJpaEntity.builder()
                 .roleId("admin-role-id")
                 .name("ADMIN")
@@ -106,10 +90,6 @@ class RbacManagementServiceImplTest {
         lenient().when(roleRepository.findById("admin-role-id"))
                 .thenReturn(Optional.of(adminRole));
     }
-
-    // ============================================================
-    // 역할(Role) 테스트
-    // ============================================================
 
     @Test
     @DisplayName("모든 역할 조회 - 성공")
@@ -246,10 +226,6 @@ class RbacManagementServiceImplTest {
         verify(roleRepository, times(1)).delete(role);
     }
 
-    // ============================================================
-    // 권한(Permission) 테스트
-    // ============================================================
-
     @Test
     @DisplayName("모든 권한 조회 - 성공")
     void testGetAllPermissions_Success() {
@@ -330,10 +306,6 @@ class RbacManagementServiceImplTest {
             rbacManagementService.createPermission(request, userId);
         });
     }
-
-    // ============================================================
-    // 역할-권한 관계 테스트
-    // ============================================================
 
     @Test
     @DisplayName("역할에 권한 할당 - 성공")
@@ -459,4 +431,3 @@ class RbacManagementServiceImplTest {
                 .deleteByRoleIdAndPermissionId(roleId, permissionId);
     }
 }
-

@@ -31,9 +31,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/**
- * RbacManagementServiceImpl - 사용자-역할 관리 기능 테스트
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RBAC 사용자-역할 관리 테스트")
 class RbacAgentRoleManagementTest {
@@ -73,30 +70,21 @@ class RbacAgentRoleManagementTest {
 
     @BeforeEach
     void setup() {
-        // SecurityContext 설정 (TenantContextHolder가 인식할 수 있는 형식)
         SecurityContextHolder.setContext(securityContext);
         lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
-        // "tenantId:userId" 형식으로 설정
         lenient().when(authentication.getPrincipal()).thenReturn(tenantId + ":test-user");
 
-        // assignRoleToAgent 내부 POSITION 역할 교체 로직에서 호출
         lenient().when(agentRoleRepository.findByAgentId(agentId))
                 .thenReturn(java.util.List.of());
 
-        // agentValidationPort - 활성 상담사로 응답 (역할 할당 허용)
         lenient().when(agentValidationPort.isActiveAgent(agentId))
                 .thenReturn(true);
     }
 
-    // ============================================================
-    // assignRoleToAgent() 테스트
-    // ============================================================
-
     @Test
     @DisplayName("사용자에게 역할 할당 - 성공")
     void testAssignRoleToAgent_Success() {
-        // Given
         RoleJpaEntity role = RoleJpaEntity.builder()
                 .roleId(roleId)
                 .tenantId(tenantId)
@@ -111,21 +99,17 @@ class RbacAgentRoleManagementTest {
         when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenReturn(new AgentRoleJpaEntity());
 
-        // When
         rbacManagementService.assignRoleToAgent(agentId, roleName);
 
-        // Then
         verify(agentRoleRepository, times(1)).save(any(AgentRoleJpaEntity.class));
     }
 
     @Test
     @DisplayName("사용자에게 역할 할당 - 역할 미존재")
     void testAssignRoleToAgent_RoleNotFound() {
-        // Given
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.empty());
 
-        // When & Then
         assertThrows(RbacException.class, () -> {
             rbacManagementService.assignRoleToAgent(agentId, roleName);
         });
@@ -134,7 +118,6 @@ class RbacAgentRoleManagementTest {
     @Test
     @DisplayName("사용자에게 역할 할당 - 이미 할당된 역할 (무시 처리)")
     void testAssignRoleToAgent_AlreadyAssigned() {
-        // Given
         RoleJpaEntity role = RoleJpaEntity.builder()
                 .roleId(roleId)
                 .tenantId(tenantId)
@@ -145,27 +128,20 @@ class RbacAgentRoleManagementTest {
 
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.of(role));
-        // ✅ RA-004: DB 제약 위반 시뮬레이션 (중복 할당은 무시)
+        // RA-004: DB 제약 위반(중복 할당)은 멱등 처리한다.
         when(agentRoleRepository.save(any(AgentRoleJpaEntity.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate key"));
 
-        // When & Then - 예외가 발생하지 않고 정상 처리되어야 함
         assertDoesNotThrow(() -> {
             rbacManagementService.assignRoleToAgent(agentId, roleName);
         });
 
-        // 로그 확인을 위해 save는 호출되었어야 함
         verify(agentRoleRepository, times(1)).save(any(AgentRoleJpaEntity.class));
     }
-
-    // ============================================================
-    // revokeRoleFromAgent() 테스트
-    // ============================================================
 
     @Test
     @DisplayName("사용자에게서 역할 회수 - 성공")
     void testRevokeRoleFromAgent_Success() {
-        // Given
         RoleJpaEntity role = RoleJpaEntity.builder()
                 .roleId(roleId)
                 .tenantId(tenantId)
@@ -182,21 +158,17 @@ class RbacAgentRoleManagementTest {
         when(agentRoleRepository.findByAgentId(agentId))
                 .thenReturn(List.of(agentRole));
 
-        // When
         rbacManagementService.revokeRoleFromAgent(agentId, roleName);
 
-        // Then
         verify(agentRoleRepository, times(1)).delete(agentRole);
     }
 
     @Test
     @DisplayName("사용자에게서 역할 회수 - 역할 미존재")
     void testRevokeRoleFromAgent_RoleNotFound() {
-        // Given
         when(roleRepository.findByTenantIdAndName(tenantId, roleName))
                 .thenReturn(Optional.empty());
 
-        // When & Then
         assertThrows(RbacException.class, () -> {
             rbacManagementService.revokeRoleFromAgent(agentId, roleName);
         });

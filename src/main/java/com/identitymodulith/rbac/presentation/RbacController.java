@@ -21,11 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.Set;
 
-/**
- * RbacController - 역할기반 접근제어(RBAC) 관리 REST API
- *
- * 인증 방식: SAML 2.0 (Keycloak) - SecurityContext에서 userId 자동 추출
- */
+/** RBAC 관리 API. */
 @Tag(name = "RBAC Management", description = "역할기반 접근제어 관리 API")
 @RestController
 @RequestMapping("/api/rbac")
@@ -35,7 +31,7 @@ public class RbacController {
 
     private final RbacManagementService rbacManagementService;
 
-    /** SAML 인증 사용자의 userId 추출 */
+    /** 인증 컨텍스트에서 userId를 추출한다. */
     private String currentUserId() {
         String userId = JwtUserContext.getCurrentUserId();
         if (userId == null) {
@@ -43,10 +39,6 @@ public class RbacController {
         }
         return userId;
     }
-
-    // ============================================================
-    // 역할(Role) 관리 엔드포인트
-    // ============================================================
 
     @Operation(summary = "모든 역할 조회", description = "시스템에 정의된 모든 역할을 조회합니다.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
@@ -154,10 +146,6 @@ public class RbacController {
         return ResponseEntity.ok().build();
     }
 
-    // ============================================================
-    // 권한(Permission) 관리 엔드포인트
-    // ============================================================
-
     @Operation(summary = "모든 권한 조회", description = "시스템에 정의된 모든 권한을 조회합니다.")
     @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/permissions")
@@ -222,10 +210,6 @@ public class RbacController {
         rbacManagementService.deletePermission(code, userId);
         return ResponseEntity.noContent().build();
     }
-
-    // ============================================================
-    // 역할-권한 할당 엔드포인트
-    // ============================================================
 
     @Operation(summary = "역할의 권한 조회", description = "특정 역할에 할당된 모든 권한을 조회합니다.")
     @ApiResponses({
@@ -300,10 +284,6 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.batchRevokePermissionsFromRole(roleName, request.permissionCodes(), currentUserId()));
     }
 
-    // ============================================================
-    // 사용자-역할 할당 엔드포인트
-    // ============================================================
-
     @Operation(summary = "사용자에게 역할 할당", description = "특정 사용자에게 역할을 할당합니다. ADMIN 권한 필요.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "역할 할당 성공"),
@@ -337,9 +317,6 @@ public class RbacController {
         return ResponseEntity.noContent().build();
     }
 
-    // ============================================================
-    // 사용자-역할 관계 엔드포인트
-    // ============================================================
 
     @Operation(summary = "사용자의 역할 목록 조회", description = "특정 사용자에게 할당된 모든 역할을 조회합니다.")
     @ApiResponses({
@@ -365,10 +342,6 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.getEffectivePermissions(agentId));
     }
 
-    // ============================================================
-    // 권한-역할 역검색 엔드포인트
-    // ============================================================
-
     @Operation(summary = "특정 권한을 가진 역할 조회", description = "특정 권한을 가진 모든 역할을 조회합니다 (역검색).")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
@@ -381,9 +354,6 @@ public class RbacController {
         return ResponseEntity.ok(rbacManagementService.getRolesWithPermission(permissionCode));
     }
 
-    // ============================================================
-    // 역할 사용 통계 엔드포인트
-    // ============================================================
 
     @Operation(summary = "역할을 사용하는 사용자 수 조회", description = "특정 역할이 할당된 사용자 수를 조회합니다.")
     @ApiResponses({
