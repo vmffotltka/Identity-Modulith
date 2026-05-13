@@ -4,8 +4,6 @@
 > **적용 범위**: RBAC 모듈 (`RbacQueryServiceImpl`, `RbacManagementServiceImpl`)  
 > **상태**: ✅ 실측 완료 — 벤치마크 테스트로 Before/After 수치 검증됨
 
-> 이 문서는 RBAC N+1 최적화 전용입니다.  
-> Organization(부서 parent Fetch Join) 성능 결과는 `Docs/PERFORMANCE_OPTIMIZATION.md`를 참고하세요.
 
 ---
 

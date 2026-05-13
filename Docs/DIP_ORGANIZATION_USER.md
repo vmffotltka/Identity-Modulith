@@ -142,6 +142,6 @@ public class AgentOrgUserAdapter implements OrgUserPort {
 - [ ] 공개 API가 루트 패키지(`UserModuleApi`, `OrganizationModuleApi`)에 위치하는가?
 
 참고 문서:
-- `Docs/ARCHITECTURE_DDD_MODULITH.md`
-- `Docs/CHANGELOG.md` (v3.0.0 Port/Adapter 패턴 적용 항목)
+- `Docs/ARCHITECTURE_DDD_MODULITH.md` - 전체 아키텍처 설계 원칙
+- `README.md` - 전체 프로젝트 구조 및 의존성 역전 설명
 
