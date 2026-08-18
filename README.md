@@ -163,12 +163,12 @@
   - `RbacPort` / `RbacAdapter`: User 모듈에서 RBAC 모듈 호출
   - `UserModuleApi`: 다른 모듈에서 User 모듈 사용 시 노출할 공개 인터페이스
 
-### 📍 Decision 2. 보안 표준: 비용과 규격에 맞춘 Keycloak 도입
+### 📍 Decision 2. 보안 표준: 비용과 규격에 맞춘 Keycloak 제안
 * **상황:** 솔루션-AWS Connect 간 SSO 연동 필요. 단, AWS Connect는 SAML 2.0 규격만 지원함.
-* **고민:** Okta 등 상용 솔루션은 라이선스 비용 부담이 큼. 오픈소스 중 규격을 충족하는 대안 필요.
-* **결과:** **Keycloak(오픈소스 IdP)** 채택. 비용 없이 SAML 2.0 연동 환경을 구축하고 파편화된 인증 체계를 통합함.
-  - SAML 응답의 JWT 토큰과 RS256 공개키를 활용한 검증
-  - Spring Security Saml2 필필터로 토큰 검증 자동화
+* **고민:** Cognito+Lambda+DynamoDB 기반 서버리스 인증을 먼저 검토했으나 SAML 2.0 IdP가 필수 규격임을 확인. Okta 등 상용 솔루션은 라이선스 비용 부담이 큼.
+* **결과:** 오픈소스 IdP인 **Keycloak으로 전환을 제안**하고, 인증(IdP)과 인가를 분리하는 구조와 SAML 2.0 연동 시퀀스 다이어그램을 설계해 팀에 공유. 검증용 데모 환경 구성도 함께 지원했으며, Client ID 발급·속성 매핑 등 세부 설정은 팀에 인계함.
+  - SAML 응답의 JWT 토큰과 RS256 공개키를 활용한 검증 흐름 설계
+  - Spring Security Saml2 필터 적용 방향 제시
 
 ### 📍 Decision 3. 데이터베이스: 도메인에 최적화된 수평적(Flat) RBAC
 * **상황:** 초기 기획은 계층형 구조였으나, 실제 상담사 업무는 부서 간 역할 교차가 잦고 비계층적임.
